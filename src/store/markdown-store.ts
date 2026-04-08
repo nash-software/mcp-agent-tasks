@@ -81,19 +81,19 @@ export class MarkdownStore {
         const g = fm.git ?? { commits: [] };
         return {
           ...g,
-          commits: (g.commits ?? []).map((c: Record<string, unknown>) => ({
+          commits: ((g.commits ?? []) as unknown as Record<string, unknown>[]).map((c) => ({
             ...c,
             authored_at: toIsoString(c['authored_at']),
-          })),
+          })) as import('../types/task.js').CommitRef[],
           pr: g.pr
             ? { ...g.pr, merged_at: toIsoStringOrNull(g.pr.merged_at) }
             : undefined,
         };
       })(),
-      transitions: (fm.transitions ?? []).map((tr: Record<string, unknown>) => ({
+      transitions: ((fm.transitions ?? []) as unknown as Record<string, unknown>[]).map((tr) => ({
         ...tr,
         at: toIsoString(tr['at']),
-      })),
+      })) as import('../types/task.js').StatusTransition[],
       files: fm.files ?? [],
       body: parsed.content.trim(),
       file_path: filePath,

@@ -103,7 +103,7 @@ export class TaskStore {
     }
 
     // Extended fields — accessed via type-extended interfaces in tool layer
-    const extended = fields as Record<string, unknown>;
+    const extended = fields as unknown as Record<string, unknown>;
 
     if (extended['dependencies'] !== undefined) {
       const newDeps = extended['dependencies'] as string[];
