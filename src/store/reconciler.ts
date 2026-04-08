@@ -28,6 +28,9 @@ export class Reconciler {
       throw new McpTasksError('PROJECT_NOT_FOUND', `Tasks directory not found: ${this.tasksDir}`);
     }
 
+    // Ensure project row exists before inserting tasks (FK constraint)
+    this.sqliteIndex.ensureProject(this.project);
+
     const files = fs.readdirSync(this.tasksDir).filter(f => f.endsWith('.md'));
     let count = 0;
 

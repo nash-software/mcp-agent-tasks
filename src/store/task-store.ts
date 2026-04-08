@@ -18,6 +18,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'tags',
   'files',
   'subtasks',
+  'children',
   'dependencies',
   'git',
   'complexity',
@@ -100,6 +101,26 @@ export class TaskStore {
       updated.complexity = fields.complexity;
       updated.complexity_manual = true;
     }
+
+    // Extended fields — accessed via type-extended interfaces in tool layer
+    const extended = fields as Record<string, unknown>;
+
+    if (extended['dependencies'] !== undefined) {
+      const newDeps = extended['dependencies'] as string[];
+      // Cycle check: temporarily remove this task's edges from existing graph, then check each new dep
+      const existingEdges = this.getExistingEdges().filter(([from]) => from !== id);
+      for (const dep of newDeps) {
+        const newEdge: [string, string] = [id, dep];
+        if (detectCycle(existingEdges, newEdge)) {
+          throw new McpTasksError('CIRCULAR_DEPENDENCY', `Adding dependency ${dep} to ${id} would create a cycle`);
+        }
+      }
+      updated.dependencies = newDeps;
+    }
+
+    if (extended['subtasks'] !== undefined) updated.subtasks = extended['subtasks'] as Task['subtasks'];
+    if (extended['children'] !== undefined) updated.children = extended['children'] as string[];
+    if (extended['git'] !== undefined) updated.git = extended['git'] as Task['git'];
 
     // Write protocol: SQLite → markdown → manifest
     this.sqliteIndex.upsertTask(updated);

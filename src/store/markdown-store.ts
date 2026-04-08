@@ -9,6 +9,22 @@ const SCHEMA_VERSION = 1;
 const MAX_TRANSITIONS = 100;
 const MAX_COMMITS = 50;
 
+/**
+ * gray-matter uses js-yaml which parses ISO date strings as Date objects.
+ * Convert back to ISO string for storage.
+ */
+function toIsoString(val: unknown): string {
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === 'string') return val;
+  return new Date().toISOString();
+}
+
+function toIsoStringOrNull(val: unknown): string | null {
+  if (val instanceof Date) return val.toISOString();
+  if (typeof val === 'string') return val;
+  return null;
+}
+
 export class MarkdownStore {
   read(filePath: string): Task {
     let raw: string;
@@ -51,18 +67,33 @@ export class MarkdownStore {
       complexity: fm.complexity ?? 1,
       complexity_manual: fm.complexity_manual ?? false,
       why: fm.why ?? '',
-      created: fm.created ?? new Date().toISOString(),
-      updated: fm.updated ?? new Date().toISOString(),
-      last_activity: fm.last_activity ?? new Date().toISOString(),
+      created: toIsoString(fm.created),
+      updated: toIsoString(fm.updated),
+      last_activity: toIsoString(fm.last_activity),
       claimed_by: fm.claimed_by ?? null,
-      claimed_at: fm.claimed_at ?? null,
+      claimed_at: toIsoStringOrNull(fm.claimed_at),
       claim_ttl_hours: fm.claim_ttl_hours ?? 4,
       parent: fm.parent ?? null,
       children: fm.children ?? [],
       dependencies: fm.dependencies ?? [],
       subtasks: fm.subtasks ?? [],
-      git: fm.git ?? { commits: [] },
-      transitions: fm.transitions ?? [],
+      git: (() => {
+        const g = fm.git ?? { commits: [] };
+        return {
+          ...g,
+          commits: (g.commits ?? []).map((c: Record<string, unknown>) => ({
+            ...c,
+            authored_at: toIsoString(c['authored_at']),
+          })),
+          pr: g.pr
+            ? { ...g.pr, merged_at: toIsoStringOrNull(g.pr.merged_at) }
+            : undefined,
+        };
+      })(),
+      transitions: (fm.transitions ?? []).map((tr: Record<string, unknown>) => ({
+        ...tr,
+        at: toIsoString(tr['at']),
+      })),
       files: fm.files ?? [],
       body: parsed.content.trim(),
       file_path: filePath,

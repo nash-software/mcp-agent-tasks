@@ -212,16 +212,16 @@ export class SqliteIndex {
         status: t.status,
         priority: t.priority,
         project: t.project,
-        complexity: t.complexity,
+        complexity: t.complexity ?? 0,
         complexity_manual: t.complexity_manual ? 1 : 0,
-        why: t.why,
-        parent: t.parent,
+        why: t.why ?? null,
+        parent: t.parent ?? null,
         created: t.created,
         updated: t.updated,
-        last_activity: t.last_activity,
-        claimed_by: t.claimed_by,
-        claimed_at: t.claimed_at,
-        claim_ttl_hours: t.claim_ttl_hours,
+        last_activity: t.last_activity ?? null,
+        claimed_by: t.claimed_by ?? null,
+        claimed_at: t.claimed_at ?? null,
+        claim_ttl_hours: t.claim_ttl_hours ?? null,
         branch: t.git.branch ?? null,
         pr_number: t.git.pr?.number ?? null,
         pr_url: t.git.pr?.url ?? null,
@@ -427,6 +427,13 @@ export class SqliteIndex {
 
     const rows = this.db.prepare(`SELECT t.* FROM tasks t ${where}`).all(...params) as TaskRow[];
     return rows.map(r => this.rowToTask(r));
+  }
+
+  ensureProject(prefix: string): void {
+    this.db.prepare(`
+      INSERT OR IGNORE INTO projects (prefix, path, storage_mode, tasks_dir, next_id, created)
+      VALUES (?, '', 'local', '', 0, datetime('now'))
+    `).run(prefix);
   }
 
   nextId(prefix: string): number {
