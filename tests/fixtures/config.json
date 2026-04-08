@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "storageDir": "tests/fixtures",
+  "defaultStorage": "local",
+  "enforcement": "warn",
+  "autoCommit": false,
+  "claimTtlHours": 4,
+  "trackManifest": true,
+  "projects": [
+    {
+      "prefix": "HERALD",
+      "path": "tests/fixtures",
+      "storage": "local"
+    }
+  ]
+}

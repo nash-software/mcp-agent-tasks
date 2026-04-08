@@ -1,0 +1,39 @@
+{
+  "name": "mcp-agent-tasks",
+  "version": "0.1.0",
+  "description": "File-based AI agent task management with MCP protocol support",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "type": "module",
+  "main": "./dist/server.cjs",
+  "module": "./dist/server.js",
+  "exports": {
+    ".": { "import": "./dist/server.js", "require": "./dist/server.cjs" },
+    "./cli": { "import": "./dist/cli.js", "require": "./dist/cli.cjs" }
+  },
+  "bin": { "mcp-agent-tasks": "./dist/cli.js" },
+  "files": ["dist", "hooks", "schema", "src/templates", "README.md"],
+  "scripts": {
+    "build": "tsup",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^9.0.0",
+    "gray-matter": "^4.0.3",
+    "yaml": "^2.4.0",
+    "chokidar": "^4.0.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "vitest": "^1.6.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "tsup": "^8.0.0"
+  }
+}

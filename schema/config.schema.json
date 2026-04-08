@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GlobalConfig",
+  "type": "object",
+  "required": ["version", "storageDir", "defaultStorage", "enforcement", "autoCommit", "claimTtlHours", "trackManifest", "projects"],
+  "properties": {
+    "version": { "type": "integer" },
+    "storageDir": { "type": "string" },
+    "defaultStorage": { "type": "string", "enum": ["global", "local"] },
+    "enforcement": { "type": "string", "enum": ["warn", "block", "off"] },
+    "autoCommit": { "type": "boolean" },
+    "claimTtlHours": { "type": "number" },
+    "trackManifest": { "type": "boolean" },
+    "projects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["prefix", "path", "storage"],
+        "properties": {
+          "prefix": { "type": "string" },
+          "path": { "type": "string" },
+          "storage": { "type": "string", "enum": ["global", "local"] }
+        }
+      }
+    }
+  }
+}
