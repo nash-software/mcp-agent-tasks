@@ -35,6 +35,7 @@ import * as taskStats from './tools/task-stats.js';
 import * as taskInit from './tools/task-init.js';
 import * as taskRebuildIndex from './tools/task-rebuild-index.js';
 import * as taskRegisterProject from './tools/task-register-project.js';
+import * as taskReconcileLegacy from './tools/task-reconcile-legacy.js';
 
 // Package version — imported as JSON
 import { createRequire } from 'node:module';
@@ -72,6 +73,7 @@ const TOOLS: ToolModule[] = [
   taskInit,
   taskRebuildIndex,
   taskRegisterProject,
+  taskReconcileLegacy,
 ];
 
 const TOOL_MAP = new Map<string, ToolModule>(TOOLS.map(t => [t.name, t]));

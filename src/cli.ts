@@ -457,6 +457,51 @@ program
     console.log('Migration not needed for schema_version 1');
   });
 
+// ── reconcile-legacy ──────────────────────────────────────────────────────────
+
+program
+  .command('reconcile-legacy <projectPath>')
+  .description('Scan scratchpads/ for legacy plan files and create task files from them')
+  .option('--prefix <ID>', 'project ID prefix (default: derived from package.json or dir name)')
+  .option('--dry-run', 'preview only; do not write files', false)
+  .action(async (projectPath: string, options: { prefix?: string; dryRun: boolean }) => {
+    const { reconcileLegacy } = await import('./tools/task-reconcile-legacy.js');
+    try {
+      const summary = await reconcileLegacy({
+        projectPath,
+        idPrefix: options.prefix,
+        dryRun: options.dryRun,
+      });
+
+      if (summary.scanned === 0) {
+        console.log('(no legacy scratchpads found)');
+        return;
+      }
+
+      const rows = summary.results.map(r => ({
+        file: r.file,
+        id: r.id,
+        status: r.status,
+        confidence: r.confidence,
+        reason: r.reason.slice(0, 40),
+      }));
+      console.log(formatTable(rows));
+      console.log('');
+      console.log(`Scanned ${summary.scanned} | Written ${summary.written} | Skipped ${summary.skipped}${summary.dryRun ? ' (dry-run)' : ''}`);
+
+      const errors = summary.results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error(`✗ ${errors.length} errors:`);
+        for (const e of errors) console.error(`  ${e.file}: ${e.error}`);
+        process.exit(1);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ ${msg}`);
+      process.exit(1);
+    }
+  });
+
 // ── parse ─────────────────────────────────────────────────────────────────────
 
 program.parse(process.argv);
