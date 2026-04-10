@@ -119,29 +119,48 @@ describe('extractWhy', () => {
     const body = '# Title\n\n> This is quoted context.';
     expect(extractWhy(body)).toBe('This is quoted context.');
   });
+
+  it('returns empty string when first paragraph after H1 is all bold key-value metadata', () => {
+    const body = '# Title\n\n**Type**: Feature (refactor + enhancement)  **Effort**: XL\n**Status**: In progress\n\nMore content below.';
+    expect(extractWhy(body)).toBe('');
+  });
+
+  it('returns prose when a real prose paragraph follows metadata lines', () => {
+    const body = '# Title\n\n**Type**: Feature\n\nThis is the actual reason this task exists and it is long enough.';
+    const why = extractWhy(body);
+    expect(why).toBe('This is the actual reason this task exists and it is long enough.');
+  });
 });
 
 // ── 4. inferType ──────────────────────────────────────────────────────────────
 
 describe('inferType', () => {
   it("'feature-xyz' → 'feature'", () => {
-    expect(inferType('feature-xyz', 'Feature Xyz')).toBe('feature');
+    expect(inferType('feature-xyz', 'Feature Xyz', 'feature-xyz.md')).toBe('feature');
   });
 
   it("'implement-auth' → 'feature'", () => {
-    expect(inferType('implement-auth', 'Implement Auth')).toBe('feature');
+    expect(inferType('implement-auth', 'Implement Auth', 'implement-auth.md')).toBe('feature');
   });
 
   it("'fix-login' → 'bug'", () => {
-    expect(inferType('fix-login', 'Fix Login')).toBe('bug');
+    expect(inferType('fix-login', 'Fix Login', 'fix-login.md')).toBe('bug');
   });
 
   it("'cleanup-deps' → 'chore'", () => {
-    expect(inferType('cleanup-deps', 'Cleanup Deps')).toBe('chore');
+    expect(inferType('cleanup-deps', 'Cleanup Deps', 'cleanup-deps.md')).toBe('chore');
   });
 
   it("title match for feature", () => {
-    expect(inferType('phase-one', 'Phase One')).toBe('feature');
+    expect(inferType('phase-one', 'Phase One', 'phase-one.md')).toBe('feature');
+  });
+
+  it("'-spec' suffix → 'feature'", () => {
+    expect(inferType('bootstrap-self-sufficiency-spec', 'Bootstrap Self-Sufficiency', 'bootstrap-self-sufficiency-spec.md')).toBe('feature');
+  });
+
+  it("'-plan' suffix → 'feature'", () => {
+    expect(inferType('some-plan', 'Some Plan', 'some-plan.md')).toBe('feature');
   });
 });
 
@@ -216,6 +235,15 @@ describe('inferStatus', () => {
     expect(result.status).toBe('todo');
     expect(result.confidence).toBe('unknown');
     expect(result.reason).toBe('no signal available');
+  });
+
+  it('short slug (< 10 chars) with no branch match → status is NOT done', () => {
+    // The slug length guard in inferGitContext prevents findMergeCommitBySlug from
+    // running for short slugs like 'handoff' (7 chars). The resulting git context
+    // will have merged: false, so status must not be 'done'.
+    const git = makeGit({ merged: false, mergeCommitSha: undefined }); // what the guard produces
+    const result = inferStatus(git, oldMtime, now);
+    expect(result.status).not.toBe('done');
   });
 });
 
@@ -316,6 +344,27 @@ describe('buildInference', () => {
     expect(result.frontmatter.updated).toBe('2024-05-14T00:00:00.000Z');
     expect(result.frontmatter.git.pr?.number).toBe(42);
     expect(result.confidence).toBe('high');
+  });
+
+  it('low-confidence item gets needs_review tag', () => {
+    const now = new Date('2024-06-01T00:00:00Z');
+    // mtime within 30 days → low confidence
+    const mtime = new Date('2024-05-20T00:00:00Z');
+    const birthtime = new Date('2024-05-01T00:00:00Z');
+
+    const result = buildInference({
+      filePath: '/proj/scratchpads/some-chore.md',
+      fileContent: '# Some Chore\n\nReason for doing this chore right here.',
+      id: 'PROJ-010',
+      project: 'PROJ',
+      git: makeGit(), // no branch, no merge → falls to mtime heuristic
+      fallbackMtime: mtime,
+      fallbackBirthtime: birthtime,
+      now,
+    });
+
+    expect(result.confidence).toBe('low');
+    expect(result.frontmatter.tags).toContain('needs_review');
   });
 
   it('round-trips through gray-matter with schema_version === 1', () => {

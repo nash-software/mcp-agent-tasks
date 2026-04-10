@@ -52,6 +52,18 @@ export function extractTitle(body: string, slug: string): string {
   return humaniseSlug(slug).slice(0, 200);
 }
 
+function isMetadataLine(stripped: string): boolean {
+  // Bold key-value: **Key**: value  or  **Key** value
+  if (/^\*\*[A-Za-z][^*]{1,30}\*\*[:\s]/.test(stripped)) return true;
+  // Table row
+  if (/^\|/.test(stripped)) return true;
+  // Separator row (only if length > 3 to avoid matching short dashes)
+  if (/^[-|:\s]+$/.test(stripped) && stripped.length > 3) return true;
+  // List item that is itself a bold key-value
+  if (/^[-*+]\s+\*\*[A-Za-z]/.test(stripped)) return true;
+  return false;
+}
+
 export function extractWhy(body: string): string {
   // Find first non-empty paragraph after the first H1 (or from start if no H1)
   const lines = body.split('\n');
@@ -89,28 +101,43 @@ export function extractWhy(body: string): string {
 
     const stripped = line
       .replace(/^>\s*/, '')
-      .replace(/^[-*+]\s+/, '')
       .trim();
 
     if (stripped.length > 0) {
-      inParagraph = true;
-      paragraphLines.push(stripped);
+      // Skip structured metadata lines (bold key-value, table rows, etc.)
+      if (isMetadataLine(stripped)) continue;
+      // Strip list item markers only for non-metadata lines
+      const content = stripped.replace(/^[-*+]\s+/, '').trim();
+      if (content.length > 0) {
+        inParagraph = true;
+        paragraphLines.push(content);
+      }
     } else if (inParagraph) {
       // Blank line ends the paragraph
       break;
     }
   }
 
+  // Require at least one line that looks like prose (has a space and length >= 20)
+  const hasProse = paragraphLines.some(l => l.includes(' ') && l.length >= 20);
+  if (!hasProse) return '';
+
   return paragraphLines.join(' ').trim().slice(0, 500);
 }
 
-export function inferType(slug: string, title: string): TaskType {
+export function inferType(slug: string, title: string, filename: string): TaskType {
+  // Suffix signals — highest priority
+  const slugBase = slug.replace(/-+/g, '-');
+  if (/-plan$/.test(slugBase) || /-spec$/.test(slugBase)) return 'feature';
+
   if (/feat|feature|phase|plan|implement/i.test(slug) || /feat|feature|phase|plan|implement/i.test(title)) {
     return 'feature';
   }
   if (/fix|bugfix|hotfix/i.test(slug) || /fix|bugfix|hotfix/i.test(title)) {
     return 'bug';
   }
+  // filename is used as a discriminator (e.g. for future extensions)
+  void filename;
   return 'chore';
 }
 
@@ -200,7 +227,7 @@ export function buildInference(opts: BuildOptions): ReconcileInference {
   const body = parsed.content;
 
   const title = extractTitle(body, slug);
-  const type = inferType(slug, title);
+  const type = inferType(slug, title, path.basename(filePath));
   const priority = inferPriority(slug);
   const why = extractWhy(body);
   const { status, confidence, reason } = inferStatus(git, fallbackMtime, now);
@@ -209,7 +236,7 @@ export function buildInference(opts: BuildOptions): ReconcileInference {
   const updated = git.lastCommitDate ?? fallbackMtime.toISOString();
   const last_activity = updated;
 
-  const tags: string[] = confidence === 'unknown' ? ['needs_review'] : [];
+  const tags: string[] = (confidence === 'unknown' || confidence === 'low') ? ['needs_review'] : [];
 
   // Build git link
   const gitLink = {

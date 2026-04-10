@@ -1,4 +1,4 @@
-import { execSync, execFileSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process'; // execSync used in isGitRepo/listBranches
 
 export interface GitInferenceResult {
   branch: string | undefined;
@@ -102,24 +102,30 @@ function longestCommonSubstring(a: string, b: string): number {
   return maxLen;
 }
 
+function parseGitLogLine(output: string): { sha: string; message: string } | undefined {
+  // Uses null byte (%x00) as separator — safe from shell pipe interpretation
+  const line = output.trim().split('\n')[0]?.trim();
+  if (!line) return undefined;
+  const nullIdx = line.indexOf('\0');
+  if (nullIdx === -1) return undefined;
+  const sha = line.slice(0, nullIdx).trim();
+  const message = line.slice(nullIdx + 1).trim();
+  if (!sha) return undefined;
+  return { sha, message };
+}
+
 export function findMergeCommit(
   projectPath: string,
   branch: string,
 ): { sha: string; message: string } | undefined {
-  // branch is safe (comes from git itself), but we still use shell-safe approach
   try {
-    const output = execSync(
-      `git log --all --merges --grep=${branch} --format=%H|%s -n 1`,
+    // Use execFileSync with argv array — avoids shell pipe interpretation of | in format string
+    const output = execFileSync(
+      'git',
+      ['log', '--all', '--merges', '--fixed-strings', `--grep=${branch}`, '--format=%H%x00%s', '-n', '1'],
       { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe' },
     );
-    const line = output.trim().split('\n')[0]?.trim();
-    if (!line) return undefined;
-    const pipeIndex = line.indexOf('|');
-    if (pipeIndex === -1) return undefined;
-    const sha = line.slice(0, pipeIndex).trim();
-    const message = line.slice(pipeIndex + 1).trim();
-    if (!sha) return undefined;
-    return { sha, message };
+    return parseGitLogLine(output);
   } catch {
     return undefined;
   }
@@ -129,20 +135,23 @@ export function findMergeCommitBySlug(
   projectPath: string,
   slug: string,
 ): { sha: string; message: string } | undefined {
-  // slug is [a-z0-9-] only — safe in shell, but still use cwd pattern
+  // Search merge commits first, then fall back to all commits (catches squash merges)
   try {
-    const output = execSync(
-      `git log --all --merges --grep=${slug} --format=%H|%s -n 1`,
+    const mergeOutput = execFileSync(
+      'git',
+      ['log', '--all', '--merges', `--grep=${slug}`, '--format=%H%x00%s', '-n', '1'],
       { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe' },
     );
-    const line = output.trim().split('\n')[0]?.trim();
-    if (!line) return undefined;
-    const pipeIndex = line.indexOf('|');
-    if (pipeIndex === -1) return undefined;
-    const sha = line.slice(0, pipeIndex).trim();
-    const message = line.slice(pipeIndex + 1).trim();
-    if (!sha) return undefined;
-    return { sha, message };
+    const mergeResult = parseGitLogLine(mergeOutput);
+    if (mergeResult) return mergeResult;
+
+    // Squash merges land as regular commits — search all commits by slug
+    const squashOutput = execFileSync(
+      'git',
+      ['log', '--all', `--grep=${slug}`, '--format=%H%x00%s', '-n', '1'],
+      { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe' },
+    );
+    return parseGitLogLine(squashOutput);
   } catch {
     return undefined;
   }
@@ -226,8 +235,9 @@ export function inferGitContext(
     mergeResult = findMergeCommit(projectPath, branch);
   }
 
-  if (!mergeResult) {
+  if (!mergeResult && slug.length >= 10) {
     // Fallback: search by slug across all merge commits
+    // Guard: skip for short slugs (< 10 chars) — too ambiguous, risks false positives
     mergeResult = findMergeCommitBySlug(projectPath, slug);
   }
 
