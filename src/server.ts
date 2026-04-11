@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   const storageDir = config.storageDir;
   const defaultProject = config.projects[0]?.prefix ?? 'DEFAULT';
   const tasksDir = config.projects[0]?.path
-    ? path.join(config.projects[0].path, 'tasks')
+    ? path.join(config.projects[0].path, config.tasksDirName)
     : storageDir;
 
   const dbPath = getDbPath();

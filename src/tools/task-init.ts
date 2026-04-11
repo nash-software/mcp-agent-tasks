@@ -58,9 +58,10 @@ export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<
   let tasksDir: string;
   let dbPath: string;
 
+  const dirName = ctx.config.tasksDirName;
   if (storageMode === 'local') {
-    tasksDir = path.join(projectPath, 'tasks');
-    dbPath = path.join(projectPath, 'tasks', '.index.db');
+    tasksDir = path.join(projectPath, dirName);
+    dbPath = path.join(projectPath, dirName, '.index.db');
   } else {
     tasksDir = path.join(ctx.config.storageDir, input.project_prefix.toLowerCase());
     dbPath = path.join(ctx.config.storageDir, '.index.db');

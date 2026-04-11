@@ -22,6 +22,7 @@ function makeConfig(storageDir: string): McpTasksConfig {
     autoCommit: false,
     claimTtlHours: 4,
     trackManifest: true,
+    tasksDirName: 'agent-tasks',
     projects: [],
   };
 }

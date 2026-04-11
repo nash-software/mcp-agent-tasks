@@ -270,18 +270,24 @@ describe('findMatchingBranch', () => {
     expect(findMatchingBranch('login-crash', branches)).toBe('fix/login-crash');
   });
 
-  it('LCS fallback at 60% threshold — positive case', () => {
-    // slug = 'reconcile' (9 chars), threshold = ceil(9*0.6) = 6
-    // branch 'reconcile-legacy-feature' has 'reconcile' in it (LCS >= 9)
-    const branches = ['main', 'reconcile-legacy-feature'];
-    const result = findMatchingBranch('reconcile', branches);
-    expect(result).toBe('reconcile-legacy-feature');
+  it('LCS fallback at 70% threshold — positive case', () => {
+    // slug = 'brain-phase-0-plan' (18 chars), threshold = ceil(18*0.7) = 13
+    // branch 'feature/brain-phase-0' has LCS 'brain-phase-0' = 13 chars — passes
+    const branches = ['main', 'feature/brain-phase-0'];
+    const result = findMatchingBranch('brain-phase-0-plan', branches);
+    expect(result).toBe('feature/brain-phase-0');
   });
 
-  it('LCS fallback — negative case below 60% threshold', () => {
-    // slug = 'reconcile' (9 chars), threshold = 6
-    // branch 'abc' has LCS = 1 (just 'e' or something tiny)
-    const branches = ['main', 'xyz'];
+  it('LCS fallback — rejects partial prefix match below 70% threshold', () => {
+    // slug = 'mer-phase-4-plan' (16 chars), threshold = ceil(16*0.7) = 12
+    // branch 'feature/mer-phase-1' has LCS 'mer-phase-' = 10 chars — rejected
+    const branches = ['main', 'feature/mer-phase-1'];
+    expect(findMatchingBranch('mer-phase-4-plan', branches)).toBeUndefined();
+  });
+
+  it('LCS fallback — skips short slugs below 12 chars', () => {
+    // slug = 'reconcile' (9 chars) — below minimum, LCS skipped entirely
+    const branches = ['main', 'reconcile-legacy-feature'];
     expect(findMatchingBranch('reconcile', branches)).toBeUndefined();
   });
 
@@ -428,7 +434,7 @@ describe('reconcileLegacy integration', () => {
     expect(summary.dryRun).toBe(true);
     expect(summary.results).toHaveLength(2);
     // No tasks dir was created
-    expect(fs.existsSync(path.join(tmpDir, 'tasks'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'agent-tasks'))).toBe(false);
   });
 
   it('writes 2 task files with valid frontmatter', async () => {
@@ -440,7 +446,7 @@ describe('reconcileLegacy integration', () => {
     expect(summary.written).toBe(2);
     expect(summary.skipped).toBe(0);
 
-    const tasksDir = path.join(tmpDir, 'tasks');
+    const tasksDir = path.join(tmpDir, 'agent-tasks');
     const taskFiles = fs.readdirSync(tasksDir);
     expect(taskFiles).toHaveLength(2);
 

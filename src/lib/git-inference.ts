@@ -64,8 +64,10 @@ export function findMatchingBranch(
     if (branches.includes(candidate)) return candidate;
   }
 
-  // 3. LCS fallback — accept if LCS >= 60% of slug length
-  const threshold = Math.ceil(slug.length * 0.6);
+  // 3. LCS fallback — skip for short slugs (< 12 chars are too ambiguous)
+  if (slug.length < 12) return undefined;
+
+  const threshold = Math.ceil(slug.length * 0.7);
   let bestBranch: string | undefined;
   let bestLcs = 0;
 
@@ -235,9 +237,10 @@ export function inferGitContext(
     mergeResult = findMergeCommit(projectPath, branch);
   }
 
-  if (!mergeResult && slug.length >= 10) {
+  if (!mergeResult && slug.length >= 15) {
     // Fallback: search by slug across all merge commits
-    // Guard: skip for short slugs (< 10 chars) — too ambiguous, risks false positives
+    // Guard: skip for short/generic slugs — too ambiguous, risks false positives
+    // (e.g. "phase-2-plan" matches "mobile-sync-phase-2" merge commits)
     mergeResult = findMergeCommitBySlug(projectPath, slug);
   }
 

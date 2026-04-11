@@ -15,6 +15,7 @@ export interface GlobalConfig {
   autoCommit: boolean;
   claimTtlHours: number;
   trackManifest: boolean; // default: true (index.yaml git-tracked)
+  tasksDirName: string;   // per-project subdirectory name (default: 'agent-tasks')
   projects: ProjectConfig[];
 }
 

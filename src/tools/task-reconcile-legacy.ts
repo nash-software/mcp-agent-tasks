@@ -8,6 +8,7 @@ import { ok } from './context.js';
 import { TaskFactory } from '../store/task-factory.js';
 import { inferGitContext } from '../lib/git-inference.js';
 import { buildInference } from '../lib/frontmatter-builder.js';
+import { DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
 import type { Confidence } from '../lib/frontmatter-builder.js';
 import type { TaskStatus } from '../types/task.js';
 
@@ -105,6 +106,20 @@ function derivePrefix(projectPath: string): string {
   return path.basename(projectPath).toUpperCase().replace(/[^A-Z0-9_]/g, '_') || 'PROJECT';
 }
 
+function isArtifactFile(filename: string): boolean {
+  // ALL_CAPS filenames (e.g. TEST_RESULTS.md, SONNET_ROUTING_DECISION.md, PHASE_6_COMPLETION.md)
+  // but not HANDOFF.md (already handled by slug-length guards)
+  const base = filename.replace(/\.md$/i, '');
+  if (/^[A-Z][A-Z0-9_-]+$/.test(base) && base !== 'HANDOFF') return true;
+  // Session state files (run-phases output)
+  if (/^run-phases-/i.test(filename)) return true;
+  // Completion markers
+  if (/-COMPLETE\.md$/i.test(filename)) return true;
+  // Flag files
+  if (/\.flag$/i.test(filename)) return true;
+  return false;
+}
+
 function findMaxExistingNum(tasksDir: string, prefix: string): number {
   try {
     if (!fs.existsSync(tasksDir)) return 0;
@@ -128,6 +143,7 @@ export async function reconcileLegacy(opts: {
   projectPath: string;
   idPrefix?: string;
   dryRun?: boolean;
+  tasksDirName?: string;
 }): Promise<ReconcileSummary> {
   const projectPath = path.resolve(opts.projectPath);
   const dryRun = opts.dryRun ?? false;
@@ -139,7 +155,7 @@ export async function reconcileLegacy(opts: {
     return { dryRun, scanned: 0, written: 0, skipped: 0, results: [] };
   }
 
-  const tasksDir = path.join(projectPath, 'tasks');
+  const tasksDir = path.join(projectPath, opts.tasksDirName ?? DEFAULT_TASKS_DIR_NAME);
   if (!dryRun && !fs.existsSync(tasksDir)) {
     fs.mkdirSync(tasksDir, { recursive: true });
   }
@@ -150,6 +166,8 @@ export async function reconcileLegacy(opts: {
 
   for (const filename of allFiles) {
     if (!filename.endsWith('.md')) continue;
+    // Skip known artifact/report files — these are never tasks
+    if (isArtifactFile(filename)) continue;
     const filePath = path.join(scratchpadsDir, filename);
     // Only include regular files (non-recursive)
     try {

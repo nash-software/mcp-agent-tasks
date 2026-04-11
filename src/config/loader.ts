@@ -6,6 +6,8 @@ import type { GlobalConfig } from '../types/config.js';
 // McpTasksConfig is an alias for GlobalConfig
 export type McpTasksConfig = GlobalConfig;
 
+export const DEFAULT_TASKS_DIR_NAME = 'agent-tasks';
+
 const DEFAULT_CONFIG: McpTasksConfig = {
   version: 1,
   storageDir: path.join(os.homedir(), '.mcp-tasks', 'tasks'),
@@ -14,6 +16,7 @@ const DEFAULT_CONFIG: McpTasksConfig = {
   autoCommit: false,
   claimTtlHours: 4,
   trackManifest: true,
+  tasksDirName: DEFAULT_TASKS_DIR_NAME,
   projects: [],
 };
 
@@ -41,6 +44,11 @@ function validateConfig(raw: unknown): McpTasksConfig {
     if (!(key in obj)) {
       throw new Error(`Config missing required field: ${key}`);
     }
+  }
+
+  // Backfill optional fields added after v1
+  if (!('tasksDirName' in obj) || typeof obj['tasksDirName'] !== 'string') {
+    obj['tasksDirName'] = DEFAULT_TASKS_DIR_NAME;
   }
 
   return obj as unknown as McpTasksConfig;

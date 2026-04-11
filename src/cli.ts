@@ -8,6 +8,12 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import type { GitLink } from './types/task.js';
 import type { TaskUpdateInput } from './types/tools.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
+import { SqliteIndex } from './store/sqlite-index.js';
+import { MarkdownStore } from './store/markdown-store.js';
+import { ManifestWriter } from './store/manifest-writer.js';
+import { TaskStore } from './store/task-store.js';
+import { Reconciler } from './store/reconciler.js';
 
 // Extended update type to carry git link fields through the update path
 interface UpdateWithGit extends TaskUpdateInput {
@@ -23,14 +29,9 @@ const __dirname = path.dirname(__filename);
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function buildStore(tasksDir: string, project: string) {
-  // Lazy dynamic imports so commands that don't need a store are fast
-  const { SqliteIndex } = require('./store/sqlite-index.js') as typeof import('./store/sqlite-index.js');
-  const { MarkdownStore } = require('./store/markdown-store.js') as typeof import('./store/markdown-store.js');
-  const { ManifestWriter } = require('./store/manifest-writer.js') as typeof import('./store/manifest-writer.js');
-  const { TaskStore } = require('./store/task-store.js') as typeof import('./store/task-store.js');
-  const { getDbPath } = require('./config/loader.js') as typeof import('./config/loader.js');
-
-  const dbPath = getDbPath();
+  // For local storage, DB lives inside the tasks dir; for global, use config
+  const localDbPath = path.join(tasksDir, '.index.db');
+  const dbPath = fs.existsSync(tasksDir) ? localDbPath : getDbPath();
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();
   const markdownStore = new MarkdownStore();
@@ -40,18 +41,18 @@ function buildStore(tasksDir: string, project: string) {
 }
 
 function resolveTasksDir(optPath?: string): { tasksDir: string; project: string; config: import('./config/loader.js').McpTasksConfig } {
-  const { loadConfig } = require('./config/loader.js') as typeof import('./config/loader.js');
   const config = loadConfig();
+  const dirName = config.tasksDirName;
 
   if (optPath) {
-    const tasksDir = path.join(optPath, 'tasks');
+    const tasksDir = path.join(optPath, dirName);
     const project = config.projects[0]?.prefix ?? 'DEFAULT';
     return { tasksDir, project, config };
   }
 
   const project = config.projects[0]?.prefix ?? 'DEFAULT';
   const tasksDir = config.projects[0]?.path
-    ? path.join(config.projects[0].path, 'tasks')
+    ? path.join(config.projects[0].path, dirName)
     : config.storageDir;
   return { tasksDir, project, config };
 }
@@ -79,24 +80,25 @@ program
 
 program
   .command('init <prefix>')
-  .description('Idempotent project init — creates tasks/ directory and .mcp-tasks.json')
+  .description('Idempotent project init — creates agent-tasks/ directory and .mcp-tasks.json')
   .option('--path <dir>', 'project root directory', process.cwd())
   .option('--storage <mode>', 'local or global', 'local')
-  .action((prefix: string, options: { path: string; storage: string }) => {
+  .action(async (prefix: string, options: { path: string; storage: string }) => {
+    const existingCfg = loadConfig();
+    const dirName = existingCfg.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
     const rootDir = path.resolve(options.path);
-    const tasksDir = path.join(rootDir, 'tasks');
+    const tasksDir = path.join(rootDir, dirName);
     const archiveDir = path.join(tasksDir, 'archive');
     const configFile = path.join(rootDir, '.mcp-tasks.json');
 
     if (!fs.existsSync(tasksDir)) fs.mkdirSync(tasksDir, { recursive: true });
     if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
 
-    const { loadConfig } = require('./config/loader.js') as typeof import('./config/loader.js');
     const existingConfig = fs.existsSync(configFile)
       ? (JSON.parse(fs.readFileSync(configFile, 'utf-8')) as Record<string, unknown>)
       : null;
 
-    const config = existingConfig ?? loadConfig();
+    const config = existingConfig ?? existingCfg;
     const projects = (Array.isArray((config as Record<string, unknown>)['projects'])
       ? (config as Record<string, unknown>)['projects']
       : []) as Array<{ prefix: string; path: string; storage: string }>;
@@ -351,7 +353,6 @@ program
     const { tasksDir, project } = resolveTasksDir(options.path);
     const resolvedProject = projectArg ?? project;
     const { sqliteIndex } = buildStore(tasksDir, resolvedProject);
-    const { Reconciler } = require('./store/reconciler.js') as typeof import('./store/reconciler.js');
     const reconciler = new Reconciler(sqliteIndex, tasksDir, resolvedProject);
     const count = reconciler.reconcile();
     console.log(`✓ Rebuilt index: ${count} tasks reconciled for project ${resolvedProject}`);
@@ -467,10 +468,12 @@ program
   .action(async (projectPath: string, options: { prefix?: string; dryRun: boolean }) => {
     const { reconcileLegacy } = await import('./tools/task-reconcile-legacy.js');
     try {
+      const cfg = loadConfig();
       const summary = await reconcileLegacy({
         projectPath,
         idPrefix: options.prefix,
         dryRun: options.dryRun,
+        tasksDirName: cfg.tasksDirName,
       });
 
       if (summary.scanned === 0) {

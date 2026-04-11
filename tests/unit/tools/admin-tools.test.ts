@@ -16,6 +16,7 @@ function makeConfig(storageDir: string, projects: McpTasksConfig['projects'] = [
     storageDir,
     defaultStorage: 'global',
     enforcement: 'warn',
+    tasksDirName: 'agent-tasks',
     autoCommit: false,
     claimTtlHours: 4,
     trackManifest: true,
@@ -83,7 +84,7 @@ describe('task_init', async () => {
       const parsed = JSON.parse(result.content[0].text) as { initialized: boolean; path: string };
       expect(parsed.initialized).toBe(true);
 
-      const tasksDir = path.join(projectPath, 'tasks');
+      const tasksDir = path.join(projectPath, 'agent-tasks');
       expect(fs.existsSync(tasksDir)).toBe(true);
       expect(fs.existsSync(path.join(tasksDir, 'archive'))).toBe(true);
       expect(fs.existsSync(path.join(tasksDir, '.gitignore'))).toBe(true);

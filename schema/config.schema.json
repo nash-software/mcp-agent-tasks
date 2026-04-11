@@ -11,6 +11,7 @@
     "autoCommit": { "type": "boolean" },
     "claimTtlHours": { "type": "number" },
     "trackManifest": { "type": "boolean" },
+    "tasksDirName": { "type": "string", "default": "agent-tasks", "description": "Per-project subdirectory name for task files" },
     "projects": {
       "type": "array",
       "items": {

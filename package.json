@@ -14,7 +14,7 @@
   "bin": { "mcp-agent-tasks": "./dist/cli.js" },
   "files": ["dist", "hooks", "schema", "src/templates", "README.md"],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && cp src/store/schema.sql dist/schema.sql",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
