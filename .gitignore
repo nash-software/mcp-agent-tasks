@@ -4,3 +4,7 @@ dist/
 *.secret.md
 coverage/
 *.tmp
+.env
+.env.*
+scratchpads/
+agent-tasks/
