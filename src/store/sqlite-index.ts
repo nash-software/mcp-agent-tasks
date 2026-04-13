@@ -91,6 +91,7 @@ export class SqliteIndex {
   private db: Database.Database;
 
   constructor(dbPath: string) {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
   }
 
