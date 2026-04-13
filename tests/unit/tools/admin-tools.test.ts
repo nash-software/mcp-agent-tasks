@@ -132,10 +132,11 @@ describe('task_rebuild_index', async () => {
     });
 
     it('runs reconciler and returns rebuilt count', async () => {
-      const tasksDir = path.join(tmpDir, 'tasks');
-      fs.mkdirSync(tasksDir, { recursive: true });
+      // projectConfig.path is the project root; task-rebuild-index appends tasksDirName
+      const agentTasksDir = path.join(tmpDir, 'agent-tasks');
+      fs.mkdirSync(agentTasksDir, { recursive: true });
 
-      const config = makeConfig(tmpDir, [{ prefix: 'TEST', path: tasksDir, storage: 'local' }]);
+      const config = makeConfig(tmpDir, [{ prefix: 'TEST', path: tmpDir, storage: 'local' }]);
       const { SqliteIndex } = await import('../../../src/store/sqlite-index.js');
       const dbPath = path.join(tmpDir, 'tasks.db');
       const idx = new SqliteIndex(dbPath);

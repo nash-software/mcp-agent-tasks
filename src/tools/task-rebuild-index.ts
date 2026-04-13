@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { McpTasksError } from '../types/errors.js';
 import { Reconciler } from '../store/reconciler.js';
 import type { ToolContext, ToolOutput } from './context.js';
@@ -36,7 +37,7 @@ export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<
     if (!projectConfig) {
       throw new McpTasksError('PROJECT_NOT_FOUND', `Project ${input.project} not found in config`);
     }
-    tasksDir = projectConfig.path;
+    tasksDir = path.join(projectConfig.path, ctx.config.tasksDirName);
     project = input.project;
   } else {
     // Use the default storage dir
