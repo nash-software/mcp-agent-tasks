@@ -2,8 +2,8 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Task, TaskStatus, Priority, SubtaskEntry, StatusTransition, CommitRef, GitLink } from '../types/task.js';
-import type { TaskStatsOutput } from '../types/tools.js';
+import type { Task, TaskStatus, Priority, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
+import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -38,6 +38,10 @@ interface TaskRow {
   body_hash: string | null;
   schema_version: number;
   spec_file: string | null;
+  milestone: string | null;
+  estimate_hours: number | null;
+  plan_file: string | null;
+  auto_captured: number;
 }
 
 interface SubtaskRow {
@@ -106,14 +110,47 @@ export class SqliteIndex {
     // Migration: add spec_file column to existing databases.
     // Fresh databases get it from schema.sql above; existing ones need ALTER TABLE.
     // SQLite serialises writes — concurrent init() calls are safe via try/catch.
-    try {
-      this.db.exec('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
-    } catch (err) {
-      if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
-        throw err;
+    const addColumnIfNotExists = (sql: string): void => {
+      try {
+        this.db.exec(sql);
+      } catch (err) {
+        if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
+          throw err;
+        }
+        // 'duplicate column name' means column already exists — expected on re-init
       }
-      // 'duplicate column name: spec_file' means column already exists — expected on re-init
-    }
+    };
+
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
+
+    // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS milestones (
+        id TEXT NOT NULL,
+        project TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        due_date TEXT,
+        status TEXT DEFAULT 'open' CHECK(status IN ('open','closed')),
+        created TEXT NOT NULL,
+        PRIMARY KEY (id, project)
+      );
+      CREATE TABLE IF NOT EXISTS task_references (
+        from_id TEXT NOT NULL,
+        to_id TEXT NOT NULL,
+        ref_type TEXT NOT NULL CHECK(ref_type IN ('closes','blocks','related')),
+        PRIMARY KEY (from_id, to_id, ref_type),
+        FOREIGN KEY (from_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        CHECK (from_id != to_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_tasks_milestone ON tasks(milestone);
+      CREATE INDEX IF NOT EXISTS idx_task_refs_from ON task_references(from_id);
+      CREATE INDEX IF NOT EXISTS idx_task_refs_to ON task_references(to_id);
+    `);
   }
 
   private rowToTask(row: TaskRow): Task {
@@ -169,7 +206,7 @@ export class SqliteIndex {
       };
     }
 
-    return {
+    const task: Task = {
       schema_version: row.schema_version,
       id: row.id,
       title: row.title,
@@ -197,7 +234,24 @@ export class SqliteIndex {
       body: row.body ?? '',
       file_path: row.file_path,
       ...(row.spec_file !== null ? { spec_file: row.spec_file } : {}),
+      ...(row.milestone !== null ? { milestone: row.milestone } : {}),
+      ...(row.estimate_hours !== null ? { estimate_hours: row.estimate_hours } : {}),
+      ...(row.plan_file !== null ? { plan_file: row.plan_file } : {}),
+      ...(row.auto_captured === 1 ? { auto_captured: true } : {}),
     };
+
+    // Attach references if any exist
+    const refRows = this.db.prepare<string>(
+      'SELECT ref_type, to_id FROM task_references WHERE from_id=?',
+    ).all(row.id) as Array<{ ref_type: string; to_id: string }>;
+    if (refRows.length > 0) {
+      task.references = refRows.map(r => ({
+        type: r.ref_type as TaskReference['type'],
+        id: r.to_id,
+      }));
+    }
+
+    return task;
   }
 
   upsertTask(task: Task): void {
@@ -208,14 +262,16 @@ export class SqliteIndex {
         created, updated, last_activity,
         claimed_by, claimed_at, claim_ttl_hours,
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
-        file_path, body, schema_version, spec_file
+        file_path, body, schema_version, spec_file,
+        milestone, estimate_hours, plan_file, auto_captured
       ) VALUES (
         @id, @title, @type, @status, @priority, @project,
         @complexity, @complexity_manual, @why, @parent,
         @created, @updated, @last_activity,
         @claimed_by, @claimed_at, @claim_ttl_hours,
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
-        @file_path, @body, @schema_version, @spec_file
+        @file_path, @body, @schema_version, @spec_file,
+        @milestone, @estimate_hours, @plan_file, @auto_captured
       )
     `);
 
@@ -248,6 +304,10 @@ export class SqliteIndex {
         body: t.body,
         schema_version: t.schema_version,
         spec_file: t.spec_file ?? null,
+        milestone: t.milestone ?? null,
+        estimate_hours: t.estimate_hours ?? null,
+        plan_file: t.plan_file ?? null,
+        auto_captured: t.auto_captured ? 1 : 0,
       });
 
       // Delete and re-insert related rows
@@ -257,6 +317,7 @@ export class SqliteIndex {
       this.db.prepare('DELETE FROM transitions WHERE task_id=?').run(t.id);
       this.db.prepare('DELETE FROM commits WHERE task_id=?').run(t.id);
       this.db.prepare('DELETE FROM children WHERE parent_id=?').run(t.id);
+      this.db.prepare('DELETE FROM task_references WHERE from_id=?').run(t.id);
 
       const insertSubtask = this.db.prepare(
         'INSERT INTO subtasks (id, parent_id, title, status, sort_order) VALUES (?, ?, ?, ?, ?)',
@@ -281,9 +342,20 @@ export class SqliteIndex {
 
       const insertChild = this.db.prepare('INSERT OR IGNORE INTO children (parent_id, child_id) VALUES (?, ?)');
       t.children.forEach(childId => insertChild.run(t.id, childId));
+
+      const insertRef = this.db.prepare(
+        'INSERT OR IGNORE INTO task_references (from_id, to_id, ref_type) VALUES (?, ?, ?)',
+      );
+      (t.references ?? []).forEach(r => insertRef.run(t.id, r.id, r.type));
     });
 
     upsertAll(task);
+  }
+
+  /** Package-internal: exposes the raw better-sqlite3 Database for use by
+   * MilestoneRepository and ReferenceRepository. Do not use outside store/. */
+  getRawDb(): Database.Database {
+    return this.db;
   }
 
   deleteTask(id: string): void {
@@ -408,12 +480,56 @@ export class SqliteIndex {
         AND datetime(t.last_activity, '+' || t.claim_ttl_hours || ' hours') < datetime('now')
     `).get(...params) as { count: number };
 
+    // Milestone burndown
+    const milestoneRows = this.db.prepare(`
+      SELECT m.id, m.title, m.status, m.due_date,
+        COUNT(t.id) as total,
+        SUM(CASE WHEN t.status='done' THEN 1 ELSE 0 END) as done
+      FROM milestones m
+      LEFT JOIN tasks t ON t.milestone=m.id ${project ? 'AND t.project=?' : ''}
+      ${project ? 'WHERE m.project=?' : ''}
+      GROUP BY m.id, m.project
+    `).all(...(project ? [project, project] : [])) as Array<{
+      id: string; title: string; status: string; due_date: string | null;
+      total: number; done: number;
+    }>;
+
+    const milestones: MilestoneBurndown[] = milestoneRows.map(r => ({
+      id: r.id,
+      title: r.title,
+      status: r.status as 'open' | 'closed',
+      total: r.total,
+      done: r.done ?? 0,
+      ...(r.due_date ? { due_date: r.due_date } : {}),
+    }));
+
+    // Orphaned milestones: tasks reference a milestone not in milestones table
+    const orphanRows = this.db.prepare(`
+      SELECT DISTINCT t.milestone FROM tasks t
+      WHERE t.milestone IS NOT NULL
+        AND t.milestone NOT IN (SELECT id FROM milestones)
+        ${project ? 'AND t.project=?' : ''}
+    `).all(...(project ? [project] : [])) as Array<{ milestone: string }>;
+    const orphaned_milestones = orphanRows.map(r => r.milestone);
+
     return {
       by_status,
       avg_cycle_time_by_type,
       completion_rate,
       stale_count: staleRows.count,
+      ...(milestones.length > 0 ? { milestones } : {}),
+      ...(orphaned_milestones.length > 0 ? { orphaned_milestones } : {}),
     };
+  }
+
+  getRecentActivity(limit: number = 50): Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }> {
+    return this.db.prepare(`
+      SELECT tr.task_id, t.title, tr.from_status, tr.to_status, tr.at, tr.reason
+      FROM transitions tr
+      JOIN tasks t ON t.id = tr.task_id
+      ORDER BY tr.at DESC
+      LIMIT ?
+    `).all(limit) as Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }>;
   }
 
   claimTask(id: string, sessionId: string, ttlHours: number): boolean {

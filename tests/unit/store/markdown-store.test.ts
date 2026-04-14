@@ -209,4 +209,80 @@ describe('MarkdownStore', () => {
       expect(fs.existsSync(archivePath)).toBe(true);
     });
   });
+
+  describe('labels/tags alias + new fields (Step 6)', () => {
+    it('merges tags and labels from frontmatter into deduped array', () => {
+      // Hand-craft a file with both tags and labels in frontmatter
+      const filePath = path.join(tmpDir, 'TEST-alias.md');
+      const content = `---
+schema_version: 1
+id: TEST-001
+title: Alias test
+type: feature
+status: todo
+priority: medium
+project: TEST
+tags:
+  - alpha
+labels:
+  - beta
+  - alpha
+why: Testing alias
+created: "2026-01-01T00:00:00.000Z"
+updated: "2026-01-01T00:00:00.000Z"
+last_activity: "2026-01-01T00:00:00.000Z"
+---
+
+Body text.
+`;
+      fs.writeFileSync(filePath, content, 'utf-8');
+      const task = store.read(filePath);
+      // Should merge both, deduplicate
+      expect(task.tags).toContain('alpha');
+      expect(task.tags).toContain('beta');
+      // alpha should appear only once
+      expect(task.tags.filter(t => t === 'alpha')).toHaveLength(1);
+      expect(task.labels).toEqual(task.tags);
+    });
+
+    it('write serializes as labels (and tags for compat); round-trips correctly', () => {
+      const filePath = path.join(tmpDir, 'TEST-write-alias.md');
+      const task = makeTask({ file_path: filePath, tags: ['x', 'y'] });
+      store.write(task);
+
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      expect(raw).toContain('labels:');
+      expect(raw).toContain('tags:');
+
+      const readBack = store.read(filePath);
+      expect(readBack.tags).toContain('x');
+      expect(readBack.tags).toContain('y');
+    });
+
+    it('round-trips references', () => {
+      const filePath = path.join(tmpDir, 'TEST-refs.md');
+      const task = makeTask({
+        file_path: filePath,
+        references: [{ type: 'closes', id: 'TEST-002' }],
+      });
+      store.write(task);
+      const readBack = store.read(filePath);
+      expect(readBack.references).toHaveLength(1);
+      expect(readBack.references![0]!.type).toBe('closes');
+      expect(readBack.references![0]!.id).toBe('TEST-002');
+    });
+
+    it('round-trips auto_captured and milestone', () => {
+      const filePath = path.join(tmpDir, 'TEST-captured.md');
+      const task = makeTask({
+        file_path: filePath,
+        auto_captured: true,
+        milestone: 'v2.0',
+      });
+      store.write(task);
+      const readBack = store.read(filePath);
+      expect(readBack.auto_captured).toBe(true);
+      expect(readBack.milestone).toBe('v2.0');
+    });
+  });
 });

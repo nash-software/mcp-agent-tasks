@@ -406,4 +406,69 @@ describe('SqliteIndex', () => {
       expect(stats.completion_rate).toBeCloseTo(2 / 3, 2);
     });
   });
+
+  describe('schema migration — new columns (Step 4)', () => {
+    it('tasks table has milestone, estimate_hours, plan_file, auto_captured columns', () => {
+      // Use PRAGMA table_info to verify column existence
+      const cols = idx['db'].prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>;
+      const colNames = cols.map(c => c.name);
+      expect(colNames).toContain('milestone');
+      expect(colNames).toContain('estimate_hours');
+      expect(colNames).toContain('plan_file');
+      expect(colNames).toContain('auto_captured');
+    });
+
+    it('milestones table exists', () => {
+      const row = idx['db']
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='milestones'")
+        .get() as { sql: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row?.sql).toContain('milestones');
+    });
+
+    it('task_references table exists', () => {
+      const row = idx['db']
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='task_references'")
+        .get() as { sql: string } | undefined;
+      expect(row).toBeDefined();
+      expect(row?.sql).toContain('task_references');
+    });
+
+    it('init() is idempotent — calling twice does not throw', () => {
+      expect(() => idx.init()).not.toThrow();
+      expect(() => idx.init()).not.toThrow();
+    });
+  });
+
+  describe('upsertTask() — new fields roundtrip (Step 5)', () => {
+    it('persists and reads back milestone, estimate_hours, plan_file, auto_captured', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({
+        milestone: 'v2.0',
+        estimate_hours: 8,
+        plan_file: 'scratchpads/x-plan.md',
+        auto_captured: true,
+      });
+      idx.upsertTask(task);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved).not.toBeNull();
+      expect(retrieved!.milestone).toBe('v2.0');
+      expect(retrieved!.estimate_hours).toBe(8);
+      expect(retrieved!.plan_file).toBe('scratchpads/x-plan.md');
+      expect(retrieved!.auto_captured).toBe(true);
+    });
+
+    it('omits new fields when not set (no spurious nulls on Task shape)', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask();
+      idx.upsertTask(task);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved!.milestone).toBeUndefined();
+      expect(retrieved!.estimate_hours).toBeUndefined();
+      expect(retrieved!.plan_file).toBeUndefined();
+      expect(retrieved!.auto_captured).toBeUndefined();
+    });
+  });
 });
