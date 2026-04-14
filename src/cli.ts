@@ -505,6 +505,100 @@ program
     }
   });
 
+// ── setup ─────────────────────────────────────────────────────────────────────
+
+program
+  .command('setup')
+  .description('One-time global setup: register MCP server in Claude Code and install task-gate hook')
+  .option('--dry-run', 'show what would be done without making changes', false)
+  .action((options: { dryRun: boolean }) => {
+    const log = (msg: string): void => console.log(options.dryRun ? `[dry-run] ${msg}` : `✓ ${msg}`);
+
+    // 1. Find binary path via npm global prefix
+    let binaryPath: string;
+    try {
+      const npmPrefix = execSync('npm prefix -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      binaryPath = process.platform === 'win32'
+        ? path.join(npmPrefix, 'mcp-agent-tasks')
+        : path.join(npmPrefix, 'bin', 'mcp-agent-tasks');
+    } catch {
+      console.error('✗ Could not determine npm global prefix. Ensure npm is installed and on PATH.');
+      process.exit(1);
+      return; // unreachable, satisfies TS
+    }
+
+    // 2. Register MCP server in ~/.claude.json
+    const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+    let claudeJson: Record<string, unknown> = {};
+    if (fs.existsSync(claudeJsonPath)) {
+      try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8')) as Record<string, unknown>; } catch { /* start fresh */ }
+    }
+    if (!claudeJson['mcpServers']) claudeJson['mcpServers'] = {};
+    const mcpServers = claudeJson['mcpServers'] as Record<string, unknown>;
+    const wasRegistered = 'mcp-agent-tasks' in mcpServers;
+    mcpServers['mcp-agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
+    if (!options.dryRun) {
+      fs.mkdirSync(path.dirname(claudeJsonPath), { recursive: true });
+      fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), 'utf-8');
+    }
+    log(`${wasRegistered ? 'Updated' : 'Registered'} MCP server in ${claudeJsonPath}`);
+    log(`  command: ${binaryPath} serve`);
+
+    // 3. Install task-gate hook
+    const hooksSourceDir = path.join(__dirname, '..', 'hooks');
+    const taskGateSrc = path.join(hooksSourceDir, 'task-gate.js');
+    const taskGateDest = path.join(os.homedir(), '.claude', 'hooks', 'task-gate.js');
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+    if (!fs.existsSync(taskGateSrc)) {
+      console.error(`✗ task-gate.js not found at ${taskGateSrc} — is the package installed correctly?`);
+      process.exit(1);
+    }
+
+    if (!options.dryRun) {
+      fs.mkdirSync(path.dirname(taskGateDest), { recursive: true });
+      fs.copyFileSync(taskGateSrc, taskGateDest);
+      fs.chmodSync(taskGateDest, 0o755);
+    }
+    log(`Installed task-gate.js → ${taskGateDest}`);
+
+    let settings: Record<string, unknown> = {};
+    if (fs.existsSync(settingsPath)) {
+      try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>; } catch { /* start fresh */ }
+    }
+    if (!settings['hooks']) settings['hooks'] = {};
+    const hooks = settings['hooks'] as Record<string, unknown>;
+    if (!hooks['PreToolUse']) hooks['PreToolUse'] = [];
+    const preToolUse = hooks['PreToolUse'] as Array<Record<string, unknown>>;
+    const hookEntry = { key: 'task-gate', matcher: '.*', cmd: `node ${taskGateDest}` };
+    const existingIdx = preToolUse.findIndex(h => h['key'] === 'task-gate');
+    if (existingIdx >= 0) { preToolUse[existingIdx] = hookEntry; } else { preToolUse.push(hookEntry); }
+    if (!options.dryRun) {
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+    }
+    log(`Registered task-gate PreToolUse hook in ${settingsPath}`);
+
+    // 4. Create global config + storage dirs
+    const configDir = path.join(os.homedir(), '.config', 'mcp-tasks');
+    const storageDir = path.join(os.homedir(), '.mcp-tasks', 'tasks');
+    if (!options.dryRun) {
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(storageDir, { recursive: true });
+    }
+    log(`Config dir ready: ${configDir}`);
+    log(`Storage dir ready: ${storageDir}`);
+
+    // Summary
+    console.log('');
+    console.log(options.dryRun ? 'Dry-run complete — no changes made.' : 'Setup complete!');
+    console.log('');
+    console.log('Next steps:');
+    console.log('  1. Restart Claude Code to load the MCP server');
+    console.log('  2. Run /mcp in Claude Code to verify mcp-agent-tasks is listed');
+    console.log('  3. For each project: cd <project-root> && mcp-agent-tasks init <PREFIX>');
+    console.log('');
+  });
+
 // ── parse ─────────────────────────────────────────────────────────────────────
 
 program.parse(process.argv);
