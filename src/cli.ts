@@ -214,7 +214,7 @@ program
 
 program
   .command('install-hooks')
-  .description('Install git hooks (post-commit, prepare-commit-msg)')
+  .description('Install git hooks (post-commit, prepare-commit-msg, post-merge)')
   .option('--path <dir>', 'project root directory', process.cwd())
   .action((options: { path: string }) => {
     const rootDir = path.resolve(options.path);
@@ -228,7 +228,7 @@ program
     // Source hooks live next to this file in hooks/ (dist layout) or in project hooks/ (dev)
     const hooksSourceDir = path.join(__dirname, '..', 'hooks');
 
-    for (const hookName of ['post-commit', 'prepare-commit-msg'] as const) {
+    for (const hookName of ['post-commit', 'prepare-commit-msg', 'post-merge'] as const) {
       const target = path.join(hooksDir, hookName);
       const source = path.join(hooksSourceDir, `${hookName}.js`);
 
@@ -399,9 +399,21 @@ program
 
 program
   .command('link-pr <id>')
-  .description('Link the current branch PR to a task (uses gh CLI)')
+  .description('Link the current branch PR to a task (uses gh CLI, or supply --pr-number to skip gh lookup)')
   .option('--path <dir>', 'project root directory')
-  .action((id: string, options: { path?: string }) => {
+  .option('--pr-number <n>', 'PR number (skips gh pr view lookup)')
+  .option('--pr-url <url>', 'PR URL')
+  .option('--pr-state <state>', 'PR state (open|merged|closed)')
+  .option('--merged-at <iso>', 'Merge timestamp (ISO-8601)')
+  .option('--pr-title <title>', 'PR title')
+  .action((id: string, options: {
+    path?: string;
+    prNumber?: string;
+    prUrl?: string;
+    prState?: string;
+    mergedAt?: string;
+    prTitle?: string;
+  }) => {
     const { tasksDir, project } = resolveTasksDir(options.path);
     const { store, sqliteIndex } = buildStore(tasksDir, project);
 
@@ -411,21 +423,39 @@ program
       title: string;
       state: string;
       baseRefName: string;
+      mergedAt?: string | null;
     };
 
-    try {
-      const raw = execSync('gh pr view --json number,url,title,state,baseRefName', { encoding: 'utf-8' });
-      prData = JSON.parse(raw) as typeof prData;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`✗ Could not get PR info: ${msg}`);
-      process.exit(1);
+    if (options.prNumber !== undefined) {
+      // Explicit flags supplied — no gh CLI needed
+      if (!options.prUrl || !options.prState) {
+        console.error('✗ --pr-url and --pr-state are required when --pr-number is provided');
+        process.exit(1);
+      }
+      prData = {
+        number: parseInt(options.prNumber, 10),
+        url: options.prUrl,
+        title: options.prTitle ?? '',
+        state: options.prState,
+        baseRefName: '',
+        mergedAt: options.mergedAt,
+      };
+    } else {
+      try {
+        const raw = execSync('gh pr view --json number,url,title,state,baseRefName', { encoding: 'utf-8' });
+        prData = JSON.parse(raw) as typeof prData;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`✗ Could not get PR info: ${msg}`);
+        process.exit(1);
+      }
     }
 
     try {
       const task = sqliteIndex.getTask(id);
       if (!task) throw new Error(`Task not found: ${id}`);
       const git = task.git ?? { commits: [] };
+      const normalizedState = prData.state.toLowerCase() as import('./types/task.js').PRRef['state'];
       const prPayload: UpdateWithGit = {
         id,
         git: {
@@ -434,13 +464,26 @@ program
             number: prData.number,
             url: prData.url,
             title: prData.title,
-            state: prData.state as import('./types/task.js').PRRef['state'],
-            merged_at: null,
+            state: normalizedState,
+            merged_at: prData.mergedAt ?? null,
             base_branch: prData.baseRefName,
           },
         },
       };
       store.updateTask(id, prPayload);
+
+      // Auto-transition to done when the PR was merged
+      if (normalizedState === 'merged') {
+        const current = sqliteIndex.getTask(id);
+        if (current && current.status !== 'done' && current.status !== 'archived') {
+          try {
+            store.transitionTask(id, 'done', 'PR merged');
+          } catch {
+            // Transition not valid from current state — skip silently
+          }
+        }
+      }
+
       console.log(`✓ Linked PR #${prData.number} to ${id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
