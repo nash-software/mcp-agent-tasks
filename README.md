@@ -80,6 +80,8 @@ The `prepare-commit-msg` hook prepends `[PROJ-001]` to commit messages when the 
 
 The `post-commit` hook runs `link-commit` automatically after every commit.
 
+The `post-merge` hook fires after `git pull` / `git merge`. It detects squash-merged PRs by reading the HEAD commit message, looks up the PR via `gh pr view`, extracts any task IDs from the PR title, body, and branch name, then automatically transitions those tasks to `done`. No manual `task_transition` call is needed after merging.
+
 Set `SKIP_TASK_GATE=1` to bypass the Claude Code gate when needed.
 
 ## Configuration Reference
