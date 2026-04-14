@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
-import { TaskFactory } from '../../../src/store/task-factory.js';
+import { TaskFactory, humanizeSlug } from '../../../src/store/task-factory.js';
 import type { TaskCreateInput } from '../../../src/types/tools.js';
+import type { CaptureEvent } from '../../../src/types/task.js';
 
 function makeInput(overrides: Partial<TaskCreateInput> = {}): TaskCreateInput {
   return {
@@ -123,6 +124,62 @@ describe('TaskFactory', () => {
     it('complexity_manual is false on creation', () => {
       const task = factory.create(makeInput(), 'PREFIX-001', TASKS_DIR);
       expect(task.complexity_manual).toBe(false);
+    });
+  });
+
+  describe('humanizeSlug()', () => {
+    it('humanizes plain slug: "auth-plan" → "Auth plan"', () => {
+      expect(humanizeSlug('scratchpads/auth-plan.md')).toBe('Auth plan');
+    });
+
+    it('strips task-ID prefix: "HBOOK-007-auth-plan.md" → "Auth plan"', () => {
+      expect(humanizeSlug('HBOOK-007-auth-plan.md')).toBe('Auth plan');
+    });
+
+    it('handles underscores: "auth_plan" → "Auth plan"', () => {
+      expect(humanizeSlug('auth_plan.md')).toBe('Auth plan');
+    });
+  });
+
+  describe('fromCaptureEvent()', () => {
+    const makeEvent = (overrides: Partial<CaptureEvent> = {}): CaptureEvent => ({
+      tool: 'Write',
+      file_path: 'scratchpads/auth-plan.md',
+      project: 'TEST',
+      inferred_type: 'plan',
+      branch: 'feat/TEST-001-auth',
+      at: new Date().toISOString(),
+      ...overrides,
+    });
+
+    it('creates a plan task with auto_captured=true', () => {
+      const event = makeEvent({ inferred_type: 'plan', file_path: 'scratchpads/auth-plan.md' });
+      const task = factory.fromCaptureEvent(event, 'TEST-001', TASKS_DIR);
+      expect(task.auto_captured).toBe(true);
+      expect(task.type).toBe('plan');
+      expect(task.title).toBe('Auth plan');
+      expect(task.plan_file).toBe('scratchpads/auth-plan.md');
+    });
+
+    it('creates a spec task with auto_captured=true', () => {
+      const event = makeEvent({ inferred_type: 'spec', file_path: 'scratchpads/auth-spec.md' });
+      const task = factory.fromCaptureEvent(event, 'TEST-002', TASKS_DIR);
+      expect(task.type).toBe('spec');
+      expect(task.spec_file).toBe('scratchpads/auth-spec.md');
+    });
+
+    it('throws for skip type', () => {
+      const event = makeEvent({ inferred_type: 'skip' });
+      expect(() => factory.fromCaptureEvent(event, 'TEST-003', TASKS_DIR)).toThrow(
+        'fromCaptureEvent requires plan/spec/spike type',
+      );
+    });
+
+    it('throws for code_change type', () => {
+      const event = makeEvent({ inferred_type: 'code_change' });
+      expect(() => factory.fromCaptureEvent(event, 'TEST-004', TASKS_DIR)).toThrow(
+        'fromCaptureEvent requires plan/spec/spike type',
+      );
     });
   });
 });

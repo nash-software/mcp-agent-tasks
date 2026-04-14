@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { isValidTransition, VALID_TRANSITIONS } from '../../src/types/transitions.js';
-import type { TaskStatus, TaskType, Priority } from '../../src/types/task.js';
+import type { TaskStatus, TaskType, Priority, Task, TaskReference, Milestone, CaptureEvent } from '../../src/types/task.js';
 import { McpTasksError } from '../../src/types/errors.js';
 
 describe('VALID_TRANSITIONS', () => {
@@ -73,13 +73,94 @@ describe('Type contracts (compile-time only)', () => {
     expect(statuses).toHaveLength(5);
   });
 
-  it('TaskType union is correct', () => {
-    const types: TaskType[] = ['feature', 'bug', 'chore', 'spike', 'refactor'];
-    expect(types).toHaveLength(5);
+  it('TaskType union is correct — includes plan', () => {
+    const types: TaskType[] = ['feature', 'bug', 'chore', 'spike', 'refactor', 'spec', 'plan'];
+    expect(types).toHaveLength(7);
+    expect(types).toContain('plan');
   });
 
   it('Priority union is correct', () => {
     const priorities: Priority[] = ['critical', 'high', 'medium', 'low'];
     expect(priorities).toHaveLength(4);
+  });
+});
+
+describe('New optional fields on Task (compile-time + runtime)', () => {
+  it('Task allows milestone, estimate_hours, plan_file, auto_captured, labels, references', () => {
+    const now = new Date().toISOString();
+    const refs: TaskReference[] = [{ type: 'closes', id: 'TEST-002' }];
+    const task: Task = {
+      schema_version: 1,
+      id: 'TEST-001',
+      title: 'New fields test',
+      type: 'plan',
+      status: 'todo',
+      priority: 'medium',
+      project: 'TEST',
+      tags: ['alpha'],
+      complexity: 1,
+      complexity_manual: false,
+      why: 'Testing new fields',
+      created: now,
+      updated: now,
+      last_activity: now,
+      claimed_by: null,
+      claimed_at: null,
+      claim_ttl_hours: 4,
+      parent: null,
+      children: [],
+      dependencies: [],
+      subtasks: [],
+      git: { commits: [] },
+      transitions: [],
+      files: [],
+      body: '',
+      file_path: '/tmp/TEST-001.md',
+      // new optional fields
+      milestone: 'v2.0',
+      estimate_hours: 8,
+      plan_file: 'scratchpads/auth-plan.md',
+      auto_captured: true,
+      labels: ['alpha', 'beta'],
+      references: refs,
+    };
+
+    expect(task.milestone).toBe('v2.0');
+    expect(task.estimate_hours).toBe(8);
+    expect(task.plan_file).toBe('scratchpads/auth-plan.md');
+    expect(task.auto_captured).toBe(true);
+    expect(task.labels).toEqual(['alpha', 'beta']);
+    expect(task.references).toEqual(refs);
+    expect(task.type).toBe('plan');
+  });
+
+  it('TaskReference has correct shape', () => {
+    const ref: TaskReference = { type: 'blocks', id: 'PROJ-042' };
+    expect(ref.type).toBe('blocks');
+    expect(ref.id).toBe('PROJ-042');
+  });
+
+  it('Milestone has correct shape', () => {
+    const m: Milestone = {
+      id: 'v2.0',
+      title: 'v2.0 Release',
+      status: 'open',
+      created: new Date().toISOString(),
+    };
+    expect(m.id).toBe('v2.0');
+    expect(m.status).toBe('open');
+  });
+
+  it('CaptureEvent has correct shape', () => {
+    const evt: CaptureEvent = {
+      tool: 'Write',
+      file_path: 'scratchpads/auth-plan.md',
+      project: 'TEST',
+      inferred_type: 'plan',
+      branch: 'feat/TEST-001-auth',
+      at: new Date().toISOString(),
+    };
+    expect(evt.tool).toBe('Write');
+    expect(evt.inferred_type).toBe('plan');
   });
 });

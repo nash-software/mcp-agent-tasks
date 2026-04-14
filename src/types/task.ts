@@ -1,6 +1,29 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved';
-export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec';
+export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
+
+export interface TaskReference {
+  type: 'closes' | 'blocks' | 'related';
+  id: string; // e.g. "PROJ-042"
+}
+
+export interface Milestone {
+  id: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  status: 'open' | 'closed';
+  created: string;
+}
+
+export interface CaptureEvent {
+  tool: 'Write' | 'Edit';
+  file_path: string;
+  project: string;
+  inferred_type: 'plan' | 'spec' | 'spike' | 'code_change' | 'skip';
+  branch: string | null;
+  at: string;
+}
 
 export interface CommitRef {
   sha: string;
@@ -59,6 +82,12 @@ export interface TaskFrontmatter {
   dependencies: string[];      // task IDs that must be done before this
   subtasks: SubtaskEntry[];    // Level 2 inline subtasks (max 10)
   spec_file?: string;           // relative path from project root; only valid on spec type; max 500 chars
+  plan_file?: string;           // relative path from project root; only valid on plan type; max 500 chars
+  milestone?: string;           // ID referencing milestones.yaml
+  estimate_hours?: number;      // planning estimate
+  auto_captured?: boolean;      // true if created by passive-capture hook
+  labels?: string[];            // alias for tags (backward-compat: tags still works)
+  references?: TaskReference[]; // cross-refs to other tasks
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches
