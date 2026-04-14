@@ -97,6 +97,7 @@ export class MarkdownStore {
       files: fm.files ?? [],
       body: parsed.content.trim(),
       file_path: filePath,
+      ...(fm.spec_file !== undefined ? { spec_file: fm.spec_file } : {}),
     };
 
     return task;

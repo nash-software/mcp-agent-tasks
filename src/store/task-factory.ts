@@ -21,12 +21,13 @@ export class TaskFactory {
   create(input: TaskCreateInput, id: string, tasksDir: string, templateBody?: string): Task {
     const now = new Date().toISOString();
 
-    return {
+    const task: Task = {
       schema_version: SCHEMA_VERSION,
       id,
       title: input.title,
       type: input.type,
-      status: 'todo',
+      // spec tasks start at draft; all others start at todo
+      status: input.type === 'spec' ? 'draft' : 'todo',
       priority: input.priority,
       project: input.project,
       tags: input.tags ?? [],
@@ -49,6 +50,12 @@ export class TaskFactory {
       body: templateBody ?? '',
       file_path: path.join(tasksDir, id + '.md'),
     };
+
+    if (input.spec_file !== undefined) {
+      task.spec_file = input.spec_file;
+    }
+
+    return task;
   }
 
   formatId(prefix: string, num: number): string {

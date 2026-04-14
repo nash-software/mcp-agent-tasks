@@ -37,6 +37,7 @@ interface TaskRow {
   body: string | null;
   body_hash: string | null;
   schema_version: number;
+  spec_file: string | null;
 }
 
 interface SubtaskRow {
@@ -101,6 +102,18 @@ export class SqliteIndex {
     const schemaPath = path.join(__dirname, 'schema.sql');
     const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schemaSql);
+
+    // Migration: add spec_file column to existing databases.
+    // Fresh databases get it from schema.sql above; existing ones need ALTER TABLE.
+    // SQLite serialises writes — concurrent init() calls are safe via try/catch.
+    try {
+      this.db.exec('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
+    } catch (err) {
+      if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
+        throw err;
+      }
+      // 'duplicate column name: spec_file' means column already exists — expected on re-init
+    }
   }
 
   private rowToTask(row: TaskRow): Task {
@@ -183,6 +196,7 @@ export class SqliteIndex {
       files: [],
       body: row.body ?? '',
       file_path: row.file_path,
+      ...(row.spec_file !== null ? { spec_file: row.spec_file } : {}),
     };
   }
 
@@ -194,14 +208,14 @@ export class SqliteIndex {
         created, updated, last_activity,
         claimed_by, claimed_at, claim_ttl_hours,
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
-        file_path, body, schema_version
+        file_path, body, schema_version, spec_file
       ) VALUES (
         @id, @title, @type, @status, @priority, @project,
         @complexity, @complexity_manual, @why, @parent,
         @created, @updated, @last_activity,
         @claimed_by, @claimed_at, @claim_ttl_hours,
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
-        @file_path, @body, @schema_version
+        @file_path, @body, @schema_version, @spec_file
       )
     `);
 
@@ -233,6 +247,7 @@ export class SqliteIndex {
         file_path: t.file_path,
         body: t.body,
         schema_version: t.schema_version,
+        spec_file: t.spec_file ?? null,
       });
 
       // Delete and re-insert related rows
@@ -357,6 +372,8 @@ export class SqliteIndex {
       done: 0,
       blocked: 0,
       archived: 0,
+      draft: 0,
+      approved: 0,
     };
     for (const r of statusRows) {
       by_status[r.status as TaskStatus] = r.count;

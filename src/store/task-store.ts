@@ -23,6 +23,7 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'git',
   'complexity',
   'complexity_manual',
+  'spec_file',
 ]);
 
 export class TaskStore {
@@ -121,6 +122,13 @@ export class TaskStore {
     if (extended['subtasks'] !== undefined) updated.subtasks = extended['subtasks'] as Task['subtasks'];
     if (extended['children'] !== undefined) updated.children = extended['children'] as string[];
     if (extended['git'] !== undefined) updated.git = extended['git'] as Task['git'];
+
+    if (extended['spec_file'] !== undefined) {
+      if (existing.type !== 'spec') {
+        throw new McpTasksError('INVALID_FIELD', "spec_file is only valid for type 'spec'");
+      }
+      updated.spec_file = extended['spec_file'] as string;
+    }
 
     // Write protocol: SQLite → markdown → manifest
     this.sqliteIndex.upsertTask(updated);

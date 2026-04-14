@@ -1,5 +1,5 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived';
-export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor';
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved';
+export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 
 export interface CommitRef {
@@ -58,6 +58,7 @@ export interface TaskFrontmatter {
   children: string[];          // Level 3 child task IDs
   dependencies: string[];      // task IDs that must be done before this
   subtasks: SubtaskEntry[];    // Level 2 inline subtasks (max 10)
+  spec_file?: string;           // relative path from project root; only valid on spec type; max 500 chars
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches

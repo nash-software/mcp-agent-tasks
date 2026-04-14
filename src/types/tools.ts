@@ -12,12 +12,13 @@ export interface TaskCreateInput {
   files?: string[];
   parent?: string;
   template?: string;
+  spec_file?: string;
 }
 
 export interface TaskCreateOutput {
   id: string;
   file: string;
-  status: 'todo';
+  status: TaskStatus;
 }
 
 export interface TaskUpdateInput {
@@ -28,6 +29,7 @@ export interface TaskUpdateInput {
   tags?: string[];
   files?: string[];
   complexity?: number;
+  spec_file?: string;
 }
 
 export interface TaskGetInput { id: string; }

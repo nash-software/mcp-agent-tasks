@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor')),
-  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived')),
+  type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor','spec')),
+  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved')),
   priority TEXT NOT NULL CHECK(priority IN ('critical','high','medium','low')),
   project TEXT NOT NULL REFERENCES projects(prefix),
   complexity INTEGER CHECK(complexity BETWEEN 1 AND 10),
@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   file_path TEXT NOT NULL,
   body TEXT,
   body_hash TEXT,
-  schema_version INTEGER NOT NULL DEFAULT 1
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  spec_file TEXT
 );
 
 CREATE TABLE IF NOT EXISTS subtasks (

@@ -14,7 +14,7 @@ export const schema = {
     title: { type: 'string', description: 'Task title (max 200 chars)' },
     type: {
       type: 'string',
-      enum: ['feature', 'bug', 'chore', 'spike', 'refactor'],
+      enum: ['feature', 'bug', 'chore', 'spike', 'refactor', 'spec'],
       description: 'Task type',
     },
     priority: {
@@ -40,6 +40,7 @@ export const schema = {
     },
     parent: { type: 'string', description: 'Parent task ID' },
     template: { type: 'string', description: 'Template name' },
+    spec_file: { type: 'string', description: 'Path to spec markdown file, relative to project root (spec type only, max 500 chars)' },
   },
   required: ['project', 'title', 'type', 'priority', 'why'],
 } as const;
@@ -55,12 +56,13 @@ interface TaskCreateRaw {
   files?: unknown;
   parent?: unknown;
   template?: unknown;
+  spec_file?: unknown;
 }
 
 interface ValidatedInput {
   project: string;
   title: string;
-  type: 'feature' | 'bug' | 'chore' | 'spike' | 'refactor';
+  type: 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec';
   priority: 'critical' | 'high' | 'medium' | 'low';
   why: string;
   tags?: string[];
@@ -68,9 +70,10 @@ interface ValidatedInput {
   files?: string[];
   parent?: string;
   template?: string;
+  spec_file?: string;
 }
 
-const VALID_TYPES = new Set(['feature', 'bug', 'chore', 'spike', 'refactor']);
+const VALID_TYPES = new Set(['feature', 'bug', 'chore', 'spike', 'refactor', 'spec']);
 const VALID_PRIORITIES = new Set(['critical', 'high', 'medium', 'low']);
 
 export function validate(input: unknown): asserts input is ValidatedInput {
@@ -110,6 +113,17 @@ export function validate(input: unknown): asserts input is ValidatedInput {
     }
     if (raw.tags.length > 10) {
       throw new McpTasksError('INVALID_FIELD', 'tags must have 10 or fewer items');
+    }
+  }
+  if (raw.spec_file !== undefined) {
+    if (typeof raw.spec_file !== 'string') {
+      throw new McpTasksError('INVALID_FIELD', 'spec_file must be a string');
+    }
+    if (raw.type !== 'spec') {
+      throw new McpTasksError('INVALID_FIELD', "spec_file is only valid for type 'spec'");
+    }
+    if (raw.spec_file.length > 500) {
+      throw new McpTasksError('INVALID_FIELD', 'spec_file must be 500 characters or fewer');
     }
   }
 }
