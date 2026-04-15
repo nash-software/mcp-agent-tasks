@@ -1,5 +1,7 @@
 node_modules/
+src/ui/node_modules/
 dist/
+src/ui/dist/
 *.index.db
 *.secret.md
 coverage/
