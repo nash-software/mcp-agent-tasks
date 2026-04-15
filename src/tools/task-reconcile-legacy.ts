@@ -108,15 +108,17 @@ function derivePrefix(projectPath: string): string {
 }
 
 function isArtifactFile(filename: string): boolean {
-  // ALL_CAPS filenames (e.g. TEST_RESULTS.md, SONNET_ROUTING_DECISION.md, PHASE_6_COMPLETION.md)
-  // but not HANDOFF.md (already handled by slug-length guards)
+  // Rule: skip any file that is an agent coordination artifact or report, not a task.
+  // These are identified by:
+  //   1. ALL_CAPS filenames — coordination files (HANDOFF.md), report dumps
+  //      (TEST_RESULTS.md, SONNET_ROUTING_DECISION.md, PHASE_6_COMPLETION.md), etc.
   const base = filename.replace(/\.md$/i, '');
-  if (/^[A-Z][A-Z0-9_-]+$/.test(base) && base !== 'HANDOFF') return true;
-  // Session state files (run-phases output)
+  if (/^[A-Z][A-Z0-9_-]+$/.test(base)) return true;
+  //   2. Session state files emitted by run-phases
   if (/^run-phases-/i.test(filename)) return true;
-  // Completion markers
+  //   3. Completion markers
   if (/-COMPLETE\.md$/i.test(filename)) return true;
-  // Flag files
+  //   4. Flag files
   if (/\.flag$/i.test(filename)) return true;
   return false;
 }

@@ -2,6 +2,7 @@ import { execSync, execFileSync } from 'node:child_process'; // execSync used in
 
 export interface GitInferenceResult {
   branch: string | undefined;
+  baseBranch: string;
   merged: boolean;
   mergeCommitSha: string | undefined;
   mergeCommitMessage: string | undefined;
@@ -48,6 +49,41 @@ export function listBranches(projectPath: string): string[] {
   } catch {
     return [];
   }
+}
+
+export function getDefaultBranch(projectPath: string): string {
+  // 1. Ask git what origin/HEAD points to (most reliable)
+  try {
+    const output = execSync('git symbolic-ref refs/remotes/origin/HEAD', {
+      cwd: projectPath,
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    }).trim();
+    // output looks like "refs/remotes/origin/main"
+    const parts = output.split('/');
+    const name = parts[parts.length - 1];
+    if (name) return name;
+  } catch {
+    // origin/HEAD not set — fall through
+  }
+
+  // 2. Check whether main or master exists locally or as a remote
+  try {
+    const output = execSync(
+      'git for-each-ref --format=%(refname:short) refs/heads refs/remotes/origin',
+      { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe' },
+    );
+    const branches = output.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const candidate of ['main', 'master']) {
+      if (branches.some(b => b === candidate || b === `origin/${candidate}`)) {
+        return candidate;
+      }
+    }
+  } catch {
+    // fall through
+  }
+
+  return 'main';
 }
 
 export function findMatchingBranch(
@@ -207,21 +243,21 @@ export function getFileLastCommitDate(
 export function inferGitContext(
   options: GitInferenceOptions,
 ): GitInferenceResult {
-  const empty: GitInferenceResult = {
-    branch: undefined,
-    merged: false,
-    mergeCommitSha: undefined,
-    mergeCommitMessage: undefined,
-    prNumber: undefined,
-    firstCommitDate: undefined,
-    lastCommitDate: undefined,
-  };
-
   if (!isGitRepo(options.projectPath)) {
-    return empty;
+    return {
+      branch: undefined,
+      baseBranch: 'main',
+      merged: false,
+      mergeCommitSha: undefined,
+      mergeCommitMessage: undefined,
+      prNumber: undefined,
+      firstCommitDate: undefined,
+      lastCommitDate: undefined,
+    };
   }
 
   const { projectPath, slug, filePath } = options;
+  const baseBranch = getDefaultBranch(projectPath);
 
   const branches = listBranches(projectPath);
   const branch = findMatchingBranch(slug, branches);
@@ -253,6 +289,7 @@ export function inferGitContext(
 
   return {
     branch,
+    baseBranch,
     merged,
     mergeCommitSha: mergeResult?.sha,
     mergeCommitMessage: mergeResult?.message,
