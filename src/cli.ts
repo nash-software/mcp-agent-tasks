@@ -72,7 +72,7 @@ function formatTable(rows: Array<Record<string, string | number | null>>): strin
 const program = new Command();
 
 program
-  .name('mcp-agent-tasks')
+  .name('agent-tasks')
   .description('File-based task management for AI coding agents')
   .version(pkg.version);
 
@@ -237,7 +237,7 @@ program
         continue;
       }
 
-      const MCP_MARKER = '# mcp-agent-tasks';
+      const MCP_MARKER = '# agent-tasks';
 
       if (!fs.existsSync(target)) {
         // Fresh install
@@ -246,7 +246,7 @@ program
         console.log(`✓ Installed ${hookName} hook`);
       } else {
         const existing = fs.readFileSync(target, 'utf-8');
-        if (existing.includes(MCP_MARKER) || existing.includes('mcp-agent-tasks')) {
+        if (existing.includes(MCP_MARKER) || existing.includes('mcp-agent-tasks') || existing.includes('agent-tasks')) {
           // Overwrite our own hook
           fs.copyFileSync(source, target);
           fs.chmodSync(target, 0o755);
@@ -264,13 +264,13 @@ program
           }
 
           // Copy mcp hook
-          const mcpDest = path.join(dotDir, '10-mcp-agent-tasks');
+          const mcpDest = path.join(dotDir, '10-agent-tasks');
           fs.copyFileSync(source, mcpDest);
           fs.chmodSync(mcpDest, 0o755);
 
           // Write dispatcher
           const dispatcher = `#!/usr/bin/env node
-// mcp-agent-tasks dispatcher
+// agent-tasks dispatcher
 const fs = require('fs'); const path = require('path'); const {execFileSync} = require('child_process');
 const d = path.join(__dirname, path.basename(__filename) + '.d');
 if (!fs.existsSync(d)) process.exit(0);
@@ -562,8 +562,8 @@ program
     try {
       const npmPrefix = execSync('npm prefix -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       binaryPath = process.platform === 'win32'
-        ? path.join(npmPrefix, 'mcp-agent-tasks')
-        : path.join(npmPrefix, 'bin', 'mcp-agent-tasks');
+        ? path.join(npmPrefix, 'agent-tasks')
+        : path.join(npmPrefix, 'bin', 'agent-tasks');
     } catch {
       console.error('✗ Could not determine npm global prefix. Ensure npm is installed and on PATH.');
       process.exit(1);
@@ -578,8 +578,8 @@ program
     }
     if (!claudeJson['mcpServers']) claudeJson['mcpServers'] = {};
     const mcpServers = claudeJson['mcpServers'] as Record<string, unknown>;
-    const wasRegistered = 'mcp-agent-tasks' in mcpServers;
-    mcpServers['mcp-agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
+    const wasRegistered = 'agent-tasks' in mcpServers;
+    mcpServers['agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
     if (!options.dryRun) {
       fs.mkdirSync(path.dirname(claudeJsonPath), { recursive: true });
       fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), 'utf-8');
@@ -637,8 +637,8 @@ program
     console.log('');
     console.log('Next steps:');
     console.log('  1. Restart Claude Code to load the MCP server');
-    console.log('  2. Run /mcp in Claude Code to verify mcp-agent-tasks is listed');
-    console.log('  3. For each project: cd <project-root> && mcp-agent-tasks init <PREFIX>');
+    console.log('  2. Run /mcp in Claude Code to verify agent-tasks is listed');
+    console.log('  3. For each project: cd <project-root> && agent-tasks init <PREFIX>');
     console.log('');
   });
 
@@ -744,7 +744,7 @@ function semverGt(a: string, b: string): boolean {
 
 program
   .command('install')
-  .description('Install mcp-agent-tasks globally: MCP server + hooks')
+  .description('Install agent-tasks globally: MCP server + hooks')
   .option('--dry-run', 'print what would be done without writing')
   .option('--project-dir <dir>', 'also initialise this project dir')
   .option('--prefix <p>', 'project prefix for --project-dir init')
@@ -760,8 +760,8 @@ program
     try {
       const npmPrefix = execSync('npm prefix -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
       binaryPath = process.platform === 'win32'
-        ? path.join(npmPrefix, 'mcp-agent-tasks')
-        : path.join(npmPrefix, 'bin', 'mcp-agent-tasks');
+        ? path.join(npmPrefix, 'agent-tasks')
+        : path.join(npmPrefix, 'bin', 'agent-tasks');
     } catch {
       console.error('✗ Could not determine npm global prefix.');
       process.exit(1);
@@ -775,7 +775,7 @@ program
     }
     if (!claudeJson['mcpServers']) claudeJson['mcpServers'] = {};
     const mcpServers = claudeJson['mcpServers'] as Record<string, unknown>;
-    mcpServers['mcp-agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
+    mcpServers['agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
     if (!dryRun) {
       fs.mkdirSync(path.dirname(claudeJsonPath), { recursive: true });
       fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), 'utf-8');

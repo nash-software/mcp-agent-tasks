@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   -- NOTE: 'plan' type is in the enum for fresh DBs only.
   -- Existing DBs cannot have their CHECK constraint altered (SQLite limitation).
-  -- Users upgrading must run: rm <tasksDir>/.index.db && mcp-agent-tasks rebuild-index <PREFIX>
+  -- Users upgrading must run: rm <tasksDir>/.index.db && agent-tasks rebuild-index <PREFIX>
   type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor','spec','plan')),
   status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved')),
   priority TEXT NOT NULL CHECK(priority IN ('critical','high','medium','low')),

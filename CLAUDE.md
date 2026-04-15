@@ -1,4 +1,4 @@
-# mcp-agent-tasks
+# agent-tasks
 
 File-based task management for AI coding agents. Hybrid markdown/SQLite store with 20 MCP tools over stdio.
 
@@ -18,14 +18,14 @@ Tasks live as plain markdown files on disk (human-readable, git-trackable) with 
 - `npm run type-check` — TypeScript strict check (no emit)
 - `npm test` — Run unit + integration + perf tests (vitest)
 - `npm run test:coverage` — Run tests with V8 coverage
-- `mcp-agent-tasks serve` — Start MCP stdio server
-- `mcp-agent-tasks init <PREFIX>` — Initialise a project for task tracking
-- `mcp-agent-tasks list` — List tasks (supports `--status`, `--project`, `--limit`, `--format`)
-- `mcp-agent-tasks next <PROJECT>` — Get the next actionable task for a project
-- `mcp-agent-tasks status` — Cross-project summary table
-- `mcp-agent-tasks rebuild-index` — Reconcile markdown files into SQLite
-- `mcp-agent-tasks install-hooks` — Install git hooks (prepare-commit-msg, post-commit)
-- `mcp-agent-tasks install-claude-hooks` — Install Claude Code PreToolUse task-gate hook
+- `agent-tasks serve` — Start MCP stdio server
+- `agent-tasks init <PREFIX>` — Initialise a project for task tracking
+- `agent-tasks list` — List tasks (supports `--status`, `--project`, `--limit`, `--format`)
+- `agent-tasks next <PROJECT>` — Get the next actionable task for a project
+- `agent-tasks status` — Cross-project summary table
+- `agent-tasks rebuild-index` — Reconcile markdown files into SQLite
+- `agent-tasks install-hooks` — Install git hooks (prepare-commit-msg, post-commit)
+- `agent-tasks install-claude-hooks` — Install Claude Code PreToolUse task-gate hook
 
 ## Architecture
 

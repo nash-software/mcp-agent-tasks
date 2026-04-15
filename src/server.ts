@@ -141,7 +141,7 @@ async function main(): Promise<void> {
   };
 
   const server = new Server(
-    { name: 'mcp-agent-tasks', version: pkg.version },
+    { name: 'agent-tasks', version: pkg.version },
     { capabilities: { tools: {} } },
   );
 
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[mcp-agent-tasks] Unexpected error in tool ${toolName}: ${message}\n`);
+      process.stderr.write(`[agent-tasks] Unexpected error in tool ${toolName}: ${message}\n`);
 
       return {
         content: [
@@ -210,7 +210,7 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  process.stderr.write(`[mcp-agent-tasks] Server started. Session: ${sessionId}\n`);
+  process.stderr.write(`[agent-tasks] Server started. Session: ${sessionId}\n`);
 
   // Cleanup on exit
   const shutdown = (): void => {
@@ -231,6 +231,6 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`[mcp-agent-tasks] Fatal startup error: ${message}\n`);
+  process.stderr.write(`[agent-tasks] Fatal startup error: ${message}\n`);
   process.exit(1);
 });

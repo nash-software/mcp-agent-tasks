@@ -1,5 +1,5 @@
 {
-  "name": "mcp-agent-tasks",
+  "name": "agent-tasks",
   "version": "0.1.0",
   "description": "File-based AI agent task management with MCP protocol support",
   "license": "MIT",
@@ -11,7 +11,7 @@
     ".": { "import": "./dist/server.js", "require": "./dist/server.cjs" },
     "./cli": { "import": "./dist/cli.js", "require": "./dist/cli.cjs" }
   },
-  "bin": { "mcp-agent-tasks": "./dist/cli.js" },
+  "bin": { "agent-tasks": "./dist/cli.js" },
   "files": ["dist", "hooks", "schema", "src/templates", "README.md"],
   "scripts": {
     "build": "tsup && cp src/store/schema.sql dist/schema.sql",

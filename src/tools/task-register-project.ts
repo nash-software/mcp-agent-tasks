@@ -8,7 +8,7 @@ import { ok } from './context.js';
 export const name = 'task_register_project';
 
 export const description =
-  'Register an existing project with mcp-agent-tasks without re-initializing.';
+  'Register an existing project with agent-tasks without re-initializing.';
 
 export const schema = {
   type: 'object',
