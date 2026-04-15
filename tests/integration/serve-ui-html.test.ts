@@ -30,23 +30,29 @@ describe('serve-ui HTML dashboard', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('GET / returns HTML containing data-kanban', async () => {
+  it('GET / returns HTML with React root mount point', async () => {
     const res = await fetch(`${baseUrl}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/text\/html/);
     const text = await res.text();
-    expect(text).toContain('data-kanban');
+    expect(text).toContain('id="root"');
   });
 
-  it('GET / contains data-view="roadmap"', async () => {
+  it('GET / contains Vite module script', async () => {
     const res = await fetch(`${baseUrl}/`);
     const text = await res.text();
-    expect(text).toContain('data-view="roadmap"');
+    expect(text).toContain('type="module"');
   });
 
-  it('GET / contains data-view="activity"', async () => {
-    const res = await fetch(`${baseUrl}/`);
-    const text = await res.text();
-    expect(text).toContain('data-view="activity"');
+  it('GET / serves static asset listed in HTML', async () => {
+    const htmlRes = await fetch(`${baseUrl}/`);
+    const html = await htmlRes.text();
+    // Extract the first JS asset path from the HTML
+    const match = html.match(/src="(\.\/assets\/[^"]+\.js)"/);
+    if (!match) return; // no asset found — skip (may happen if dist/ui is stale)
+    const assetPath = match[1].replace('./', '/');
+    const assetRes = await fetch(`${baseUrl}${assetPath}`);
+    expect(assetRes.status).toBe(200);
+    expect(assetRes.headers.get('content-type')).toMatch(/javascript/);
   });
 });

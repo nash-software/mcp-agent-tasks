@@ -14,8 +14,10 @@
   "bin": { "agent-tasks": "./dist/cli.js" },
   "files": ["dist", "hooks", "schema", "src/templates", "README.md"],
   "scripts": {
-    "build": "tsup && cp src/store/schema.sql dist/schema.sql",
-    "type-check": "tsc --noEmit",
+    "build": "tsup && npm --prefix src/ui ci --prefer-offline && npm --prefix src/ui run build",
+    "build:server": "tsup",
+    "build:ui": "npm --prefix src/ui ci --prefer-offline && npm --prefix src/ui run build",
+    "type-check": "tsc --noEmit && npm --prefix src/ui run type-check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit"
