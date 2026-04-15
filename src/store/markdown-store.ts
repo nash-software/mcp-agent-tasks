@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { stringify as yamlStringify } from 'yaml';
-import type { Task, TaskFrontmatter } from '../types/task.js';
+import type { Task, TaskFrontmatter, TaskReference } from '../types/task.js';
 import { McpTasksError } from '../types/errors.js';
 
 const SCHEMA_VERSION = 1;
@@ -25,6 +25,24 @@ function toIsoStringOrNull(val: unknown): string | null {
   return null;
 }
 
+/** Validate that a value is an array of TaskReference entries. */
+function parseReferences(raw: unknown): TaskReference[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item: unknown, i: number) => {
+    if (!item || typeof item !== 'object') {
+      throw new McpTasksError('SCHEMA_MISMATCH', `references[${i}] must be an object`);
+    }
+    const r = item as Record<string, unknown>;
+    if (!['closes', 'blocks', 'related'].includes(r['type'] as string)) {
+      throw new McpTasksError('SCHEMA_MISMATCH', `references[${i}].type must be closes|blocks|related`);
+    }
+    if (typeof r['id'] !== 'string') {
+      throw new McpTasksError('SCHEMA_MISMATCH', `references[${i}].id must be a string`);
+    }
+    return { type: r['type'] as TaskReference['type'], id: r['id'] };
+  });
+}
+
 export class MarkdownStore {
   read(filePath: string): Task {
     let raw: string;
@@ -41,7 +59,14 @@ export class MarkdownStore {
       throw new McpTasksError('SCHEMA_MISMATCH', `Failed to parse frontmatter in ${filePath}: ${String(err)}`);
     }
 
-    const fm = parsed.data as Partial<TaskFrontmatter>;
+    const fm = parsed.data as Partial<TaskFrontmatter> & {
+      labels?: string[];
+      milestone?: string;
+      estimate_hours?: number;
+      plan_file?: string;
+      auto_captured?: boolean;
+      references?: unknown;
+    };
 
     if (fm.schema_version !== SCHEMA_VERSION) {
       throw new McpTasksError(
@@ -55,6 +80,9 @@ export class MarkdownStore {
       throw new McpTasksError('SCHEMA_MISMATCH', `Missing required frontmatter fields in ${filePath}`);
     }
 
+    // labels/tags alias: merge both arrays and deduplicate
+    const merged = Array.from(new Set([...(fm.tags ?? []), ...(fm.labels ?? [])]));
+
     const task: Task = {
       schema_version: fm.schema_version,
       id: fm.id,
@@ -63,7 +91,8 @@ export class MarkdownStore {
       status: fm.status,
       priority: fm.priority,
       project: fm.project,
-      tags: fm.tags ?? [],
+      tags: merged,
+      labels: merged,
       complexity: fm.complexity ?? 1,
       complexity_manual: fm.complexity_manual ?? false,
       why: fm.why ?? '',
@@ -97,7 +126,17 @@ export class MarkdownStore {
       files: fm.files ?? [],
       body: parsed.content.trim(),
       file_path: filePath,
+      ...(fm.spec_file !== undefined ? { spec_file: fm.spec_file } : {}),
+      ...(fm.plan_file !== undefined ? { plan_file: fm.plan_file } : {}),
+      ...(fm.milestone !== undefined ? { milestone: fm.milestone } : {}),
+      ...(fm.estimate_hours !== undefined ? { estimate_hours: fm.estimate_hours } : {}),
+      ...(fm.auto_captured !== undefined ? { auto_captured: fm.auto_captured } : {}),
     };
+
+    // Parse and validate references
+    if (fm.references !== undefined) {
+      task.references = parseReferences(fm.references);
+    }
 
     return task;
   }
@@ -116,9 +155,33 @@ export class MarkdownStore {
       },
     };
 
-    const { body, file_path, ...frontmatter } = taskToWrite;
+    const { body, file_path, labels, ...frontmatter } = taskToWrite;
 
-    const yamlStr = yamlStringify(frontmatter, {
+    // Write labels (not tags) as the canonical key going forward;
+    // keep tags as labels alias for backward compat — write both for schema_version=1
+    const { tags, ...restFrontmatter } = frontmatter;
+    const frontmatterToWrite: Record<string, unknown> = {
+      ...restFrontmatter,
+      tags: tags, // keep tags for backward compat with existing readers
+      labels: task.tags, // forward-compatible alias
+    };
+
+    // Only include optional new fields if defined
+    if (task.milestone === undefined) delete frontmatterToWrite['milestone'];
+    if (task.estimate_hours === undefined) delete frontmatterToWrite['estimate_hours'];
+    if (task.plan_file === undefined) delete frontmatterToWrite['plan_file'];
+    if (task.auto_captured === undefined) delete frontmatterToWrite['auto_captured'];
+    if (task.references === undefined) delete frontmatterToWrite['references'];
+
+    // Remove labels/tags if both are empty to keep output clean
+    if (!task.tags?.length) {
+      delete frontmatterToWrite['labels'];
+      delete frontmatterToWrite['tags'];
+    }
+
+    void labels; // suppress unused warning — we destructure to remove from spread
+
+    const yamlStr = yamlStringify(frontmatterToWrite, {
       lineWidth: 0,
       defaultKeyType: 'PLAIN',
       defaultStringType: 'PLAIN',

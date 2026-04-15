@@ -214,7 +214,7 @@ program
 
 program
   .command('install-hooks')
-  .description('Install git hooks (post-commit, prepare-commit-msg)')
+  .description('Install git hooks (post-commit, prepare-commit-msg, post-merge)')
   .option('--path <dir>', 'project root directory', process.cwd())
   .action((options: { path: string }) => {
     const rootDir = path.resolve(options.path);
@@ -228,7 +228,7 @@ program
     // Source hooks live next to this file in hooks/ (dist layout) or in project hooks/ (dev)
     const hooksSourceDir = path.join(__dirname, '..', 'hooks');
 
-    for (const hookName of ['post-commit', 'prepare-commit-msg'] as const) {
+    for (const hookName of ['post-commit', 'prepare-commit-msg', 'post-merge'] as const) {
       const target = path.join(hooksDir, hookName);
       const source = path.join(hooksSourceDir, `${hookName}.js`);
 
@@ -399,9 +399,21 @@ program
 
 program
   .command('link-pr <id>')
-  .description('Link the current branch PR to a task (uses gh CLI)')
+  .description('Link the current branch PR to a task (uses gh CLI, or supply --pr-number to skip gh lookup)')
   .option('--path <dir>', 'project root directory')
-  .action((id: string, options: { path?: string }) => {
+  .option('--pr-number <n>', 'PR number (skips gh pr view lookup)')
+  .option('--pr-url <url>', 'PR URL')
+  .option('--pr-state <state>', 'PR state (open|merged|closed)')
+  .option('--merged-at <iso>', 'Merge timestamp (ISO-8601)')
+  .option('--pr-title <title>', 'PR title')
+  .action((id: string, options: {
+    path?: string;
+    prNumber?: string;
+    prUrl?: string;
+    prState?: string;
+    mergedAt?: string;
+    prTitle?: string;
+  }) => {
     const { tasksDir, project } = resolveTasksDir(options.path);
     const { store, sqliteIndex } = buildStore(tasksDir, project);
 
@@ -411,21 +423,39 @@ program
       title: string;
       state: string;
       baseRefName: string;
+      mergedAt?: string | null;
     };
 
-    try {
-      const raw = execSync('gh pr view --json number,url,title,state,baseRefName', { encoding: 'utf-8' });
-      prData = JSON.parse(raw) as typeof prData;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`✗ Could not get PR info: ${msg}`);
-      process.exit(1);
+    if (options.prNumber !== undefined) {
+      // Explicit flags supplied — no gh CLI needed
+      if (!options.prUrl || !options.prState) {
+        console.error('✗ --pr-url and --pr-state are required when --pr-number is provided');
+        process.exit(1);
+      }
+      prData = {
+        number: parseInt(options.prNumber, 10),
+        url: options.prUrl,
+        title: options.prTitle ?? '',
+        state: options.prState,
+        baseRefName: '',
+        mergedAt: options.mergedAt,
+      };
+    } else {
+      try {
+        const raw = execSync('gh pr view --json number,url,title,state,baseRefName', { encoding: 'utf-8' });
+        prData = JSON.parse(raw) as typeof prData;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`✗ Could not get PR info: ${msg}`);
+        process.exit(1);
+      }
     }
 
     try {
       const task = sqliteIndex.getTask(id);
       if (!task) throw new Error(`Task not found: ${id}`);
       const git = task.git ?? { commits: [] };
+      const normalizedState = prData.state.toLowerCase() as import('./types/task.js').PRRef['state'];
       const prPayload: UpdateWithGit = {
         id,
         git: {
@@ -434,13 +464,26 @@ program
             number: prData.number,
             url: prData.url,
             title: prData.title,
-            state: prData.state as import('./types/task.js').PRRef['state'],
-            merged_at: null,
+            state: normalizedState,
+            merged_at: prData.mergedAt ?? null,
             base_branch: prData.baseRefName,
           },
         },
       };
       store.updateTask(id, prPayload);
+
+      // Auto-transition to done when the PR was merged
+      if (normalizedState === 'merged') {
+        const current = sqliteIndex.getTask(id);
+        if (current && current.status !== 'done' && current.status !== 'archived') {
+          try {
+            store.transitionTask(id, 'done', 'PR merged');
+          } catch {
+            // Transition not valid from current state — skip silently
+          }
+        }
+      }
+
       console.log(`✓ Linked PR #${prData.number} to ${id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -503,6 +546,337 @@ program
       console.error(`✗ ${msg}`);
       process.exit(1);
     }
+  });
+
+// ── setup ─────────────────────────────────────────────────────────────────────
+
+program
+  .command('setup')
+  .description('One-time global setup: register MCP server in Claude Code and install task-gate hook')
+  .option('--dry-run', 'show what would be done without making changes', false)
+  .action((options: { dryRun: boolean }) => {
+    const log = (msg: string): void => console.log(options.dryRun ? `[dry-run] ${msg}` : `✓ ${msg}`);
+
+    // 1. Find binary path via npm global prefix
+    let binaryPath: string;
+    try {
+      const npmPrefix = execSync('npm prefix -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      binaryPath = process.platform === 'win32'
+        ? path.join(npmPrefix, 'mcp-agent-tasks')
+        : path.join(npmPrefix, 'bin', 'mcp-agent-tasks');
+    } catch {
+      console.error('✗ Could not determine npm global prefix. Ensure npm is installed and on PATH.');
+      process.exit(1);
+      return; // unreachable, satisfies TS
+    }
+
+    // 2. Register MCP server in ~/.claude.json
+    const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+    let claudeJson: Record<string, unknown> = {};
+    if (fs.existsSync(claudeJsonPath)) {
+      try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8')) as Record<string, unknown>; } catch { /* start fresh */ }
+    }
+    if (!claudeJson['mcpServers']) claudeJson['mcpServers'] = {};
+    const mcpServers = claudeJson['mcpServers'] as Record<string, unknown>;
+    const wasRegistered = 'mcp-agent-tasks' in mcpServers;
+    mcpServers['mcp-agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
+    if (!options.dryRun) {
+      fs.mkdirSync(path.dirname(claudeJsonPath), { recursive: true });
+      fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), 'utf-8');
+    }
+    log(`${wasRegistered ? 'Updated' : 'Registered'} MCP server in ${claudeJsonPath}`);
+    log(`  command: ${binaryPath} serve`);
+
+    // 3. Install task-gate hook
+    const hooksSourceDir = path.join(__dirname, '..', 'hooks');
+    const taskGateSrc = path.join(hooksSourceDir, 'task-gate.js');
+    const taskGateDest = path.join(os.homedir(), '.claude', 'hooks', 'task-gate.js');
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+    if (!fs.existsSync(taskGateSrc)) {
+      console.error(`✗ task-gate.js not found at ${taskGateSrc} — is the package installed correctly?`);
+      process.exit(1);
+    }
+
+    if (!options.dryRun) {
+      fs.mkdirSync(path.dirname(taskGateDest), { recursive: true });
+      fs.copyFileSync(taskGateSrc, taskGateDest);
+      fs.chmodSync(taskGateDest, 0o755);
+    }
+    log(`Installed task-gate.js → ${taskGateDest}`);
+
+    let settings: Record<string, unknown> = {};
+    if (fs.existsSync(settingsPath)) {
+      try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>; } catch { /* start fresh */ }
+    }
+    if (!settings['hooks']) settings['hooks'] = {};
+    const hooks = settings['hooks'] as Record<string, unknown>;
+    if (!hooks['PreToolUse']) hooks['PreToolUse'] = [];
+    const preToolUse = hooks['PreToolUse'] as Array<Record<string, unknown>>;
+    const hookEntry = { key: 'task-gate', matcher: '.*', cmd: `node ${taskGateDest}` };
+    const existingIdx = preToolUse.findIndex(h => h['key'] === 'task-gate');
+    if (existingIdx >= 0) { preToolUse[existingIdx] = hookEntry; } else { preToolUse.push(hookEntry); }
+    if (!options.dryRun) {
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+    }
+    log(`Registered task-gate PreToolUse hook in ${settingsPath}`);
+
+    // 4. Create global config + storage dirs
+    const configDir = path.join(os.homedir(), '.config', 'mcp-tasks');
+    const storageDir = path.join(os.homedir(), '.mcp-tasks', 'tasks');
+    if (!options.dryRun) {
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(storageDir, { recursive: true });
+    }
+    log(`Config dir ready: ${configDir}`);
+    log(`Storage dir ready: ${storageDir}`);
+
+    // Summary
+    console.log('');
+    console.log(options.dryRun ? 'Dry-run complete — no changes made.' : 'Setup complete!');
+    console.log('');
+    console.log('Next steps:');
+    console.log('  1. Restart Claude Code to load the MCP server');
+    console.log('  2. Run /mcp in Claude Code to verify mcp-agent-tasks is listed');
+    console.log('  3. For each project: cd <project-root> && mcp-agent-tasks init <PREFIX>');
+    console.log('');
+  });
+
+// ── serve-ui ──────────────────────────────────────────────────────────────────
+
+program
+  .command('serve-ui')
+  .description('Start local dashboard server')
+  .option('--port <n>', 'port number', '4242')
+  .option('--open', 'open browser after start')
+  .action(async (opts: { port: string; open?: boolean }) => {
+    const { startUiServer } = await import('./server-ui.js');
+    const { url, close } = await startUiServer({ port: parseInt(opts.port, 10), openBrowser: opts.open });
+    console.log(`Dashboard: ${url}`);
+    process.on('SIGINT', async () => { await close(); process.exit(0); });
+  });
+
+// ── add-file ──────────────────────────────────────────────────────────────────
+
+program
+  .command('add-file <id> <filePath>')
+  .description('Add a file path to a task')
+  .option('--path <dir>', 'project root directory')
+  .action((id: string, filePath: string, options: { path?: string }) => {
+    const { tasksDir, project } = resolveTasksDir(options.path);
+    const { store, sqliteIndex } = buildStore(tasksDir, project);
+    const task = sqliteIndex.getTask(id);
+    if (!task) {
+      console.error(`✗ Task not found: ${id}`);
+      process.exit(1);
+    }
+    const existing = task.files ?? [];
+    const deduped = Array.from(new Set([...existing, filePath]));
+    store.updateTask(id, { id, files: deduped });
+    console.log(`✓ Added file ${filePath} to ${id}`);
+  });
+
+// ── create ────────────────────────────────────────────────────────────────────
+
+program
+  .command('create')
+  .description('Create a task')
+  .requiredOption('--project <prefix>', 'project prefix')
+  .requiredOption('--title <title>', 'task title')
+  .requiredOption('--type <type>', 'task type')
+  .requiredOption('--why <why>', 'reason for this task')
+  .option('--priority <priority>', 'priority', 'medium')
+  .option('--auto-captured', 'mark as auto-captured')
+  .option('--plan-file <path>', 'link a plan file')
+  .option('--milestone <id>', 'milestone ID')
+  .option('--estimate-hours <n>', 'estimate hours', parseFloat)
+  .action(async (opts: {
+    project: string;
+    title: string;
+    type: string;
+    why: string;
+    priority: string;
+    autoCaptured?: boolean;
+    planFile?: string;
+    milestone?: string;
+    estimateHours?: number;
+  }) => {
+    const { tasksDir } = resolveTasksDir();
+    const { store } = buildStore(tasksDir, opts.project);
+    try {
+      const task = store.createTask({
+        project: opts.project,
+        title: opts.title,
+        type: opts.type as import('./types/task.js').TaskType,
+        priority: opts.priority as import('./types/task.js').Priority,
+        why: opts.why,
+        auto_captured: opts.autoCaptured,
+        plan_file: opts.planFile,
+        milestone: opts.milestone,
+        estimate_hours: opts.estimateHours,
+      });
+      process.stdout.write(`${task.id}\n`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ ${msg}`);
+      process.exit(1);
+    }
+  });
+
+// ── install ───────────────────────────────────────────────────────────────────
+
+function getHookVersion(filePath: string): string {
+  try {
+    const lines = fs.readFileSync(filePath, 'utf-8').split('\n').slice(0, 5);
+    const vLine = lines.find(l => l.includes('@version'));
+    return vLine ? vLine.replace(/.*@version\s*/, '').trim() : '0.0.0';
+  } catch { return '0.0.0'; }
+}
+
+function semverGt(a: string, b: string): boolean {
+  const parse = (v: string): number[] => v.split('.').map(n => parseInt(n, 10) || 0);
+  const [a0, a1, a2] = parse(a);
+  const [b0, b1, b2] = parse(b);
+  if (a0 !== b0) return a0 > b0;
+  if (a1 !== b1) return a1 > b1;
+  return a2 > b2;
+}
+
+program
+  .command('install')
+  .description('Install mcp-agent-tasks globally: MCP server + hooks')
+  .option('--dry-run', 'print what would be done without writing')
+  .option('--project-dir <dir>', 'also initialise this project dir')
+  .option('--prefix <p>', 'project prefix for --project-dir init')
+  .action(async (opts: { dryRun?: boolean; projectDir?: string; prefix?: string }) => {
+    const dryRun = opts.dryRun ?? false;
+    const log = (msg: string): void => console.log(dryRun ? `[dry-run] ${msg}` : `✓ ${msg}`);
+    const hooksSourceDir = path.join(__dirname, '..', 'hooks');
+    const claudeHooksDir = path.join(os.homedir(), '.claude', 'hooks');
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+
+    // 1. Register MCP server in ~/.claude.json (reuse setup logic)
+    let binaryPath: string;
+    try {
+      const npmPrefix = execSync('npm prefix -g', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      binaryPath = process.platform === 'win32'
+        ? path.join(npmPrefix, 'mcp-agent-tasks')
+        : path.join(npmPrefix, 'bin', 'mcp-agent-tasks');
+    } catch {
+      console.error('✗ Could not determine npm global prefix.');
+      process.exit(1);
+      return;
+    }
+
+    const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+    let claudeJson: Record<string, unknown> = {};
+    if (fs.existsSync(claudeJsonPath)) {
+      try { claudeJson = JSON.parse(fs.readFileSync(claudeJsonPath, 'utf-8')) as Record<string, unknown>; } catch { /* start fresh */ }
+    }
+    if (!claudeJson['mcpServers']) claudeJson['mcpServers'] = {};
+    const mcpServers = claudeJson['mcpServers'] as Record<string, unknown>;
+    mcpServers['mcp-agent-tasks'] = { type: 'stdio', command: binaryPath, args: ['serve'], env: {} };
+    if (!dryRun) {
+      fs.mkdirSync(path.dirname(claudeJsonPath), { recursive: true });
+      fs.writeFileSync(claudeJsonPath, JSON.stringify(claudeJson, null, 2), 'utf-8');
+    }
+    log(`Registered MCP server in ${claudeJsonPath}`);
+
+    // Load or bootstrap settings.json
+    let settings: { hooks: { PostToolUse: Array<Record<string, unknown>>; SessionStart: Array<Record<string, unknown>> } } = { hooks: { PostToolUse: [], SessionStart: [] } };
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+        if (!raw['hooks']) raw['hooks'] = {};
+        const h = raw['hooks'] as Record<string, unknown>;
+        if (!h['PostToolUse']) h['PostToolUse'] = [];
+        if (!h['SessionStart']) h['SessionStart'] = [];
+        settings = raw as typeof settings;
+      } catch { /* use defaults */ }
+    }
+
+    // Helper: dedup hook entry by filename in cmd
+    function upsertHookEntry(
+      arr: Array<Record<string, unknown>>,
+      entry: Record<string, unknown>,
+      filename: string,
+    ): void {
+      const idx = arr.findIndex(h => typeof h['cmd'] === 'string' && (h['cmd'] as string).includes(filename));
+      if (idx >= 0) { arr[idx] = entry; } else { arr.push(entry); }
+    }
+
+    // 2. Copy passive-capture.js → ~/.claude/hooks/ (version-aware)
+    const passiveSrc = path.join(hooksSourceDir, 'passive-capture.js');
+    const passiveDest = path.join(claudeHooksDir, 'passive-capture.js');
+    if (fs.existsSync(passiveSrc)) {
+      const srcVersion = getHookVersion(passiveSrc);
+      const destVersion = getHookVersion(passiveDest);
+      if (!fs.existsSync(passiveDest) || semverGt(srcVersion, destVersion)) {
+        if (!dryRun) {
+          fs.mkdirSync(claudeHooksDir, { recursive: true });
+          fs.copyFileSync(passiveSrc, passiveDest);
+        }
+        log(`Installed passive-capture.js ${srcVersion} → ${passiveDest}`);
+      } else {
+        log(`passive-capture.js already up to date (${destVersion})`);
+      }
+
+      // 3. Add PostToolUse entry
+      const postEntry: Record<string, unknown> = {
+        key: 'passive-capture',
+        matcher: '.*',
+        cmd: `node ${passiveDest}`,
+      };
+      upsertHookEntry(settings.hooks.PostToolUse, postEntry, 'passive-capture.js');
+    } else {
+      console.error(`✗ passive-capture.js not found at ${passiveSrc}`);
+    }
+
+    // 4. Copy session-task-detector.js → ~/.claude/hooks/
+    const detectorSrc = path.join(hooksSourceDir, 'session-task-detector.js');
+    const detectorDest = path.join(claudeHooksDir, 'session-task-detector.js');
+    if (fs.existsSync(detectorSrc)) {
+      const srcVersion = getHookVersion(detectorSrc);
+      const destVersion = getHookVersion(detectorDest);
+      if (!fs.existsSync(detectorDest) || semverGt(srcVersion, destVersion)) {
+        if (!dryRun) {
+          fs.mkdirSync(claudeHooksDir, { recursive: true });
+          fs.copyFileSync(detectorSrc, detectorDest);
+        }
+        log(`Installed session-task-detector.js ${srcVersion} → ${detectorDest}`);
+      } else {
+        log(`session-task-detector.js already up to date (${destVersion})`);
+      }
+
+      // 5. Add SessionStart entry
+      const sessionEntry: Record<string, unknown> = {
+        key: 'session-task-detector',
+        cmd: `node ${detectorDest}`,
+      };
+      upsertHookEntry(settings.hooks.SessionStart, sessionEntry, 'session-task-detector.js');
+    } else {
+      console.error(`✗ session-task-detector.js not found at ${detectorSrc}`);
+    }
+
+    if (!dryRun) {
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+    }
+    log(`Updated hooks in ${settingsPath}`);
+
+    // 6. If --project-dir: init that project
+    if (opts.projectDir && opts.prefix) {
+      const { reconcileLegacy } = await import('./tools/task-reconcile-legacy.js');
+      void reconcileLegacy; // optional: just init the dir
+      const cfg = loadConfig();
+      const projectTasksDir = path.join(opts.projectDir, cfg.tasksDirName);
+      if (!dryRun) {
+        fs.mkdirSync(projectTasksDir, { recursive: true });
+      }
+      log(`Initialised project dir: ${projectTasksDir} (prefix: ${opts.prefix})`);
+    }
+
+    console.log('');
+    console.log(dryRun ? 'Dry-run complete — no changes made.' : 'Install complete!');
   });
 
 // ── parse ─────────────────────────────────────────────────────────────────────

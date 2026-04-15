@@ -1,0 +1,9 @@
+milestones:
+  - id: v2.0
+    title: "v2.0 Release"
+    status: open
+    created: "2026-04-15T00:00:00.000Z"
+  - id: v1.0
+    title: "v1.0 Release"
+    status: closed
+    created: "2026-04-01T00:00:00.000Z"

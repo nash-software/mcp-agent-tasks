@@ -19,8 +19,11 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
-  type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor')),
-  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived')),
+  -- NOTE: 'plan' type is in the enum for fresh DBs only.
+  -- Existing DBs cannot have their CHECK constraint altered (SQLite limitation).
+  -- Users upgrading must run: rm <tasksDir>/.index.db && mcp-agent-tasks rebuild-index <PREFIX>
+  type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor','spec','plan')),
+  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved')),
   priority TEXT NOT NULL CHECK(priority IN ('critical','high','medium','low')),
   project TEXT NOT NULL REFERENCES projects(prefix),
   complexity INTEGER CHECK(complexity BETWEEN 1 AND 10),
@@ -43,7 +46,12 @@ CREATE TABLE IF NOT EXISTS tasks (
   file_path TEXT NOT NULL,
   body TEXT,
   body_hash TEXT,
-  schema_version INTEGER NOT NULL DEFAULT 1
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  spec_file TEXT,
+  milestone TEXT,
+  estimate_hours REAL,
+  plan_file TEXT,
+  auto_captured INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS subtasks (
@@ -122,3 +130,28 @@ CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent);
 CREATE INDEX IF NOT EXISTS idx_tasks_last_activity ON tasks(last_activity);
 CREATE INDEX IF NOT EXISTS idx_tasks_claimed_by ON tasks(claimed_by);
+CREATE INDEX IF NOT EXISTS idx_tasks_milestone ON tasks(milestone);
+
+CREATE TABLE IF NOT EXISTS milestones (
+  id TEXT NOT NULL,
+  project TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  due_date TEXT,
+  status TEXT DEFAULT 'open' CHECK(status IN ('open','closed')),
+  created TEXT NOT NULL,
+  PRIMARY KEY (id, project)
+);
+
+CREATE TABLE IF NOT EXISTS task_references (
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  ref_type TEXT NOT NULL CHECK(ref_type IN ('closes','blocks','related')),
+  PRIMARY KEY (from_id, to_id, ref_type),
+  FOREIGN KEY (from_id) REFERENCES tasks(id) ON DELETE CASCADE,
+  -- to_id is intentionally NOT foreign-keyed to allow cross-project refs
+  CHECK (from_id != to_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_refs_from ON task_references(from_id);
+CREATE INDEX IF NOT EXISTS idx_task_refs_to ON task_references(to_id);

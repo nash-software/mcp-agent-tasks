@@ -9,6 +9,7 @@ import { TaskStore } from '../../src/store/task-store.js';
 import { MarkdownStore } from '../../src/store/markdown-store.js';
 import { SqliteIndex } from '../../src/store/sqlite-index.js';
 import { ManifestWriter } from '../../src/store/manifest-writer.js';
+import { MilestoneRepository } from '../../src/store/milestone-repository.js';
 import type { ToolContext } from '../../src/tools/context.js';
 import type { McpTasksConfig } from '../../src/config/loader.js';
 import type { Task } from '../../src/types/task.js';
@@ -53,6 +54,7 @@ describe('Subtask promotion', () => {
       index: idx,
       sessionId: 'test-session',
       config: makeConfig(tmpDir),
+      milestones: new MilestoneRepository(idx.getRawDb()),
     };
   });
 

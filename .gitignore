@@ -8,3 +8,14 @@ coverage/
 .env.*
 scratchpads/
 agent-tasks/
+
+# Handbook tool (auto-generated)
+.handbook/queue.jsonl
+.handbook/queue.processing.jsonl
+.handbook/.lock
+.handbook/.initializing
+.handbook/.review-requested
+.handbook/.summarize-requested
+.handbook/intermediate/
+.handbook/logs/
+.handbook/diagnose/cache.json

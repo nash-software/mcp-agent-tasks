@@ -1,12 +1,14 @@
 import type { TaskStore } from '../store/task-store.js';
 import type { SqliteIndex } from '../store/sqlite-index.js';
 import type { McpTasksConfig } from '../config/loader.js';
+import type { MilestoneRepository } from '../store/milestone-repository.js';
 
 export interface ToolContext {
   store: TaskStore;
   index: SqliteIndex;
   sessionId: string;
   config: McpTasksConfig;
+  milestones: MilestoneRepository;
 }
 
 export type ToolOutput = { content: Array<{ type: 'text'; text: string }> };

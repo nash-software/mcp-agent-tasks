@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'yaml';
@@ -303,17 +304,40 @@ export async function reconcileLegacy(opts: {
   };
 }
 
-export async function execute(input: ValidatedInput, _ctx: ToolContext): Promise<ToolOutput> {
+export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<ToolOutput> {
+  const prefix = input.idPrefix ?? derivePrefix(input.projectPath);
+
   const summary = await reconcileLegacy({
     projectPath: input.projectPath,
-    idPrefix: input.idPrefix,
+    idPrefix: prefix,
     dryRun: input.dryRun,
   });
+
+  // Auto-register project in config after a real (non-dry) run
+  let registered = false;
+  if (!summary.dryRun) {
+    const alreadyRegistered = ctx.config.projects.some(p => p.prefix === prefix);
+    if (!alreadyRegistered) {
+      ctx.config.projects.push({
+        prefix,
+        path: path.resolve(input.projectPath),
+        storage: 'local',
+      });
+
+      const configPath =
+        process.env['MCP_TASKS_CONFIG'] ??
+        path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify(ctx.config, null, 2), 'utf-8');
+      registered = true;
+    }
+  }
 
   return ok({
     dryRun: summary.dryRun,
     results: summary.results,
     written: summary.written,
     skipped: summary.skipped,
+    registered,
   });
 }

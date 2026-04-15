@@ -1,6 +1,6 @@
-import { McpTasksError } from '../types/errors.js';
 import type { ToolContext, ToolOutput } from './context.js';
 import { ok } from './context.js';
+import { McpTasksError } from '../types/errors.js';
 
 export const name = 'task_update';
 
@@ -20,6 +20,7 @@ export const schema = {
     tags: { type: 'array', items: { type: 'string' } },
     files: { type: 'array', items: { type: 'string' } },
     complexity: { type: 'number', minimum: 1, maximum: 10 },
+    spec_file: { type: 'string', description: 'Path to spec markdown file, relative to project root (spec type only, max 500 chars)' },
   },
   required: ['id'],
 } as const;
@@ -32,6 +33,7 @@ interface ValidatedInput {
   tags?: string[];
   files?: string[];
   complexity?: number;
+  spec_file?: string;
 }
 
 const VALID_PRIORITIES = new Set(['critical', 'high', 'medium', 'low']);
@@ -79,6 +81,15 @@ export function validate(input: unknown): asserts input is ValidatedInput {
     if (typeof raw['complexity'] !== 'number' || raw['complexity'] < 1 || raw['complexity'] > 10) {
       throw new McpTasksError('INVALID_FIELD', 'complexity must be a number between 1 and 10');
     }
+  }
+  if (raw['spec_file'] !== undefined) {
+    if (typeof raw['spec_file'] !== 'string') {
+      throw new McpTasksError('INVALID_FIELD', 'spec_file must be a string');
+    }
+    if ((raw['spec_file'] as string).length > 500) {
+      throw new McpTasksError('INVALID_FIELD', 'spec_file must be 500 characters or fewer');
+    }
+    // type check against actual task happens in execute() — we can't know the type here without a lookup
   }
 }
 

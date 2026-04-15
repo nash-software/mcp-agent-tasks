@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.5",
+  "version": 1,
+  "last_updated": "2026-04-13T00:08:56.075Z",
+  "git_hash": "9669969007fe82293a7b20e4d001c6f3b01b6288",
+  "source_hashes": {},
+  "analyzed_files": 89,
+  "node_counts": {
+    "pattern": 0,
+    "decision": 0,
+    "flow": 0,
+    "rule": 0,
+    "intent": 0,
+    "component": 0,
+    "change": 0,
+    "assumption": 0,
+    "symbol": 0,
+    "spec": 0
+  },
+  "total_edges": 0,
+  "queue_last_drained": null,
+  "intermediate_prompt_hash": "c53debacc8e203c47e25a1998dcffb35"
+}

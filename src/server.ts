@@ -9,6 +9,7 @@ import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
 import { TaskStore } from './store/task-store.js';
 import { FileWatcher } from './store/file-watcher.js';
+import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
 import type { ToolContext } from './tools/context.js';
 
@@ -36,6 +37,7 @@ import * as taskInit from './tools/task-init.js';
 import * as taskRebuildIndex from './tools/task-rebuild-index.js';
 import * as taskRegisterProject from './tools/task-register-project.js';
 import * as taskReconcileLegacy from './tools/task-reconcile-legacy.js';
+import * as taskMilestone from './tools/task-milestone.js';
 
 // Package version — imported as JSON
 import { createRequire } from 'node:module';
@@ -74,6 +76,7 @@ const TOOLS: ToolModule[] = [
   taskRebuildIndex,
   taskRegisterProject,
   taskReconcileLegacy,
+  taskMilestone,
 ];
 
 const TOOL_MAP = new Map<string, ToolModule>(TOOLS.map(t => [t.name, t]));
@@ -98,6 +101,7 @@ async function main(): Promise<void> {
 
   const markdownStore = new MarkdownStore();
   const manifestWriter = new ManifestWriter();
+  const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
 
   const store = new TaskStore(markdownStore, sqliteIndex, manifestWriter, tasksDir, defaultProject);
 
@@ -133,6 +137,7 @@ async function main(): Promise<void> {
     index: sqliteIndex,
     sessionId,
     config,
+    milestones: milestoneRepo,
   };
 
   const server = new Server(

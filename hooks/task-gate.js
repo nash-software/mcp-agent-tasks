@@ -14,6 +14,30 @@ if (process.env.SKIP_TASK_GATE === '1') {
   process.exit(0);
 }
 
+// ── read stdin for tool_input ──────────────────────────────────────────────────
+let toolInput = {};
+try {
+  const raw = fs.readFileSync(0, 'utf-8');
+  const parsed = JSON.parse(raw);
+  toolInput = parsed.tool_input || {};
+} catch (_) {
+  // malformed or no stdin — continue with empty toolInput
+}
+
+const filePath = typeof toolInput.file_path === 'string' ? toolInput.file_path : null;
+
+// ── scratchpads always allowed ────────────────────────────────────────────────
+if (filePath && /scratchpads[/\\]/.test(filePath)) {
+  process.exit(0);
+}
+
+// ── only gate on code-like files ─────────────────────────────────────────────
+// Non-code files (markdown, yaml, json, html, etc.) are always allowed
+const CODE_EXTENSIONS = /\.(ts|tsx|js|jsx|py|go|rs|java|c|cpp|h|sql)$/;
+if (filePath && !CODE_EXTENSIONS.test(filePath)) {
+  process.exit(0);
+}
+
 // ── session dedup ─────────────────────────────────────────────────────────────
 // Only warn once per parent process session
 
@@ -97,7 +121,7 @@ function findInProgressTask(indexYamlPath) {
 
 const indexYaml = findIndexYaml();
 if (!indexYaml) {
-  // No tasks project found — silently exit
+  // No tasks project found — silently allow (no task tracking configured)
   process.exit(0);
 }
 
@@ -105,15 +129,16 @@ let inProgressId;
 try {
   inProgressId = findInProgressTask(indexYaml);
 } catch {
-  // Unreadable — silently exit
+  // Unreadable — silently allow
   process.exit(0);
 }
 
-if (!inProgressId) {
+if (inProgressId) {
+  // There is an in_progress task — editing code files is expected, allow
   process.exit(0);
 }
 
-// Task is in_progress — block unless already warned this session
+// No in_progress task found — warn/block code file edits
 if (!alreadyWarned) {
   try {
     fs.writeFileSync(flagFile, String(Date.now()), 'utf-8');
@@ -125,7 +150,7 @@ if (!alreadyWarned) {
 process.stdout.write(
   JSON.stringify({
     type: 'error',
-    message: `\u26a0 Task gate: task ${inProgressId} is in_progress. Complete or release it before editing files.\nSet SKIP_TASK_GATE=1 to bypass.`,
+    message: '\u26a0 Task gate: no in_progress task found. Start a task before editing code files.\nSet SKIP_TASK_GATE=1 to bypass.',
   }) + '\n',
 );
 process.exit(2);

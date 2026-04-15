@@ -1,4 +1,4 @@
-import type { Priority, TaskStatus, TaskType } from './task.js';
+import type { Priority, TaskStatus, TaskType, TaskReference } from './task.js';
 
 // Core CRUD
 export interface TaskCreateInput {
@@ -12,12 +12,18 @@ export interface TaskCreateInput {
   files?: string[];
   parent?: string;
   template?: string;
+  spec_file?: string;
+  plan_file?: string;
+  milestone?: string;
+  estimate_hours?: number;
+  auto_captured?: boolean;
+  references?: TaskReference[];
 }
 
 export interface TaskCreateOutput {
   id: string;
   file: string;
-  status: 'todo';
+  status: TaskStatus;
 }
 
 export interface TaskUpdateInput {
@@ -28,6 +34,12 @@ export interface TaskUpdateInput {
   tags?: string[];
   files?: string[];
   complexity?: number;
+  spec_file?: string;
+  plan_file?: string;
+  milestone?: string;
+  estimate_hours?: number;
+  auto_captured?: boolean;
+  references?: TaskReference[];
 }
 
 export interface TaskGetInput { id: string; }
@@ -106,11 +118,42 @@ export interface TaskUnblocksInput { id: string; }
 export interface TaskStaleInput { project?: string; }
 export interface TaskStatsInput { project?: string; }
 
+export interface MilestoneBurndown {
+  id: string;
+  title: string;
+  status: 'open' | 'closed';
+  total: number;
+  done: number;
+  due_date?: string;
+}
+
 export interface TaskStatsOutput {
   by_status: Record<TaskStatus, number>;
   avg_cycle_time_by_type: Record<string, number | null>; // hours
   completion_rate: number; // 0-1
   stale_count: number;
+  milestones?: MilestoneBurndown[];
+  orphaned_milestones?: string[];
+}
+
+export interface MilestoneCreateInput {
+  project: string;
+  id: string;
+  title: string;
+  description?: string;
+  due_date?: string;
+  status?: 'open' | 'closed';
+}
+
+export interface MilestoneActionInput {
+  action: 'create' | 'list' | 'get' | 'update' | 'close' | 'delete';
+  project?: string;
+  id?: string;
+  title?: string;
+  description?: string;
+  due_date?: string;
+  status?: 'open' | 'closed';
+  patch?: Partial<MilestoneCreateInput>;
 }
 
 // Admin
