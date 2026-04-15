@@ -131,12 +131,12 @@ function writeSessionState(state) {
 // Prefer PATH (global install), fall back to local node_modules/.bin
 function resolveBinary() {
   try {
-    const which = execSync('where mcp-agent-tasks 2>NUL || which mcp-agent-tasks 2>/dev/null', {
+    const which = execSync('where agent-tasks 2>NUL || which agent-tasks 2>/dev/null', {
       encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'],
     }).trim().split(/\r?\n/)[0];
     if (which) return which;
   } catch { /* not in PATH */ }
-  return path.join(path.dirname(configPath), 'node_modules', '.bin', 'mcp-agent-tasks');
+  return path.join(path.dirname(configPath), 'node_modules', '.bin', 'agent-tasks');
 }
 
 // ── main logic ────────────────────────────────────────────────────────────────

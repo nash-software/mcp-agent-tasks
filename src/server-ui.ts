@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, getDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
@@ -22,6 +22,15 @@ export interface UiServerHandle {
   close: () => Promise<void>;
 }
 
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript',
+  '.css':  'text/css',
+  '.map':  'application/json',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
+};
+
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   const body = JSON.stringify(data);
   res.writeHead(status, {
@@ -35,6 +44,17 @@ function sendError(res: ServerResponse, status: number, message: string): void {
   sendJson(res, status, { error: message });
 }
 
+function serveStatic(res: ServerResponse, filePath: string): void {
+  if (!existsSync(filePath)) {
+    sendError(res, 404, `Not found: ${filePath}`);
+    return;
+  }
+  const content = readFileSync(filePath);
+  const mime = MIME[extname(filePath)] ?? 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-cache' });
+  res.end(content);
+}
+
 export async function startUiServer(opts: { port: number; openBrowser?: boolean }): Promise<UiServerHandle> {
   const config = loadConfig();
   const dbPath = getDbPath();
@@ -42,27 +62,31 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
   sqliteIndex.init();
   const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
 
-  const htmlPath = join(__dirname, '..', 'dist', 'ui.html');
-  const htmlFallback = join(__dirname, 'ui', 'index.html');
+  const uiDir = join(__dirname, '..', 'dist', 'ui');
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://localhost`);
     const pathname = url.pathname;
 
     try {
-      // Serve HTML dashboard
-      if (pathname === '/' || pathname === '/index.html') {
-        let htmlContent: string | undefined;
-        if (existsSync(htmlPath)) {
-          htmlContent = readFileSync(htmlPath, 'utf-8');
-        } else if (existsSync(htmlFallback)) {
-          htmlContent = readFileSync(htmlFallback, 'utf-8');
+      // Static assets — /assets/* (guard against path traversal)
+      if (pathname.startsWith('/assets/')) {
+        const resolved = resolve(join(uiDir, pathname));
+        if (!resolved.startsWith(resolve(uiDir))) {
+          sendError(res, 404, 'Not found');
+          return;
         }
-        if (htmlContent !== undefined) {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-          res.end(htmlContent);
+        serveStatic(res, resolved);
+        return;
+      }
+
+      // HTML entry point
+      if (pathname === '/' || pathname === '/index.html') {
+        const indexPath = join(uiDir, 'index.html');
+        if (existsSync(indexPath)) {
+          serveStatic(res, indexPath);
         } else {
-          sendError(res, 404, 'Dashboard HTML not found. Run npm run build first.');
+          sendError(res, 404, 'Dashboard not built. Run npm run build first.');
         }
         return;
       }

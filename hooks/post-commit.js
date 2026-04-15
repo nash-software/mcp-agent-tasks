@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp-agent-tasks post-commit hook
+// agent-tasks post-commit hook
 
 'use strict';
 
@@ -34,7 +34,7 @@ function run() {
   }
 
   // 4. Link commit via CLI
-  const cliBin = path.join(process.cwd(), 'node_modules', '.bin', 'mcp-agent-tasks');
+  const cliBin = path.join(process.cwd(), 'node_modules', '.bin', 'agent-tasks');
   try {
     execFileSync(process.execPath, [cliBin, 'link-commit', id, sha, message], {
       stdio: 'inherit',

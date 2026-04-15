@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp-agent-tasks post-merge hook
+// agent-tasks post-merge hook
 // Fires after `git pull` / `git merge`. Extracts task IDs from the merged PR
 // and auto-transitions them to done.
 
@@ -61,7 +61,7 @@ function main() {
   // Check gh is available
   const gh = run('which gh') || run('where gh');
   if (!gh) {
-    console.warn('[mcp-agent-tasks] post-merge: gh CLI not found, skipping auto-transition');
+    console.warn('[agent-tasks] post-merge: gh CLI not found, skipping auto-transition');
     return;
   }
 
@@ -82,8 +82,8 @@ function main() {
   if (taskIds.length === 0) return;
 
   // Prefer local node_modules bin; fall back to global
-  const localBin = path.resolve(repoRoot, 'node_modules', '.bin', 'mcp-agent-tasks');
-  const bin = existsSync(localBin) ? localBin : 'mcp-agent-tasks';
+  const localBin = path.resolve(repoRoot, 'node_modules', '.bin', 'agent-tasks');
+  const bin = existsSync(localBin) ? localBin : 'agent-tasks';
 
   const closed = [];
   for (const id of taskIds) {
@@ -95,12 +95,12 @@ function main() {
     if (result !== null) {
       closed.push(id);
     } else {
-      console.warn(`[mcp-agent-tasks] post-merge: failed to close ${id}`);
+      console.warn(`[agent-tasks] post-merge: failed to close ${id}`);
     }
   }
 
   if (closed.length > 0) {
-    console.log(`[mcp-agent-tasks] Closed ${closed.length} task(s): ${closed.join(', ')}`);
+    console.log(`[agent-tasks] Closed ${closed.length} task(s): ${closed.join(', ')}`);
   }
 }
 

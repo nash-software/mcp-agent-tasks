@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp-agent-tasks prepare-commit-msg hook
+// agent-tasks prepare-commit-msg hook
 
 'use strict';
 

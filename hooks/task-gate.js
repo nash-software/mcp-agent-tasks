@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// mcp-agent-tasks task-gate PreToolUse hook
+// agent-tasks task-gate PreToolUse hook
 // Zero non-built-in require() calls — only fs, path, os, child_process
 
 'use strict';

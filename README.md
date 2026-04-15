@@ -1,6 +1,6 @@
 ![Node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen) ![License MIT](https://img.shields.io/badge/license-MIT-blue)
 
-# mcp-agent-tasks
+# agent-tasks
 
 File-based task management for AI coding agents. Hybrid markdown/SQLite store. 20 MCP tools over stdio.
 
@@ -9,31 +9,31 @@ Tasks live as plain markdown files on disk (readable, diffable, git-trackable) w
 ## Install
 
 ```bash
-npm install -g mcp-agent-tasks
+npm install -g agent-tasks
 # or run without installing:
-npx -y mcp-agent-tasks serve
+npx -y agent-tasks serve
 ```
 
 ## Quick Start
 
 ```bash
 # 1. Install globally
-npm install -g mcp-agent-tasks
+npm install -g agent-tasks
 
 # 2. Initialise a project
 cd my-project
-mcp-agent-tasks init MYPROJECT --storage local
+agent-tasks init MYPROJECT --storage local
 
 # 3. Configure your MCP client (see below)
 
 # 4. Install git hooks
-mcp-agent-tasks install-hooks
+agent-tasks install-hooks
 
 # 5. Install Claude Code task-gate hook (optional, recommended)
-mcp-agent-tasks install-claude-hooks
+agent-tasks install-claude-hooks
 
 # 6. Create your first task (via MCP tool or CLI)
-mcp-agent-tasks list
+agent-tasks list
 ```
 
 ## MCP Client Configuration
@@ -44,7 +44,7 @@ mcp-agent-tasks list
 {
   "mcpServers": {
     "tasks": {
-      "command": "mcp-agent-tasks",
+      "command": "agent-tasks",
       "args": ["serve"]
     }
   }
@@ -57,7 +57,7 @@ mcp-agent-tasks list
 {
   "mcpServers": {
     "tasks": {
-      "command": "mcp-agent-tasks",
+      "command": "agent-tasks",
       "args": ["serve"]
     }
   }
@@ -70,10 +70,10 @@ Install hooks so commits and PRs are automatically linked to tasks:
 
 ```bash
 # Install into .git/hooks/ (safe — chains with existing hooks)
-mcp-agent-tasks install-hooks
+agent-tasks install-hooks
 
 # Install Claude Code PreToolUse hook (blocks edits while a task is in_progress)
-mcp-agent-tasks install-claude-hooks
+agent-tasks install-claude-hooks
 ```
 
 The `prepare-commit-msg` hook prepends `[PROJ-001]` to commit messages when the branch name contains a task ID.
@@ -119,3 +119,7 @@ Set `SKIP_TASK_GATE=1` to bypass the Claude Code gate when needed.
 ## Spec
 
 Full protocol spec: `schema/` directory in this package.
+
+## Migrating from mcp-agent-tasks
+
+The CLI binary was renamed in v0.2.0. Re-run `npm install -g agent-tasks` and `agent-tasks install` to update your `~/.claude.json` MCP registration. The old `mcp-agent-tasks` entry in `~/.claude.json` can be removed manually.
