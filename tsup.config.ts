@@ -10,9 +10,9 @@ export default defineConfig({
   onSuccess: async () => {
     const { copyFileSync, mkdirSync, existsSync } = await import('node:fs');
     mkdirSync('dist', { recursive: true });
-    if (existsSync('src/ui/index.html')) {
-      copyFileSync('src/ui/index.html', 'dist/ui.html');
-      console.log('[tsup] Copied src/ui/index.html → dist/ui.html');
+    if (existsSync('src/ui/legacy-index.html')) {
+      copyFileSync('src/ui/legacy-index.html', 'dist/ui.html');
+      console.log('[tsup] Copied src/ui/legacy-index.html → dist/ui.html');
     }
   },
 });
