@@ -4,12 +4,16 @@ import { Badge } from './Badge'
 
 interface Props {
   task: Task
+  onClick?: () => void
 }
 
-export function TaskCard({ task }: Props): React.JSX.Element {
+export function TaskCard({ task, onClick }: Props): React.JSX.Element {
   const labels = task.labels?.slice(0, 3) ?? []
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2">
+    <div
+      className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 cursor-pointer hover:border-slate-500 hover:bg-slate-750 transition-colors"
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between gap-2">
         <span className="text-xs text-slate-500 font-mono">{task.id}</span>
         <Badge variant="priority" value={task.priority} />

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TaskStatus, FilterState } from '../types'
+import type { Task, TaskStatus, FilterState } from '../types'
 import { useTasks } from '../hooks/useTasks'
 import { TaskCard } from '../components/TaskCard'
 
@@ -12,9 +12,10 @@ const COLUMNS: { status: TaskStatus; label: string }[] = [
 
 interface Props {
   filters: FilterState
+  onTaskClick?: (task: Task) => void
 }
 
-export function BoardView({ filters }: Props): React.JSX.Element {
+export function BoardView({ filters, onTaskClick }: Props): React.JSX.Element {
   const { tasks, isLoading, error } = useTasks({
     project:   filters.project || undefined,
     milestone: filters.milestone || undefined,
@@ -54,7 +55,7 @@ export function BoardView({ filters }: Props): React.JSX.Element {
               {col.label} <span className="text-slate-600">({colTasks.length})</span>
             </h2>
             {colTasks.map(task => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard key={task.id} task={task} onClick={() => onTaskClick?.(task)} />
             ))}
             {colTasks.length === 0 && (
               <p className="text-xs text-slate-600 italic">No tasks</p>
