@@ -24,6 +24,11 @@ const ALLOWED_UPDATE_FIELDS = new Set([
   'complexity',
   'complexity_manual',
   'spec_file',
+  'plan_file',
+  'milestone',
+  'estimate_hours',
+  'auto_captured',
+  'references',
 ]);
 
 export class TaskStore {
@@ -129,6 +134,12 @@ export class TaskStore {
       }
       updated.spec_file = extended['spec_file'] as string;
     }
+
+    if (extended['plan_file'] !== undefined) updated.plan_file = extended['plan_file'] as string;
+    if (extended['milestone'] !== undefined) updated.milestone = extended['milestone'] as string;
+    if (extended['estimate_hours'] !== undefined) updated.estimate_hours = extended['estimate_hours'] as number;
+    if (extended['auto_captured'] !== undefined) updated.auto_captured = extended['auto_captured'] as boolean;
+    if (extended['references'] !== undefined) updated.references = extended['references'] as Task['references'];
 
     // Write protocol: SQLite → markdown → manifest
     this.sqliteIndex.upsertTask(updated);

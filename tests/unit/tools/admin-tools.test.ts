@@ -33,6 +33,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
     } as unknown as ToolContext['index'],
     sessionId: 'test-session',
     config: makeConfig('/tmp/mcp-tasks'),
+    milestones: {} as unknown as ToolContext['milestones'],
     ...overrides,
   };
 }

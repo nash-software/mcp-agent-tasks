@@ -56,6 +56,7 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext {
       trackManifest: true,
       projects: [],
     },
+    milestones: {} as unknown as ToolContext['milestones'],
     ...overrides,
   };
 }
