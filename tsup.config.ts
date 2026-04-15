@@ -7,4 +7,12 @@ export default defineConfig({
   clean: true,
   external: ['better-sqlite3'],
   outDir: 'dist',
+  onSuccess: async () => {
+    const { copyFileSync, mkdirSync, existsSync } = await import('node:fs');
+    mkdirSync('dist', { recursive: true });
+    if (existsSync('src/ui/index.html')) {
+      copyFileSync('src/ui/index.html', 'dist/ui.html');
+      console.log('[tsup] Copied src/ui/index.html → dist/ui.html');
+    }
+  },
 });
