@@ -193,18 +193,20 @@ program
   .description('Cross-project summary')
   .action(() => {
     const { config, tasksDir, project } = resolveTasksDir();
-    const { sqliteIndex } = buildStore(tasksDir, project);
+    const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
-    const projects = config.projects.length > 0
-      ? config.projects.map(p => p.prefix)
-      : [project];
+    const projectEntries = config.projects.length > 0
+      ? config.projects
+      : [{ prefix: project, path: path.dirname(tasksDir), storage: 'local' as const }];
 
-    const rows = projects.map(p => {
-      const todo = sqliteIndex.listTasks({ status: 'todo', project: p }).length;
-      const in_progress = sqliteIndex.listTasks({ status: 'in_progress', project: p }).length;
-      const done = sqliteIndex.listTasks({ status: 'done', project: p }).length;
-      const blocked = sqliteIndex.listTasks({ status: 'blocked', project: p }).length;
-      return { project: p, todo, in_progress, done, blocked };
+    const rows = projectEntries.map(p => {
+      const projTasksDir = path.join(p.path, tasksDirName);
+      const { sqliteIndex } = buildStore(projTasksDir, p.prefix);
+      const todo = sqliteIndex.listTasks({ status: 'todo', project: p.prefix }).length;
+      const in_progress = sqliteIndex.listTasks({ status: 'in_progress', project: p.prefix }).length;
+      const done = sqliteIndex.listTasks({ status: 'done', project: p.prefix }).length;
+      const blocked = sqliteIndex.listTasks({ status: 'blocked', project: p.prefix }).length;
+      return { project: p.prefix, todo, in_progress, done, blocked };
     });
 
     console.log(formatTable(rows));
