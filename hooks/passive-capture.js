@@ -127,6 +127,18 @@ function writeSessionState(state) {
   }
 }
 
+// ── resolve CLI binary ────────────────────────────────────────────────────────
+// Prefer PATH (global install), fall back to local node_modules/.bin
+function resolveBinary() {
+  try {
+    const which = execSync('where mcp-agent-tasks 2>NUL || which mcp-agent-tasks 2>/dev/null', {
+      encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().split(/\r?\n/)[0];
+    if (which) return which;
+  } catch { /* not in PATH */ }
+  return path.join(path.dirname(configPath), 'node_modules', '.bin', 'mcp-agent-tasks');
+}
+
 // ── main logic ────────────────────────────────────────────────────────────────
 try {
   if ((fileType === 'plan' || fileType === 'spec' || fileType === 'spike') && !activeTask) {
@@ -138,15 +150,16 @@ try {
 
     const title = humanizeTitle(filePath, fileType);
     const why = `Auto-captured from file write: ${filePath}`;
+    const binary = resolveBinary();
 
     const result = spawnSync(
       process.execPath,
       [
-        path.join(path.dirname(configPath), 'node_modules', '.bin', 'mcp-agent-tasks'),
+        binary,
         'create',
         '--project', prefix,
         '--title', title,
-        '--type', fileType === 'spike' ? 'spike' : 'spec',
+        '--type', fileType,   // plan → plan, spec → spec, spike → spike (correct mapping)
         '--priority', 'medium',
         '--why', why,
         '--auto-captured',
@@ -170,7 +183,7 @@ try {
     const result = spawnSync(
       process.execPath,
       [
-        path.join(path.dirname(configPath), 'node_modules', '.bin', 'mcp-agent-tasks'),
+        resolveBinary(),
         'add-file',
         activeTask,
         filePath,
