@@ -541,6 +541,15 @@ program
         for (const e of errors) console.error(`  ${e.file}: ${e.error}`);
         process.exit(1);
       }
+
+      if (!summary.dryRun && summary.written > 0) {
+        const { tasksDir } = resolveTasksDir(projectPath);
+        const resolvedPrefix = options.prefix ?? summary.results[0]?.id.split('-')[0] ?? 'PROJECT';
+        const { sqliteIndex } = buildStore(tasksDir, resolvedPrefix);
+        const reconciler = new Reconciler(sqliteIndex, tasksDir, resolvedPrefix);
+        const count = reconciler.reconcile();
+        console.log(`✓ Rebuilt index: ${count} tasks reconciled`);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`✗ ${msg}`);
