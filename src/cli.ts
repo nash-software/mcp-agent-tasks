@@ -559,6 +559,49 @@ program
     }
   });
 
+// ── audit ─────────────────────────────────────────────────────────────────────
+
+program
+  .command('audit <projectPath>')
+  .description('Audit in_progress tasks: resolve done via git/GitHub, tag ambiguous ones for review')
+  .option('--prefix <ID>', 'project ID prefix (default: derived from package.json or dir name)')
+  .option('--dry-run', 'preview only; do not write changes', false)
+  .option('--no-llm', 'skip LLM matching, only use git branch lookup')
+  .action(async (projectPath: string, options: { prefix?: string; dryRun: boolean; llm: boolean }) => {
+    const { auditTasks } = await import('./tools/task-audit.js');
+    try {
+      const summary = await auditTasks({
+        projectPath,
+        idPrefix: options.prefix,
+        dryRun: options.dryRun,
+        noLlm: !options.llm,
+      });
+
+      if (summary.scanned === 0) {
+        console.log('(no in_progress tasks found)');
+        return;
+      }
+
+      const rows = summary.results.map(r => ({
+        id: r.taskId,
+        title: r.title.slice(0, 40),
+        action: r.action,
+        method: r.method,
+        conf: r.confidence,
+        pr: r.evidence?.prNumber ? `#${r.evidence.prNumber}` : '',
+      }));
+      console.log(formatTable(rows));
+      console.log('');
+      console.log(
+        `Scanned ${summary.scanned} | Done ${summary.transitioned} | Review ${summary.taggedReview} | No signal ${summary.noSignal}${summary.dryRun ? ' (dry-run)' : ''}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ ${msg}`);
+      process.exit(1);
+    }
+  });
+
 // ── setup ─────────────────────────────────────────────────────────────────────
 
 program

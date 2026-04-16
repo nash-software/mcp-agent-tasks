@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { resolvePath } from '../lib/normalize-path.js';
 import matter from 'gray-matter';
 import yaml from 'yaml';
 import { McpTasksError } from '../types/errors.js';
@@ -148,7 +149,7 @@ export async function reconcileLegacy(opts: {
   dryRun?: boolean;
   tasksDirName?: string;
 }): Promise<ReconcileSummary> {
-  const projectPath = path.resolve(opts.projectPath);
+  const projectPath = resolvePath(opts.projectPath);
   const dryRun = opts.dryRun ?? false;
 
   const prefix = opts.idPrefix ?? derivePrefix(projectPath);

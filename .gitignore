@@ -11,7 +11,11 @@ coverage/
 scratchpads/
 agent-tasks/
 
+# Runtime state
+.conductor-status
+
 # Handbook tool (auto-generated)
+.handbook/sessions/
 .handbook/queue.jsonl
 .handbook/queue.processing.jsonl
 .handbook/.lock
