@@ -216,62 +216,119 @@ program
 
 program
   .command('install-hooks')
-  .description('Install git hooks (post-commit, prepare-commit-msg, post-merge)')
-  .option('--path <dir>', 'project root directory', process.cwd())
-  .action((options: { path: string }) => {
-    const rootDir = path.resolve(options.path);
-    const hooksDir = path.join(rootDir, '.git', 'hooks');
-
-    if (!fs.existsSync(hooksDir)) {
-      console.error(`✗ No .git/hooks directory found at ${hooksDir}`);
-      process.exit(1);
-    }
-
+  .description('Install git hooks globally to ~/.claude/git-hooks/ (default) or locally to .git/hooks/ (--local)')
+  .option('--path <dir>', 'project root directory (used with --local)', process.cwd())
+  .option('--local', 'install to .git/hooks/ of the target repo instead of the global path', false)
+  .option('--global', 'install to ~/.claude/git-hooks/ (default behaviour, explicit flag)', true)
+  .action((options: { path: string; local: boolean; global: boolean }) => {
     // Source hooks live next to this file in hooks/ (dist layout) or in project hooks/ (dev)
     const hooksSourceDir = path.join(__dirname, '..', 'hooks');
 
-    for (const hookName of ['post-commit', 'prepare-commit-msg', 'post-merge'] as const) {
-      const target = path.join(hooksDir, hookName);
-      const source = path.join(hooksSourceDir, `${hookName}.js`);
+    if (!options.local) {
+      // ── Global install (default) ─────────────────────────────────────────────
+      const globalHooksDir = path.join(os.homedir(), '.claude', 'git-hooks');
 
-      if (!fs.existsSync(source)) {
-        console.error(`✗ Source hook not found: ${source}`);
-        continue;
+      if (!fs.existsSync(globalHooksDir)) {
+        fs.mkdirSync(globalHooksDir, { recursive: true });
       }
 
-      const MCP_MARKER = '# agent-tasks';
+      // Warn if core.hooksPath doesn't point here
+      try {
+        const configuredPath = execSync('git config --global core.hooksPath', {
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        const normalizedConfigured = configuredPath.replace(/\\/g, '/').replace(/^\/c\//, 'C:/');
+        const normalizedTarget = globalHooksDir.replace(/\\/g, '/');
+        if (normalizedConfigured !== normalizedTarget &&
+            configuredPath !== globalHooksDir &&
+            configuredPath !== globalHooksDir.replace(/\\/g, '/')) {
+          console.warn(`⚠  git config --global core.hooksPath is set to: ${configuredPath}`);
+          console.warn(`   Expected: ${globalHooksDir}`);
+          console.warn(`   Run: git config --global core.hooksPath "${globalHooksDir}"`);
+        }
+      } catch {
+        // core.hooksPath not set at all
+        console.warn(`⚠  git config --global core.hooksPath is not set.`);
+        console.warn(`   Hooks installed but will not fire until you run:`);
+        console.warn(`   git config --global core.hooksPath "${globalHooksDir}"`);
+      }
 
-      if (!fs.existsSync(target)) {
-        // Fresh install
-        fs.copyFileSync(source, target);
-        fs.chmodSync(target, 0o755);
-        console.log(`✓ Installed ${hookName} hook`);
-      } else {
-        const existing = fs.readFileSync(target, 'utf-8');
-        if (existing.includes(MCP_MARKER) || existing.includes('mcp-agent-tasks') || existing.includes('agent-tasks')) {
-          // Overwrite our own hook
+      for (const hookName of ['post-commit', 'post-merge'] as const) {
+        const sourceJs = path.join(hooksSourceDir, `${hookName}.js`);
+
+        if (!fs.existsSync(sourceJs)) {
+          console.error(`✗ Source hook not found: ${sourceJs}`);
+          continue;
+        }
+
+        // 1. Copy .js companion file
+        const destJs = path.join(globalHooksDir, `${hookName}.js`);
+        fs.copyFileSync(sourceJs, destJs);
+
+        // 2. Write shell wrapper
+        const destWrapper = path.join(globalHooksDir, hookName);
+        // Use forward-slash Unix path in the shebang line (works under MSYS2/Git Bash)
+        const unixJsPath = destJs.replace(/\\/g, '/').replace(/^([A-Z]):/, (_, d) => `/${d.toLowerCase()}`);
+        const wrapperContent = `#!/bin/sh\nnode "${unixJsPath}" "$@"\n`;
+        fs.writeFileSync(destWrapper, wrapperContent, 'utf-8');
+        fs.chmodSync(destWrapper, 0o755);
+
+        console.log(`✓ Installed ${hookName} hook (global: ~/.claude/git-hooks/)`);
+      }
+
+    } else {
+      // ── Local install (--local flag) — original behaviour ────────────────────
+      const rootDir = path.resolve(options.path);
+      const hooksDir = path.join(rootDir, '.git', 'hooks');
+
+      if (!fs.existsSync(hooksDir)) {
+        console.error(`✗ No .git/hooks directory found at ${hooksDir}`);
+        process.exit(1);
+      }
+
+      for (const hookName of ['post-commit', 'prepare-commit-msg', 'post-merge'] as const) {
+        const target = path.join(hooksDir, hookName);
+        const source = path.join(hooksSourceDir, `${hookName}.js`);
+
+        if (!fs.existsSync(source)) {
+          console.error(`✗ Source hook not found: ${source}`);
+          continue;
+        }
+
+        const MCP_MARKER = '# agent-tasks';
+
+        if (!fs.existsSync(target)) {
+          // Fresh install
           fs.copyFileSync(source, target);
           fs.chmodSync(target, 0o755);
-          console.log(`✓ Updated ${hookName} hook`);
+          console.log(`✓ Installed ${hookName} hook`);
         } else {
-          // Chain with user hook
-          const dotDir = path.join(hooksDir, `${hookName}.d`);
-          if (!fs.existsSync(dotDir)) fs.mkdirSync(dotDir, { recursive: true });
+          const existing = fs.readFileSync(target, 'utf-8');
+          if (existing.includes(MCP_MARKER) || existing.includes('mcp-agent-tasks') || existing.includes('agent-tasks')) {
+            // Overwrite our own hook
+            fs.copyFileSync(source, target);
+            fs.chmodSync(target, 0o755);
+            console.log(`✓ Updated ${hookName} hook`);
+          } else {
+            // Chain with user hook
+            const dotDir = path.join(hooksDir, `${hookName}.d`);
+            if (!fs.existsSync(dotDir)) fs.mkdirSync(dotDir, { recursive: true });
 
-          // Move existing to 00-existing
-          const existingDest = path.join(dotDir, '00-existing');
-          if (!fs.existsSync(existingDest)) {
-            fs.renameSync(target, existingDest);
-            fs.chmodSync(existingDest, 0o755);
-          }
+            // Move existing to 00-existing
+            const existingDest = path.join(dotDir, '00-existing');
+            if (!fs.existsSync(existingDest)) {
+              fs.renameSync(target, existingDest);
+              fs.chmodSync(existingDest, 0o755);
+            }
 
-          // Copy mcp hook
-          const mcpDest = path.join(dotDir, '10-agent-tasks');
-          fs.copyFileSync(source, mcpDest);
-          fs.chmodSync(mcpDest, 0o755);
+            // Copy mcp hook
+            const mcpDest = path.join(dotDir, '10-agent-tasks');
+            fs.copyFileSync(source, mcpDest);
+            fs.chmodSync(mcpDest, 0o755);
 
-          // Write dispatcher
-          const dispatcher = `#!/usr/bin/env node
+            // Write dispatcher
+            const dispatcher = `#!/usr/bin/env node
 // agent-tasks dispatcher
 const fs = require('fs'); const path = require('path'); const {execFileSync} = require('child_process');
 const d = path.join(__dirname, path.basename(__filename) + '.d');
@@ -281,9 +338,10 @@ for (const f of fs.readdirSync(d).sort()) {
   catch (e) { process.exit((e.status) || 1); }
 }
 `;
-          fs.writeFileSync(target, dispatcher, 'utf-8');
-          fs.chmodSync(target, 0o755);
-          console.log(`✓ Installed ${hookName} hook (chained with existing hook in ${hookName}.d/)`);
+            fs.writeFileSync(target, dispatcher, 'utf-8');
+            fs.chmodSync(target, 0o755);
+            console.log(`✓ Installed ${hookName} hook (chained with existing hook in ${hookName}.d/)`);
+          }
         }
       }
     }
