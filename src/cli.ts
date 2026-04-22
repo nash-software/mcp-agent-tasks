@@ -679,7 +679,6 @@ program
     } catch {
       console.error('✗ Could not determine npm global prefix. Ensure npm is installed and on PATH.');
       process.exit(1);
-      return; // unreachable, satisfies TS
     }
 
     // 2. Register MCP server in ~/.claude.json
@@ -877,7 +876,6 @@ program
     } catch {
       console.error('✗ Could not determine npm global prefix.');
       process.exit(1);
-      return;
     }
 
     const claudeJsonPath = path.join(os.homedir(), '.claude.json');
