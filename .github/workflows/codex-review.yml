@@ -1,0 +1,144 @@
+# Codex Cross-Model PR Review
+# Copy to: .github/workflows/codex-review.yml
+# Also copy: .github/scripts/codex-pr-review.mjs  (from templates/github-actions/scripts/)
+# Required secrets: OPENAI_API_KEY
+# Optional vars:    CODEX_REVIEW_MODEL (default: gpt-4o)
+#
+# To skip: add [skip codex] to PR title
+
+name: Codex Plan Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  codex-review:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Check skip flag
+        id: skip
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$PR_TITLE" == *"[skip codex]"* ]]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.skip.outputs.value != 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract spec path from PR body
+        if: steps.skip.outputs.value != 'true'
+        id: spec
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          SPEC_PATH=$(echo "$PR_BODY" | grep -oP '(?<=<!-- codex-spec: )[^>]+(?= -->)' || echo "")
+          # Sanitize to safe path characters only
+          SPEC_PATH=$(echo "$SPEC_PATH" | tr -cd 'A-Za-z0-9/_.-')
+          echo "path=${SPEC_PATH}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.skip.outputs.value != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate diff
+        if: steps.skip.outputs.value != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git diff "origin/${BASE_REF}...HEAD" > /tmp/pr-diff.txt
+          wc -l /tmp/pr-diff.txt
+
+      - name: Copy review script
+        if: steps.skip.outputs.value != 'true'
+        run: |
+          cp .github/scripts/codex-pr-review.mjs /tmp/codex-pr-review.mjs 2>/dev/null || \
+            { echo "codex-pr-review.mjs not found in .github/scripts/ — skipping review"; exit 1; }
+
+      - name: Run Codex review
+        if: steps.skip.outputs.value != 'true'
+        id: review
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_REVIEW_MODEL: ${{ vars.CODEX_REVIEW_MODEL || 'gpt-4o' }}
+          SPEC_PATH: ${{ steps.spec.outputs.path }}
+        run: |
+          if [ -n "$SPEC_PATH" ] && [ -f "$SPEC_PATH" ]; then
+            RESULT=$(node /tmp/codex-pr-review.mjs /tmp/pr-diff.txt "$SPEC_PATH")
+          else
+            RESULT=$(node /tmp/codex-pr-review.mjs /tmp/pr-diff.txt)
+          fi
+          DELIMITER="revieweof_$(openssl rand -hex 8)"
+          echo "result<<${DELIMITER}" >> "$GITHUB_OUTPUT"
+          echo "$RESULT" >> "$GITHUB_OUTPUT"
+          echo "${DELIMITER}" >> "$GITHUB_OUTPUT"
+
+      - name: Post review comment
+        if: steps.skip.outputs.value != 'true' && steps.review.outputs.result != ''
+        uses: actions/github-script@v7
+        env:
+          REVIEW_JSON: ${{ steps.review.outputs.result }}
+          REVIEW_MODEL: ${{ vars.CODEX_REVIEW_MODEL || 'gpt-4o' }}
+        with:
+          script: |
+            let review;
+            try {
+              review = JSON.parse(process.env.REVIEW_JSON);
+            } catch (e) {
+              core.warning(`Codex review: failed to parse JSON response — ${e.message}`);
+              return;
+            }
+            const verdict = review.verdict;
+            const gaps = review.gaps ?? [];
+            const summary = review.summary ?? '';
+
+            const icon = verdict === 'ALIGNED' ? '✅' : '⚠️';
+            const label = verdict === 'ALIGNED'
+              ? 'Codex: aligned with spec'
+              : `Codex: ${gaps.length} gap${gaps.length !== 1 ? 's' : ''} found`;
+
+            let body = `### ${icon} ${label}\n\n${summary}\n`;
+
+            if (gaps.length > 0) {
+              body += '\n**Findings:**\n';
+              for (const gap of gaps) {
+                const sev = gap.severity === 'high' ? '🔴' : gap.severity === 'medium' ? '🟡' : '🟢';
+                body += `\n${sev} **${gap.file}** (line ${gap.line}): ${gap.description}`;
+              }
+            }
+
+            body += `\n\n<sub>Cross-model review by OpenAI ${process.env.REVIEW_MODEL}. This is advisory — it does not block merge.</sub>`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+      - name: Handle review failure gracefully
+        if: failure() && steps.skip.outputs.value != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '⚠️ **Codex review failed** (API error or timeout). Manual review recommended.\n\n<sub>This does not block merge.</sub>',
+            });
