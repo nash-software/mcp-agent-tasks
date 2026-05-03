@@ -63,24 +63,25 @@ function findIndexYaml() {
     if (fs.existsSync(config)) {
       try {
         const raw = JSON.parse(fs.readFileSync(config, 'utf-8'));
+        const tasksDirName = raw.tasksDirName || 'agent-tasks';
         const projects = Array.isArray(raw.projects) ? raw.projects : [];
-        // Check each project path
+        // Check each project path using configured tasksDirName
         for (const proj of projects) {
           if (proj.path) {
-            const candidate = path.join(proj.path, 'tasks', 'index.yaml');
+            const candidate = path.join(proj.path, tasksDirName, 'index.yaml');
             if (fs.existsSync(candidate)) return candidate;
           }
         }
-        // Fallback: tasks/ in same dir as config
-        const candidate = path.join(dir, 'tasks', 'index.yaml');
+        // Fallback: tasksDirName in same dir as config
+        const candidate = path.join(dir, tasksDirName, 'index.yaml');
         if (fs.existsSync(candidate)) return candidate;
       } catch {
         // malformed config — skip
       }
     }
 
-    // Also check for tasks/index.yaml directly
-    const directCandidate = path.join(dir, 'tasks', 'index.yaml');
+    // Also check for agent-tasks/index.yaml directly (convention fallback)
+    const directCandidate = path.join(dir, 'agent-tasks', 'index.yaml');
     if (fs.existsSync(directCandidate)) return directCandidate;
 
     const parent = path.dirname(dir);
