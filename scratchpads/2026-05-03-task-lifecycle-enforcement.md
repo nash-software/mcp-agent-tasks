@@ -85,14 +85,19 @@ Open `C:/Users/micha/.claude/settings.json`. Find the `hooks.PreToolUse` array. 
 
 > **Security note:** This hook executes a script from `C:/code/mcp-agent-tasks/hooks/task-gate.js` on every matching tool call. Verify ownership before wiring:
 > ```powershell
-> # Check owner AND verify no broad write access (Everyone / Users / Authenticated Users)
-> $acl = Get-Acl "C:\code\mcp-agent-tasks\hooks\task-gate.js"
-> Write-Host "Owner:" $acl.Owner
-> $acl.Access | Where-Object {
->   $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users' -and
->   $_.FileSystemRights -match 'Write|Modify|FullControl'
-> } | ForEach-Object { Write-Warning "RISKY ACL: $($_.IdentityReference) has $($_.FileSystemRights)" }
-> # Expected: Owner is current user; no WARNING lines printed.
+> # Check owner AND broad write access on both the script AND the launcher
+> foreach ($path in @(
+>   "C:\code\mcp-agent-tasks\hooks\task-gate.js",
+>   "C:\Users\micha\.claude\hooks\node-hidden.exe"
+> )) {
+>   $acl = Get-Acl $path
+>   Write-Host "Owner of $path`: " $acl.Owner
+>   $acl.Access | Where-Object {
+>     $_.IdentityReference -match 'Everyone|Users|Authenticated Users|BUILTIN\\Users' -and
+>     $_.FileSystemRights -match 'Write|Modify|FullControl'
+>   } | ForEach-Object { Write-Warning "RISKY ACL on ${path}: $($_.IdentityReference) has $($_.FileSystemRights)" }
+> }
+> # Expected: both owned by current user; no WARNING lines.
 > # If warnings appear: fix ACLs with icacls or do not wire this hook.
 > ```
 > The hook has no network access and only reads `index.yaml` — it does not write files or call external APIs.
@@ -495,9 +500,11 @@ At the beginning of the build skill (before any code changes), add:
    - **One result, status `in_progress`, unclaimed:** call `task_claim` only (no transition needed)
    - **One result, status `in_progress`, already claimed:** check the branch name — if the branch matches this work, proceed without claiming (same task, different session). If the branch is unrelated, this is a different piece of work: call `task_create` for the current task instead.
    - **One result, status `done` or `cancelled`:** create a new task — the prior one is closed
-   - **Multiple results:** pick the one whose title most closely matches the current work; if two are equally close, create a new task with a more specific title
+   - **Multiple results:** pick the one whose title most closely matches the current work; if two are equally close, create a new task with a more specific title. *(M3 accepted: subjective matching is safe — worst case is a duplicate task, which is harmless and can be cancelled. Over-specifying a similarity algorithm here would be premature.)*
 
    **Agent identity for `task_claim`:** pass the current agent role as the `claim_agent` field (e.g. `"builder"`, `"conductor-builder"`). Do not use a session-unique ID — role names are stable and sufficient for detecting concurrent builds.
+
+   > **Design decision (M2):** Role names are not unique per concurrent worker instance. This is accepted — `task_claim` here is for tracking accountability, not mutex locking. On a single-user dev machine, two agents simultaneously claiming the same task under the same role name is an edge case with no real consequence: both proceed, both link commits, the task ends up with richer history. A true distributed lock would require a coordination layer beyond this plan's scope.
 
 2. Set the branch and link it:
    - Branch must include the task ID: `git checkout -b feat/TASK-NNN-short-description`
@@ -570,10 +577,13 @@ const sinceIdx = args.indexOf('--since');
 const sinceRaw = (sinceIdx !== -1 && args[sinceIdx + 1] && !args[sinceIdx + 1].startsWith('--'))
   ? args[sinceIdx + 1]
   : null;
-// Strict ISO date validation — reject anything that isn't YYYY-MM-DD
-const sinceDate = (sinceRaw && /^\d{4}-\d{2}-\d{2}$/.test(sinceRaw)) ? sinceRaw : null;
+// Strict ISO date validation — reject anything that isn't YYYY-MM-DD and a real calendar date
+const sinceDate = (sinceRaw &&
+  /^\d{4}-\d{2}-\d{2}$/.test(sinceRaw) &&
+  !isNaN(new Date(sinceRaw).getTime())
+) ? sinceRaw : null;
 if (sinceRaw && !sinceDate) {
-  console.error(`Error: --since must be a date in YYYY-MM-DD format, got: ${sinceRaw}`);
+  console.error(`Error: --since must be a valid date in YYYY-MM-DD format, got: ${sinceRaw}`);
   process.exit(1);
 }
 
