@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import os from 'node:os';
 import path from 'node:path';
-import { loadConfig, getDbPath } from './config/loader.js';
+import { loadConfig, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
     ? path.join(config.projects[0].path, config.tasksDirName)
     : storageDir;
 
-  const dbPath = getDbPath();
+  const dbPath = resolveServerDbPath(tasksDir);
 
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();

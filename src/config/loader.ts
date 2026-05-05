@@ -122,3 +122,7 @@ export function getDbPath(): string {
   const config = loadConfig();
   return path.join(config.storageDir, 'tasks.db');
 }
+
+export function resolveServerDbPath(tasksDir: string): string {
+  return fs.existsSync(tasksDir) ? path.join(tasksDir, '.index.db') : getDbPath();
+}
