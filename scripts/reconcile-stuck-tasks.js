@@ -32,7 +32,11 @@ if (sinceRaw && !sinceDate) {
 const projects = {
   COND: 'C:/code/conductor',
   ACR: 'C:/code/acr-reimagined',
+  HRLD: 'C:/code/herald',
   HBOOK: 'C:/code/handbook',
+  EXTR: 'C:/code/exercise-tracker',
+  PRSM: 'C:/code/prism',
+  MCPAT: 'C:/code/mcp-agent-tasks',
 };
 
 function run(cmd, opts = {}) {
@@ -51,7 +55,7 @@ const prLimit = (limitIdx !== -1 && args[limitIdx + 1] && !isNaN(parseInt(args[l
 
 function getMergedPRs(repoDir) {
   const ghArgs = ['pr', 'list', '--state', 'merged', '--limit', String(prLimit),
-    '--json', 'number,title,headRefName,body'];
+    '--json', 'number,title,headRefName,body,url'];
   if (sinceDate) ghArgs.push('--search', `merged:>${sinceDate}`);
   try {
     const result = execFileSync('gh', ghArgs, { encoding: 'utf-8', cwd: repoDir }).trim();
@@ -113,7 +117,7 @@ async function main() {
         if (!dryRun) {
           console.log(`    → task_link_pr ${taskId} ${prNumber}`);
           const linkResult = run(
-            `node C:/code/mcp-agent-tasks/dist/cli.js link-pr ${taskId} ${prNumber}`,
+            `node C:/code/mcp-agent-tasks/dist/cli.js link-pr ${taskId} --pr-number ${prNumber} --pr-state merged --pr-url "${matchedPR.url ?? ''}"`,
             { cwd: repoDir }
           );
           if (linkResult === null) {
