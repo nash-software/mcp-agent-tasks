@@ -242,14 +242,27 @@ export async function reconcileLegacy(opts: {
         });
 
       if (dryRun) {
-        results.push({
-          file: filename,
-          id,
-          status: inference.frontmatter.status,
-          confidence: inference.confidence,
-          reason: inference.reason,
-          outputPath: null,
-        });
+        if (slugAlreadyExists) {
+          results.push({
+            file: filename,
+            id,
+            status: inference.frontmatter.status,
+            confidence: inference.confidence,
+            reason: inference.reason,
+            outputPath: null,
+            error: 'output file already exists',
+          });
+          skipped++;
+        } else {
+          results.push({
+            file: filename,
+            id,
+            status: inference.frontmatter.status,
+            confidence: inference.confidence,
+            reason: inference.reason,
+            outputPath: null,
+          });
+        }
         continue;
       }
 
