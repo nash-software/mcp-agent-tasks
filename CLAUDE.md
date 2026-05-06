@@ -34,13 +34,13 @@ src/
   types/          — TypeScript interfaces (task, errors, config, tools, transitions)
   store/          — MarkdownStore, SqliteIndex, TaskStore, TaskFactory, Reconciler, ConfigLoader
   tools/          — 20 MCP tool handler files (task-create, task-get, task-list, task-transition, etc.)
-  config/         — ConfigLoader (env -> .mcp-tasks.json -> global config)
+  config/         — ConfigLoader (env -> ~/.config/mcp-tasks/config.json)
   templates/      — feature/bug/spike/chore markdown templates
   server.ts       — MCP stdio server entry point (registers all 20 tools)
   cli.ts          — Commander CLI entry point
 schema/
   task.schema.json    — JSON Schema for task frontmatter
-  config.schema.json  — JSON Schema for .mcp-tasks.json
+  config.schema.json  — JSON Schema for ~/.config/mcp-tasks/config.json
 hooks/
   task-gate.js           — Claude Code PreToolUse enforcement hook (reads index.yaml, zero deps)
   post-commit.js         — Auto-links commits to tasks via branch name
