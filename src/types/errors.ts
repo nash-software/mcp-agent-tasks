@@ -6,7 +6,8 @@ export type ErrorCode =
   | 'CIRCULAR_DEPENDENCY'
   | 'MAX_DEPTH_EXCEEDED'
   | 'INVALID_FIELD'
-  | 'SCHEMA_MISMATCH';
+  | 'SCHEMA_MISMATCH'
+  | 'TASK_FILE_EXISTS';
 
 export class McpTasksError extends Error {
   constructor(

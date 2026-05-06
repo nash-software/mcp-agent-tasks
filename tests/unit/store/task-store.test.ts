@@ -94,6 +94,20 @@ describe('TaskStore', () => {
       const task = store.createTask(makeInput());
       expect(task.status).toBe('todo');
     });
+
+    it('does not allocate an ID whose markdown file already exists on disk', () => {
+      // Regression: simulate a freshly-built SQLite index (counter at 0)
+      // against an existing tasks dir that already has TEST-001.md and
+      // TEST-002.md. createTask must skip past them (next ID >= 003)
+      // rather than overwriting either file.
+      fs.writeFileSync(path.join(tasksDir, 'TEST-001.md'), '---\nid: TEST-001\n---\n');
+      fs.writeFileSync(path.join(tasksDir, 'TEST-002.md'), '---\nid: TEST-002\n---\n');
+
+      const task = store.createTask(makeInput());
+
+      const num = parseInt(task.id.split('-')[1] ?? '0', 10);
+      expect(num).toBeGreaterThanOrEqual(3);
+    });
   });
 
   describe('updateTask()', () => {

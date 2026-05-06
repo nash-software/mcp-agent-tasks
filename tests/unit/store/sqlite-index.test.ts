@@ -347,6 +347,22 @@ describe('SqliteIndex', () => {
       expect(second).toBe(first + 1);
       expect(third).toBe(first + 2);
     });
+
+    it('consults disk when tasksDir is provided — never returns an ID whose file exists', () => {
+      // Regression for the MCPAT clobber bug: counter starts at 0 for a fresh
+      // project row, but markdown files for IDs 1 and 2 already exist on disk
+      // (e.g. global-storage tasks created before the index was rebuilt).
+      // Naive increment would return 1 and the create path would overwrite
+      // XX-001.md. nextId must skip past on-disk IDs.
+      const tasksDir = path.join(tmpDir, 'tasks-with-existing');
+      fs.mkdirSync(tasksDir, { recursive: true });
+      fs.writeFileSync(path.join(tasksDir, 'XX-001.md'), '---\nid: XX-001\n---\n');
+      fs.writeFileSync(path.join(tasksDir, 'XX-002.md'), '---\nid: XX-002\n---\n');
+
+      const id = idx.nextId('XX', tasksDir);
+
+      expect(id).toBeGreaterThanOrEqual(3);
+    });
   });
 
   describe('releaseTask()', () => {

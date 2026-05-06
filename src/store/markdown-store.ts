@@ -189,6 +189,28 @@ export class MarkdownStore {
 
     const content = `---\n${yamlStr}---\n\n${body}\n`;
 
+    // Belt-and-braces: if a different task already occupies this file path,
+    // refuse to clobber. Same-id overwrites are the legitimate update path.
+    if (fs.existsSync(file_path)) {
+      try {
+        const existing = matter(fs.readFileSync(file_path, 'utf-8'));
+        const existingId = (existing.data as { id?: unknown })?.id;
+        if (typeof existingId === 'string' && existingId !== task.id) {
+          throw new McpTasksError(
+            'TASK_FILE_EXISTS',
+            `Refusing to overwrite ${file_path}: occupied by ${existingId}, would be replaced by ${task.id}`,
+          );
+        }
+      } catch (err) {
+        if (err instanceof McpTasksError) throw err;
+        // Unparseable existing file — treat as foreign and refuse.
+        throw new McpTasksError(
+          'TASK_FILE_EXISTS',
+          `Refusing to overwrite unparseable file ${file_path} with task ${task.id}`,
+        );
+      }
+    }
+
     const dir = path.dirname(file_path);
     const tmpPath = path.join(dir, path.basename(file_path) + '.tmp');
 
