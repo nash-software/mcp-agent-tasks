@@ -11,7 +11,7 @@
     {
       "prefix": "MCPAT",
       "path": "C:\\code\\mcp-agent-tasks",
-      "storage": "local"
+      "storage": "global"
     }
   ]
 }

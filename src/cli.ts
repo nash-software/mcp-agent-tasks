@@ -51,9 +51,13 @@ function resolveTasksDir(optPath?: string): { tasksDir: string; project: string;
   }
 
   const project = config.projects[0]?.prefix ?? 'DEFAULT';
-  const tasksDir = config.projects[0]?.path
-    ? path.join(config.projects[0].path, dirName)
-    : config.storageDir;
+  const projEntry = config.projects[0];
+  const tasksDir =
+    projEntry && projEntry.storage === 'global'
+      ? config.storageDir
+      : projEntry?.path
+        ? path.join(projEntry.path, dirName)
+        : config.storageDir;
   return { tasksDir, project, config };
 }
 
