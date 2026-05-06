@@ -43,16 +43,12 @@ describe('passive-capture hook', () => {
 
   it('src code file with no active task → stderr is empty (no action on code_change without task)', () => {
     const input = { tool_input: { file_path: '/some/project/src/utils.ts' } };
-    // Create a temp dir with no .mcp-tasks.json so hook exits before code_change logic
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-hook-test-'));
-    try {
-      const result = runHook(input, { MCP_TASKS_DRY_RUN: '0' }, tmpDir);
-      // No .mcp-tasks.json → hook exits 0 silently
-      expect(result.status).toBe(0);
-      expect(result.stderr).toBe('');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    // Point MCP_TASKS_CONFIG to a nonexistent path so hook exits before code_change logic
+    const nonExistentConfig = path.join(os.tmpdir(), 'mcp-hook-nonexistent-' + Date.now(), 'config.json');
+    const result = runHook(input, { MCP_TASKS_DRY_RUN: '0', MCP_TASKS_CONFIG: nonExistentConfig });
+    // No global config → hook exits 0 silently
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
   });
 
   it('malformed stdin → exits 0 silently', () => {
@@ -64,20 +60,15 @@ describe('passive-capture hook', () => {
     expect(result.status).toBe(0);
   });
 
-  it('missing .mcp-tasks.json → exits 0 silently (no output)', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-hook-no-config-'));
-    try {
-      const input = { tool_input: { file_path: path.join(tmpDir, 'scratchpads', 'x-plan.md') } };
-      const result = spawnSync(process.execPath, [HOOK_PATH], {
-        input: JSON.stringify(input),
-        encoding: 'utf-8',
-        env: { ...process.env },
-        cwd: tmpDir,
-      });
-      expect(result.status).toBe(0);
-      expect(result.stdout).toBe('');
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+  it('missing global config → exits 0 silently (no output)', () => {
+    const nonExistentConfig = path.join(os.tmpdir(), 'mcp-hook-no-config-' + Date.now(), 'config.json');
+    const input = { tool_input: { file_path: '/some/project/scratchpads/x-plan.md' } };
+    const result = spawnSync(process.execPath, [HOOK_PATH], {
+      input: JSON.stringify(input),
+      encoding: 'utf-8',
+      env: { ...process.env, MCP_TASKS_CONFIG: nonExistentConfig },
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('');
   });
 });

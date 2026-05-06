@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// @version 2.1.0
+// @version 2.2.0
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync, spawnSync } = require('child_process');
 
 // ── classify file path ────────────────────────────────────────────────────────
@@ -31,17 +32,12 @@ function pickBestBinary(lines, platform) {
   return nonEmpty[0];
 }
 
-// ── locate .mcp-tasks.json ────────────────────────────────────────────────────
-function findMcpTasksConfig() {
-  let dir = process.cwd();
-  while (true) {
-    const candidate = path.join(dir, '.mcp-tasks.json');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+// ── locate global config (~/.config/mcp-tasks/config.json) ──────────────────
+// Respects MCP_TASKS_CONFIG env-var override for testing and per-machine config.
+function findGlobalConfig() {
+  const override = process.env.MCP_TASKS_CONFIG;
+  const configPath = override || path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
+  return fs.existsSync(configPath) ? configPath : null;
 }
 
 // ── humanize file path to a title ────────────────────────────────────────────
@@ -73,7 +69,7 @@ function resolveBinary(configPath) {
 module.exports = {
   classifyPath,
   pickBestBinary,
-  findMcpTasksConfig,
+  findGlobalConfig,
   humanizeTitle,
   resolvePrefix,
   resolveBinary,
@@ -103,7 +99,7 @@ if (require.main === module) {
   const fileType = classifyPath(filePath);
   if (fileType === 'skip') process.exit(0);
 
-  const configPath = findMcpTasksConfig();
+  const configPath = findGlobalConfig();
   if (!configPath) process.exit(0);
 
   let mcpConfig = {};
