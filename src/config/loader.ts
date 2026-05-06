@@ -123,14 +123,28 @@ function applyEnvOverrides(config: McpTasksConfig): McpTasksConfig {
   return result;
 }
 
-export function getDbPath(): string {
+export function getDbPath(config?: McpTasksConfig): string {
   const envDb = process.env['MCP_TASKS_DB'];
   if (envDb) return envDb;
 
-  const config = loadConfig();
-  return path.join(config.storageDir, 'tasks.db');
+  const resolvedConfig = config ?? loadConfig();
+  return path.join(resolvedConfig.storageDir, 'tasks.db');
 }
 
-export function resolveServerDbPath(tasksDir: string): string {
-  return fs.existsSync(tasksDir) ? path.join(tasksDir, '.index.db') : getDbPath();
+export function resolveServerDbPath(tasksDir: string, config: McpTasksConfig, projectPrefix?: string): string {
+  const project = projectPrefix
+    ? config.projects.find(p => p.prefix === projectPrefix)
+    : config.projects[0];
+
+  if (project?.storage === 'global') {
+    return getDbPath(config);
+  }
+
+  // No matching project or local storage — check if there's any project at all
+  if (!project) {
+    // No project found: default to global db
+    return getDbPath(config);
+  }
+
+  return path.join(tasksDir, '.index.db');
 }

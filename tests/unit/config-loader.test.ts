@@ -3,22 +3,52 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { resolveServerDbPath, loadConfig } from '../../src/config/loader.js';
+import type { McpTasksConfig } from '../../src/config/loader.js';
+
+function makeConfig(overrides: Partial<McpTasksConfig> = {}): McpTasksConfig {
+  return {
+    version: 1,
+    storageDir: path.join(os.tmpdir(), 'mcp-test-storage'),
+    defaultStorage: 'global',
+    enforcement: 'warn',
+    autoCommit: false,
+    claimTtlHours: 4,
+    trackManifest: true,
+    tasksDirName: 'agent-tasks',
+    projects: [],
+    ...overrides,
+  };
+}
 
 describe('resolveServerDbPath', () => {
-  it('uses .index.db inside tasksDir when tasksDir exists', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-loader-test-'));
-    try {
-      expect(resolveServerDbPath(dir)).toBe(path.join(dir, '.index.db'));
-    } finally {
-      fs.rmSync(dir, { recursive: true });
-    }
+  it('returns global tasks.db for a global-storage project', () => {
+    const config = makeConfig({
+      storageDir: '/fake/global/storage',
+      projects: [{ prefix: 'MYPROJ', path: '/fake/project', storage: 'global' }],
+    });
+    const tasksDir = '/fake/project/agent-tasks';
+    const result = resolveServerDbPath(tasksDir, config, 'MYPROJ');
+    expect(result).toBe(path.join('/fake/global/storage', 'tasks.db'));
   });
 
-  it('falls back to global tasks.db when tasksDir does not exist', () => {
-    const missing = path.join(os.tmpdir(), `mcp-nonexistent-${Date.now()}`);
-    const result = resolveServerDbPath(missing);
-    expect(result).toMatch(/tasks\.db$/);
-    expect(result).not.toContain('.index.db');
+  it('returns .index.db for a local-storage project', () => {
+    const config = makeConfig({
+      storageDir: '/fake/global/storage',
+      projects: [{ prefix: 'LOCALPROJ', path: '/fake/local-project', storage: 'local' }],
+    });
+    const tasksDir = '/fake/local-project/agent-tasks';
+    const result = resolveServerDbPath(tasksDir, config, 'LOCALPROJ');
+    expect(result).toBe(path.join(tasksDir, '.index.db'));
+  });
+
+  it('returns global tasks.db when no matching project entry found', () => {
+    const config = makeConfig({
+      storageDir: '/fake/global/storage',
+      projects: [],
+    });
+    const tasksDir = '/fake/project/agent-tasks';
+    const result = resolveServerDbPath(tasksDir, config, 'UNKNOWN');
+    expect(result).toBe(path.join('/fake/global/storage', 'tasks.db'));
   });
 });
 

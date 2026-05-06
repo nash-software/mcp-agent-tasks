@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import type { GitLink } from './types/task.js';
 import type { TaskUpdateInput } from './types/tools.js';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
+import { loadConfig, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
@@ -28,10 +28,9 @@ const __dirname = path.dirname(__filename);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-function buildStore(tasksDir: string, project: string) {
-  // For local storage, DB lives inside the tasks dir; for global, use config
-  const localDbPath = path.join(tasksDir, '.index.db');
-  const dbPath = fs.existsSync(tasksDir) ? localDbPath : getDbPath();
+function buildStore(tasksDir: string, project: string, config?: import('./config/loader.js').McpTasksConfig) {
+  const resolvedConfig = config ?? loadConfig();
+  const dbPath = resolveServerDbPath(tasksDir, resolvedConfig, project !== 'DEFAULT' ? project : undefined);
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();
   const markdownStore = new MarkdownStore();

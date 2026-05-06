@@ -94,7 +94,7 @@ async function main(): Promise<void> {
     ? path.join(config.projects[0].path, config.tasksDirName)
     : storageDir;
 
-  const dbPath = resolveServerDbPath(tasksDir);
+  const dbPath = resolveServerDbPath(tasksDir, config, defaultProject !== 'DEFAULT' ? defaultProject : undefined);
 
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();
