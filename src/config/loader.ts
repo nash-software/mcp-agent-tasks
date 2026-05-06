@@ -20,7 +20,7 @@ const DEFAULT_CONFIG: McpTasksConfig = {
   projects: [],
 };
 
-const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
+export const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
 
 function validateConfig(raw: unknown): McpTasksConfig {
   if (!raw || typeof raw !== 'object') {

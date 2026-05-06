@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import type { GitLink } from './types/task.js';
 import type { TaskUpdateInput } from './types/tools.js';
-import { loadConfig, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
+import { loadConfig, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME, GLOBAL_CONFIG_PATH } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
@@ -83,43 +83,46 @@ program
 
 program
   .command('init <prefix>')
-  .description('Idempotent project init — creates agent-tasks/ directory and .mcp-tasks.json')
+  .description('Idempotent project init — creates agent-tasks/ directory and registers project in global config')
   .option('--path <dir>', 'project root directory', process.cwd())
   .option('--storage <mode>', 'local or global', 'local')
   .action(async (prefix: string, options: { path: string; storage: string }) => {
-    const existingCfg = loadConfig();
-    const dirName = existingCfg.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+    const globalCfg = loadConfig();
+    const dirName = globalCfg.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
     const rootDir = path.resolve(options.path);
     const tasksDir = path.join(rootDir, dirName);
     const archiveDir = path.join(tasksDir, 'archive');
-    const configFile = path.join(rootDir, '.mcp-tasks.json');
 
     if (!fs.existsSync(tasksDir)) fs.mkdirSync(tasksDir, { recursive: true });
     if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
 
-    const existingConfig = fs.existsSync(configFile)
-      ? (JSON.parse(fs.readFileSync(configFile, 'utf-8')) as Record<string, unknown>)
-      : null;
-
-    const config = existingConfig ?? existingCfg;
-    const projects = (Array.isArray((config as Record<string, unknown>)['projects'])
-      ? (config as Record<string, unknown>)['projects']
-      : []) as Array<{ prefix: string; path: string; storage: string }>;
-
-    if (!projects.find(p => p.prefix === prefix)) {
+    // Read the current global config (already loaded above via loadConfig())
+    const projects = globalCfg.projects as Array<{ prefix: string; path: string; storage: string }>;
+    const existingIdx = projects.findIndex(p => p.prefix === prefix);
+    if (existingIdx >= 0) {
+      // Update existing entry in-place
+      projects[existingIdx] = { prefix, path: rootDir, storage: options.storage };
+    } else {
       projects.push({ prefix, path: rootDir, storage: options.storage });
     }
 
     const configToWrite = {
-      ...(config as Record<string, unknown>),
+      ...globalCfg,
       projects,
     };
 
-    fs.writeFileSync(configFile, JSON.stringify(configToWrite, null, 2), 'utf-8');
+    // Atomic write: tmp file → rename (same pattern as MarkdownStore)
+    const globalConfigDir = path.dirname(GLOBAL_CONFIG_PATH);
+    if (!fs.existsSync(globalConfigDir)) fs.mkdirSync(globalConfigDir, { recursive: true });
+    const tmp = `${GLOBAL_CONFIG_PATH}.tmp.${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(configToWrite, null, 2), 'utf-8');
+    fs.renameSync(tmp, GLOBAL_CONFIG_PATH);
+
+    const globalConfigDisplay = GLOBAL_CONFIG_PATH.replace(os.homedir(), '~');
     console.log(`✓ Initialized project ${prefix} at ${rootDir}`);
     console.log(`  tasks/   → ${tasksDir}`);
     console.log(`  archive/ → ${archiveDir}`);
-    console.log(`  config   → ${configFile}`);
+    console.log(`  config   → ${globalConfigDisplay} (global)`);
   });
 
 // ── serve ─────────────────────────────────────────────────────────────────────
