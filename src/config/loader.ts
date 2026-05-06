@@ -73,31 +73,39 @@ function ensureDefaultConfig(): McpTasksConfig {
   return DEFAULT_CONFIG;
 }
 
+function warnIfLocalConfigPresent(): void {
+  const localPath = path.join(process.cwd(), '.mcp-tasks.json');
+  if (fs.existsSync(localPath)) {
+    process.stderr.write(
+      `[mcp-agent-tasks] WARNING: Found legacy .mcp-tasks.json at ${localPath}. This file is no longer read.\n` +
+        `  Project routing now uses ~/.config/mcp-tasks/config.json.\n` +
+        `  You can safely delete ${localPath}.\n`,
+    );
+  }
+}
+
 export function loadConfig(): McpTasksConfig {
   // 1. Check env-specified config file
   const envConfigPath = process.env['MCP_TASKS_CONFIG'];
   if (envConfigPath) {
     const config = readJsonFile(envConfigPath);
     if (config) {
+      warnIfLocalConfigPresent();
       return applyEnvOverrides(config);
     }
   }
 
-  // 2. Local .mcp-tasks.json
-  const localConfig = readJsonFile(path.join(process.cwd(), '.mcp-tasks.json'));
-  if (localConfig) {
-    return applyEnvOverrides(localConfig);
-  }
-
-  // 3. Global config file
+  // 2. Global config file
   if (fs.existsSync(GLOBAL_CONFIG_PATH)) {
     const globalConfig = readJsonFile(GLOBAL_CONFIG_PATH);
     if (globalConfig) {
+      warnIfLocalConfigPresent();
       return applyEnvOverrides(globalConfig);
     }
   }
 
-  // 4. First run — create default global config
+  // 3. First run — create default global config
+  warnIfLocalConfigPresent();
   return applyEnvOverrides(ensureDefaultConfig());
 }
 
