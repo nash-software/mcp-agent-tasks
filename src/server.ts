@@ -7,7 +7,7 @@ import { loadConfig, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
-import { TaskStore } from './store/task-store.js';
+import { StoreRegistry } from './store/store-registry.js';
 import { FileWatcher } from './store/file-watcher.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
   const manifestWriter = new ManifestWriter();
   const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
 
-  const store = new TaskStore(markdownStore, sqliteIndex, manifestWriter, tasksDir, defaultProject);
+  const registry = new StoreRegistry(config, sqliteIndex, markdownStore, manifestWriter);
 
   // File watcher: sync changes to markdown files back into SQLite
   const watcher = new FileWatcher(
@@ -133,7 +133,8 @@ async function main(): Promise<void> {
   watcher.start();
 
   const ctx: ToolContext = {
-    store,
+    store: registry,
+    registry,
     index: sqliteIndex,
     sessionId,
     config,
