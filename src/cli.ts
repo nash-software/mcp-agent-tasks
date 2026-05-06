@@ -39,25 +39,54 @@ function buildStore(tasksDir: string, project: string, config?: import('./config
   return { store, sqliteIndex, markdownStore, manifestWriter };
 }
 
-function resolveTasksDir(optPath?: string): { tasksDir: string; project: string; config: import('./config/loader.js').McpTasksConfig } {
+function resolveTasksDir(optPath?: string, prefix?: string): { tasksDir: string; project: string; config: import('./config/loader.js').McpTasksConfig } {
   const config = loadConfig();
   const dirName = config.tasksDirName;
 
+  // Explicit path override — used by --path flag
   if (optPath) {
     const tasksDir = path.join(optPath, dirName);
-    const project = config.projects[0]?.prefix ?? 'DEFAULT';
+    // Try to find a matching project for the path
+    const matched = config.projects.find(p =>
+      path.resolve(p.path) === path.resolve(optPath)
+    );
+    const project = matched?.prefix ?? config.projects[0]?.prefix ?? 'UNKNOWN';
     return { tasksDir, project, config };
   }
 
-  const project = config.projects[0]?.prefix ?? 'DEFAULT';
-  const projEntry = config.projects[0];
-  const tasksDir =
-    projEntry && projEntry.storage === 'global'
+  // Explicit prefix supplied (from --project flag)
+  if (prefix) {
+    const entry = config.projects.find(p => p.prefix === prefix);
+    if (!entry) {
+      throw new Error(`Project '${prefix}' is not registered in config. Run 'agent-tasks init ${prefix}' first.`);
+    }
+    const tasksDir = entry.storage === 'global'
       ? config.storageDir
-      : projEntry?.path
-        ? path.join(projEntry.path, dirName)
-        : config.storageDir;
-  return { tasksDir, project, config };
+      : path.join(entry.path, dirName);
+    return { tasksDir, project: prefix, config };
+  }
+
+  // No prefix — try cwd match
+  const cwd = process.cwd();
+  const cwdMatch = config.projects.find(p =>
+    p.path && cwd.startsWith(path.resolve(p.path))
+  );
+  if (cwdMatch) {
+    const tasksDir = cwdMatch.storage === 'global'
+      ? config.storageDir
+      : path.join(cwdMatch.path, dirName);
+    return { tasksDir, project: cwdMatch.prefix, config };
+  }
+
+  // Fallback: first project (preserves existing behaviour for single-project setups)
+  const first = config.projects[0];
+  if (!first) {
+    throw new Error('No projects configured. Run agent-tasks init <PREFIX> first.');
+  }
+  const tasksDir = first.storage === 'global'
+    ? config.storageDir
+    : path.join(first.path, dirName);
+  return { tasksDir, project: first.prefix, config };
 }
 
 function formatTable(rows: Array<Record<string, string | number | null>>): string {
@@ -153,7 +182,7 @@ program
   .option('--limit <n>', 'max results', '50')
   .option('--format <fmt>', 'table or json', 'table')
   .action((options: { status?: string; project?: string; limit: string; format: string }) => {
-    const { tasksDir, project } = resolveTasksDir();
+    const { tasksDir, project } = resolveTasksDir(undefined, options.project);
     const { sqliteIndex } = buildStore(tasksDir, project);
     const tasks = sqliteIndex.listTasks({
       status: options.status as import('./types/task.js').TaskStatus | undefined,
@@ -182,7 +211,7 @@ program
   .command('next <project>')
   .description('Get the next task for a project')
   .action((projectArg: string) => {
-    const { tasksDir, project } = resolveTasksDir();
+    const { tasksDir, project } = resolveTasksDir(undefined, projectArg);
     const { sqliteIndex } = buildStore(tasksDir, project);
     const task = sqliteIndex.getNextTask(projectArg);
     if (!task) {
@@ -416,7 +445,7 @@ program
   .description('Rebuild SQLite index from markdown files')
   .option('--path <dir>', 'project root directory')
   .action((projectArg: string | undefined, options: { path?: string }) => {
-    const { tasksDir, project } = resolveTasksDir(options.path);
+    const { tasksDir, project } = resolveTasksDir(options.path, projectArg);
     const resolvedProject = projectArg ?? project;
     const { sqliteIndex } = buildStore(tasksDir, resolvedProject);
     const reconciler = new Reconciler(sqliteIndex, tasksDir, resolvedProject);
@@ -818,7 +847,7 @@ program
     milestone?: string;
     estimateHours?: number;
   }) => {
-    const { tasksDir } = resolveTasksDir();
+    const { tasksDir } = resolveTasksDir(undefined, opts.project);
     const { store } = buildStore(tasksDir, opts.project);
     try {
       const task = store.createTask({
