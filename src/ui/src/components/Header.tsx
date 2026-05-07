@@ -1,4 +1,6 @@
 import React from 'react'
+import { useStats } from '../hooks/useStats'
+import type { TaskStatus } from '../types'
 
 export type TabId = 'board' | 'roadmap' | 'activity'
 
@@ -8,12 +10,30 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'activity', label: 'Activity' },
 ]
 
+const STATUS_LABELS: { key: TaskStatus; label: string; color: string }[] = [
+  { key: 'todo',        label: 'Todo',        color: 'text-slate-400' },
+  { key: 'in_progress', label: 'Active',      color: 'text-blue-400' },
+  { key: 'blocked',     label: 'Blocked',     color: 'text-amber-400' },
+  { key: 'done',        label: 'Done',        color: 'text-emerald-400' },
+]
+
 interface Props {
   activeTab: TabId
   onTabChange: (tab: TabId) => void
 }
 
 export function Header({ activeTab, onTabChange }: Props): React.JSX.Element {
+  const { stats, isLoading } = useStats()
+
+  const totals: Record<string, number> = {}
+  if (!isLoading) {
+    for (const entry of stats) {
+      for (const [status, count] of Object.entries(entry.stats.by_status ?? {})) {
+        totals[status] = (totals[status] ?? 0) + count
+      }
+    }
+  }
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center gap-6">
       <h1 className="text-slate-100 font-semibold text-lg">agent-tasks</h1>
@@ -32,6 +52,15 @@ export function Header({ activeTab, onTabChange }: Props): React.JSX.Element {
           </button>
         ))}
       </nav>
+      {!isLoading && (
+        <div className="ml-auto flex gap-4 text-xs">
+          {STATUS_LABELS.map(s => (
+            <span key={s.key} className={s.color}>
+              {s.label} <strong>{totals[s.key] ?? 0}</strong>
+            </span>
+          ))}
+        </div>
+      )}
     </header>
   )
 }
