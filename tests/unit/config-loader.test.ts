@@ -21,14 +21,14 @@ function makeConfig(overrides: Partial<McpTasksConfig> = {}): McpTasksConfig {
 }
 
 describe('resolveServerDbPath', () => {
-  it('returns global tasks.db for a global-storage project', () => {
+  it('returns global .index.db for a global-storage project', () => {
     const config = makeConfig({
       storageDir: '/fake/global/storage',
       projects: [{ prefix: 'MYPROJ', path: '/fake/project', storage: 'global' }],
     });
     const tasksDir = '/fake/project/agent-tasks';
     const result = resolveServerDbPath(tasksDir, config, 'MYPROJ');
-    expect(result).toBe(path.join('/fake/global/storage', 'tasks.db'));
+    expect(result).toBe(path.join('/fake/global/storage', '.index.db'));
   });
 
   it('returns .index.db for a local-storage project', () => {
@@ -41,14 +41,14 @@ describe('resolveServerDbPath', () => {
     expect(result).toBe(path.join(tasksDir, '.index.db'));
   });
 
-  it('returns global tasks.db when no matching project entry found', () => {
+  it('returns global .index.db when no matching project entry found', () => {
     const config = makeConfig({
       storageDir: '/fake/global/storage',
       projects: [],
     });
     const tasksDir = '/fake/project/agent-tasks';
     const result = resolveServerDbPath(tasksDir, config, 'UNKNOWN');
-    expect(result).toBe(path.join('/fake/global/storage', 'tasks.db'));
+    expect(result).toBe(path.join('/fake/global/storage', '.index.db'));
   });
 });
 
