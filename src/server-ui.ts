@@ -2,7 +2,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, getDbPath } from './config/loader.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 
@@ -55,12 +55,34 @@ function serveStatic(res: ServerResponse, filePath: string): void {
   res.end(content);
 }
 
+interface ProjectIndex {
+  prefix: string;
+  index: SqliteIndex;
+  milestoneRepo: MilestoneRepository;
+}
+
+function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex[] {
+  const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+
+  if (config.projects.length === 0) {
+    // No registered projects — fall back to global DB
+    const idx = new SqliteIndex(getDbPath());
+    idx.init();
+    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
+  }
+
+  return config.projects.map(p => {
+    const tasksDir = join(p.path, tasksDirName);
+    const dbPath = existsSync(tasksDir) ? join(tasksDir, '.index.db') : getDbPath();
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) };
+  });
+}
+
 export async function startUiServer(opts: { port: number; openBrowser?: boolean }): Promise<UiServerHandle> {
   const config = loadConfig();
-  const dbPath = getDbPath();
-  const sqliteIndex = new SqliteIndex(dbPath);
-  sqliteIndex.init();
-  const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
+  const projectIndexes = openProjectIndexes(config);
 
   const uiDir = join(__dirname, '..', 'dist', 'ui');
 
@@ -93,16 +115,22 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
       // API: tasks
       if (pathname === '/api/tasks') {
-        const project = url.searchParams.get('project') ?? undefined;
+        const projectFilter = url.searchParams.get('project') ?? undefined;
         const status = url.searchParams.get('status') ?? undefined;
         const milestone = url.searchParams.get('milestone') ?? undefined;
         const label = url.searchParams.get('label') ?? undefined;
 
-        let tasks = sqliteIndex.listTasks({
-          project: project,
-          status: status as Parameters<typeof sqliteIndex.listTasks>[0]['status'],
-          limit: 1000,
-        });
+        const indexes = projectFilter
+          ? projectIndexes.filter(p => p.prefix === projectFilter)
+          : projectIndexes;
+
+        let tasks = indexes.flatMap(p =>
+          p.index.listTasks({
+            project: p.prefix,
+            status: status as Parameters<typeof p.index.listTasks>[0]['status'],
+            limit: 1000,
+          }),
+        );
 
         if (milestone !== undefined) {
           tasks = tasks.filter(t => t.milestone === milestone);
@@ -117,19 +145,16 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
       // API: milestones
       if (pathname === '/api/milestones') {
-        const milestones = milestoneRepo.listMilestones();
+        const milestones = projectIndexes.flatMap(p => p.milestoneRepo.listMilestones());
         sendJson(res, 200, milestones);
         return;
       }
 
       // API: stats
       if (pathname === '/api/stats') {
-        const projects = config.projects.length > 0
-          ? config.projects.map(p => p.prefix)
-          : [undefined];
-        const statsResult = projects.map(p => ({
-          project: p ?? 'default',
-          stats: sqliteIndex.getStats(p),
+        const statsResult = projectIndexes.map(p => ({
+          project: p.prefix,
+          stats: p.index.getStats(p.prefix),
         }));
         sendJson(res, 200, statsResult);
         return;
@@ -137,7 +162,10 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
       // API: activity
       if (pathname === '/api/activity') {
-        const activity: ActivityEntry[] = sqliteIndex.getRecentActivity(50);
+        const activity: ActivityEntry[] = projectIndexes
+          .flatMap(p => p.index.getRecentActivity(50))
+          .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+          .slice(0, 50);
         sendJson(res, 200, activity);
         return;
       }
@@ -172,8 +200,10 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
     url,
     close: () => new Promise<void>((resolve, reject) => {
       server.close(err => {
-        // Close the DB connection to release file locks (important on Windows)
-        try { sqliteIndex.close(); } catch { /* ignore */ }
+        // Close all DB connections to release file locks (important on Windows)
+        for (const p of projectIndexes) {
+          try { p.index.close(); } catch { /* ignore */ }
+        }
         if (err) reject(err);
         else resolve();
       });

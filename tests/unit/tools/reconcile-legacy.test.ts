@@ -485,6 +485,21 @@ describe('reconcileLegacy integration', () => {
     expect(summary.written).toBe(0);
   });
 
+  it('dry-run: reports already-existing slugs as skipped, not as new candidates', async () => {
+    createScratchpad('foo.md', '# Foo Task\n\nFoo reason.');
+
+    // First real run writes the task file
+    await reconcileLegacy({ projectPath: tmpDir, dryRun: false, idPrefix: 'TEST' });
+
+    // Dry-run on same project must report the slug as already existing
+    const summary2 = await reconcileLegacy({ projectPath: tmpDir, dryRun: true, idPrefix: 'TEST' });
+
+    expect(summary2.dryRun).toBe(true);
+    expect(summary2.written).toBe(0);
+    expect(summary2.skipped).toBe(1);
+    expect(summary2.results[0]?.error).toBe('output file already exists');
+  });
+
   it('skips files that already have schema_version in frontmatter', async () => {
     createScratchpad(
       'legacy.md',

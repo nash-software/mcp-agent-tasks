@@ -250,7 +250,7 @@ export function buildInference(opts: BuildOptions): ReconcileInference {
             title: '',
             state: 'merged' as const,
             merged_at: null,
-            base_branch: 'master',
+            base_branch: git.baseBranch,
           },
         }
       : {}),

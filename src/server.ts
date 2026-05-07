@@ -3,11 +3,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import os from 'node:os';
 import path from 'node:path';
-import { loadConfig, getDbPath } from './config/loader.js';
+import { loadConfig } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
-import { TaskStore } from './store/task-store.js';
+import { StoreRegistry } from './store/store-registry.js';
+import { Reconciler } from './store/reconciler.js';
 import { FileWatcher } from './store/file-watcher.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
@@ -87,15 +88,8 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
 
-  // Resolve storage directory and default project
-  const storageDir = config.storageDir;
-  const defaultProject = config.projects[0]?.prefix ?? 'DEFAULT';
-  const tasksDir = config.projects[0]?.path
-    ? path.join(config.projects[0].path, config.tasksDirName)
-    : storageDir;
-
-  const dbPath = getDbPath();
-
+  // One shared SqliteIndex at global storageDir
+  const dbPath = path.join(config.storageDir, '.index.db');
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();
 
@@ -103,37 +97,54 @@ async function main(): Promise<void> {
   const manifestWriter = new ManifestWriter();
   const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
 
-  const store = new TaskStore(markdownStore, sqliteIndex, manifestWriter, tasksDir, defaultProject);
+  // Build registry — one TaskStore per unique tasksDir
+  const registry = new StoreRegistry(config, sqliteIndex, markdownStore, manifestWriter);
 
-  // File watcher: sync changes to markdown files back into SQLite
-  const watcher = new FileWatcher(
-    tasksDir,
-    (filePath) => {
-      try {
-        const task = markdownStore.read(filePath);
-        sqliteIndex.upsertTask(task);
-      } catch {
-        // Skip unparseable files
-      }
-    },
-    (filePath) => {
-      // On delete, remove from index if we can find the task ID from the filename
-      const basename = path.basename(filePath, '.md');
-      if (basename) sqliteIndex.deleteTask(basename);
-    },
-    (filePath) => {
-      try {
-        const task = markdownStore.read(filePath);
-        sqliteIndex.upsertTask(task);
-      } catch {
-        // Skip unparseable files
-      }
-    },
-  );
-  watcher.start();
+  // Reconcile every project directory into the shared index at startup
+  for (const projectEntry of config.projects) {
+    const tasksDir = registry.getTasksDirForPrefix(projectEntry.prefix);
+    try {
+      const reconciler = new Reconciler(sqliteIndex, tasksDir, projectEntry.prefix);
+      reconciler.reconcile();
+    } catch {
+      // Skip projects whose tasksDir does not exist yet
+    }
+  }
+
+  // File watchers: one per unique tasksDir — syncs markdown changes back into SQLite
+  const watchers: FileWatcher[] = [];
+  for (const tasksDir of registry.allTasksDirs()) {
+    const watcher = new FileWatcher(
+      tasksDir,
+      (filePath) => {
+        try {
+          const task = markdownStore.read(filePath);
+          sqliteIndex.upsertTask(task);
+        } catch {
+          // Skip unparseable files
+        }
+      },
+      (filePath) => {
+        // On delete, remove from index if we can find the task ID from the filename
+        const basename = path.basename(filePath, '.md');
+        if (basename) sqliteIndex.deleteTask(basename);
+      },
+      (filePath) => {
+        try {
+          const task = markdownStore.read(filePath);
+          sqliteIndex.upsertTask(task);
+        } catch {
+          // Skip unparseable files
+        }
+      },
+    );
+    watcher.start();
+    watchers.push(watcher);
+  }
 
   const ctx: ToolContext = {
-    store,
+    store: registry,
+    registry,
     index: sqliteIndex,
     sessionId,
     config,
@@ -214,7 +225,9 @@ async function main(): Promise<void> {
 
   // Cleanup on exit
   const shutdown = (): void => {
-    watcher.stop();
+    for (const watcher of watchers) {
+      watcher.stop();
+    }
     sqliteIndex.close();
   };
 

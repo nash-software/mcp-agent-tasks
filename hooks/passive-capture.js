@@ -1,34 +1,11 @@
 #!/usr/bin/env node
-// @version 2.0.0
+// @version 2.2.0
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync, spawnSync } = require('child_process');
-
-// ── dry-run short-circuit ──────────────────────────────────────────────────────
-if (process.env.MCP_TASKS_DRY_RUN === '1') {
-  process.stderr.write('[passive-capture] DRY_RUN mode — exiting\n');
-  process.exit(0);
-}
-
-// ── read stdin ─────────────────────────────────────────────────────────────────
-let hookData = {};
-try {
-  const raw = fs.readFileSync(0, 'utf-8');
-  hookData = JSON.parse(raw);
-} catch {
-  // malformed or no stdin — always safe to exit 0
-  process.exit(0);
-}
-
-const toolInput = (hookData && hookData.tool_input) || {};
-const filePath = typeof toolInput.file_path === 'string' ? toolInput.file_path : null;
-
-if (!filePath) {
-  process.exit(0);
-}
 
 // ── classify file path ────────────────────────────────────────────────────────
 function classifyPath(fp) {
@@ -41,71 +18,26 @@ function classifyPath(fp) {
   return 'skip';
 }
 
-const fileType = classifyPath(filePath);
-if (fileType === 'skip') {
-  process.exit(0);
-}
-
-// ── locate .mcp-tasks.json ────────────────────────────────────────────────────
-function findMcpTasksConfig() {
-  let dir = process.cwd();
-  while (true) {
-    const candidate = path.join(dir, '.mcp-tasks.json');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
+// ── pick best binary path from `where`/`which` output ────────────────────────
+// On Windows, `where agent-tasks` returns BOTH the POSIX shell script and
+// the .cmd wrapper. Passing the bare shell script to node.exe crashes with
+// SyntaxError. Prefer .cmd on win32; fall back to first non-empty line.
+function pickBestBinary(lines, platform) {
+  const nonEmpty = lines.filter(line => typeof line === 'string' && line.trim() !== '');
+  if (nonEmpty.length === 0) return null;
+  if (platform === 'win32') {
+    const cmd = nonEmpty.find(line => line.toLowerCase().endsWith('.cmd'));
+    if (cmd) return cmd;
   }
-  return null;
+  return nonEmpty[0];
 }
 
-const configPath = findMcpTasksConfig();
-if (!configPath) {
-  process.exit(0);
-}
-
-let mcpConfig = {};
-try {
-  mcpConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-} catch {
-  process.exit(0);
-}
-
-// ── get git branch + infer task ID ───────────────────────────────────────────
-let branch = null;
-try {
-  branch = execSync('git branch --show-current', {
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-  }).trim() || null;
-} catch {
-  branch = null;
-}
-
-let taskIdFromBranch = null;
-if (branch) {
-  const m = /([A-Z]+-\d+)/.exec(branch);
-  if (m) taskIdFromBranch = m[1];
-}
-
-// ── read session state ────────────────────────────────────────────────────────
-const configDir = path.dirname(configPath);
-const sessionFile = path.join(configDir, '.mcp-tasks-session.json');
-
-let sessionState = {};
-try {
-  sessionState = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
-} catch {
-  sessionState = {};
-}
-
-const activeTask = taskIdFromBranch || (sessionState && sessionState.active_task) || null;
-
-// ── resolve project prefix from config ───────────────────────────────────────
-function resolvePrefix() {
-  const projects = Array.isArray(mcpConfig.projects) ? mcpConfig.projects : [];
-  if (projects.length > 0 && projects[0].prefix) return projects[0].prefix;
-  return null;
+// ── locate global config (~/.config/mcp-tasks/config.json) ──────────────────
+// Respects MCP_TASKS_CONFIG env-var override for testing and per-machine config.
+function findGlobalConfig() {
+  const override = process.env.MCP_TASKS_CONFIG;
+  const configPath = override || path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
+  return fs.existsSync(configPath) ? configPath : null;
 }
 
 // ── humanize file path to a title ────────────────────────────────────────────
@@ -115,89 +47,161 @@ function humanizeTitle(fp, type) {
   return `${type.charAt(0).toUpperCase() + type.slice(1)}: ${clean}`;
 }
 
-// ── write session state atomically ───────────────────────────────────────────
-function writeSessionState(state) {
-  const tmp = sessionFile + '.tmp.' + process.pid;
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
-    fs.renameSync(tmp, sessionFile);
-  } catch (e) {
-    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
-    throw e;
-  }
+// ── resolve project prefix from config ───────────────────────────────────────
+function resolvePrefix(mcpConfig) {
+  const projects = Array.isArray(mcpConfig.projects) ? mcpConfig.projects : [];
+  if (projects.length > 0 && projects[0].prefix) return projects[0].prefix;
+  return null;
 }
 
 // ── resolve CLI binary ────────────────────────────────────────────────────────
-// Prefer PATH (global install), fall back to local node_modules/.bin
-function resolveBinary() {
+function resolveBinary(configPath) {
   try {
-    const which = execSync('where agent-tasks 2>NUL || which agent-tasks 2>/dev/null', {
+    const stdout = execSync('where agent-tasks 2>NUL || which agent-tasks 2>/dev/null', {
       encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim().split(/\r?\n/)[0];
-    if (which) return which;
+    });
+    const best = pickBestBinary(stdout.trim().split(/\r?\n/), process.platform);
+    if (best) return best;
   } catch { /* not in PATH */ }
   return path.join(path.dirname(configPath), 'node_modules', '.bin', 'agent-tasks');
 }
 
-// ── main logic ────────────────────────────────────────────────────────────────
-try {
-  if ((fileType === 'plan' || fileType === 'spec' || fileType === 'spike') && !activeTask) {
-    // Auto-capture: create a new task
-    const prefix = resolvePrefix();
-    if (!prefix) {
-      process.exit(0);
-    }
+module.exports = {
+  classifyPath,
+  pickBestBinary,
+  findGlobalConfig,
+  humanizeTitle,
+  resolvePrefix,
+  resolveBinary,
+};
 
-    const title = humanizeTitle(filePath, fileType);
-    const why = `Auto-captured from file write: ${filePath}`;
-    const binary = resolveBinary();
+// ── script entry point ────────────────────────────────────────────────────────
+// Side effects only run when this file is invoked directly (not require()-d).
+if (require.main === module) {
+  if (process.env.MCP_TASKS_DRY_RUN === '1') {
+    process.stderr.write('[passive-capture] DRY_RUN mode — exiting\n');
+    process.exit(0);
+  }
 
-    const result = spawnSync(
-      process.execPath,
-      [
-        binary,
-        'create',
-        '--project', prefix,
-        '--title', title,
-        '--type', fileType,   // plan → plan, spec → spec, spike → spike (correct mapping)
-        '--priority', 'medium',
-        '--why', why,
-        '--auto-captured',
-        '--plan-file', filePath,
-      ],
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+  let hookData = {};
+  try {
+    const raw = fs.readFileSync(0, 'utf-8');
+    hookData = JSON.parse(raw);
+  } catch {
+    process.exit(0);
+  }
 
-    const stdout = (result.stdout || '').trim();
-    const createdId = stdout.match(/^([A-Z]+-\d+)/) ? stdout.match(/^([A-Z]+-\d+)/)[1] : null;
+  const toolInput = (hookData && hookData.tool_input) || {};
+  const filePath = typeof toolInput.file_path === 'string' ? toolInput.file_path : null;
 
-    if (createdId) {
-      try {
-        writeSessionState({ active_task: createdId, updated_at: new Date().toISOString() });
-      } catch { /* non-fatal */ }
-      process.stderr.write(`[passive-capture] Created ${createdId} (${fileType}) for ${filePath}\n`);
-    }
+  if (!filePath) process.exit(0);
 
-  } else if (fileType === 'code_change' && activeTask) {
-    // Link file to active task
-    const result = spawnSync(
-      process.execPath,
-      [
-        resolveBinary(),
-        'add-file',
-        activeTask,
-        filePath,
-      ],
-      { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+  const fileType = classifyPath(filePath);
+  if (fileType === 'skip') process.exit(0);
 
-    if (result.status === 0) {
-      process.stderr.write(`[passive-capture] Linked ${filePath} → ${activeTask}\n`);
+  const configPath = findGlobalConfig();
+  if (!configPath) process.exit(0);
+
+  let mcpConfig = {};
+  try {
+    mcpConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch {
+    process.exit(0);
+  }
+
+  let branch = null;
+  try {
+    branch = execSync('git branch --show-current', {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim() || null;
+  } catch {
+    branch = null;
+  }
+
+  let taskIdFromBranch = null;
+  if (branch) {
+    const m = /([A-Z]+-\d+)/.exec(branch);
+    if (m) taskIdFromBranch = m[1];
+  }
+
+  const configDir = path.dirname(configPath);
+  const sessionFile = path.join(configDir, '.mcp-tasks-session.json');
+
+  let sessionState = {};
+  try {
+    sessionState = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
+  } catch {
+    sessionState = {};
+  }
+
+  const activeTask = taskIdFromBranch || (sessionState && sessionState.active_task) || null;
+
+  function writeSessionState(state) {
+    const tmp = sessionFile + '.tmp.' + process.pid;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2), 'utf-8');
+      fs.renameSync(tmp, sessionFile);
+    } catch (e) {
+      try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+      throw e;
     }
   }
-} catch (e) {
-  process.stderr.write(`[passive-capture] ERROR: ${e && e.message ? e.message : String(e)}\n`);
-  // always exit 0 — hook must never block the tool
-}
 
-process.exit(0);
+  try {
+    if ((fileType === 'plan' || fileType === 'spec' || fileType === 'spike') && !activeTask) {
+      const prefix = resolvePrefix(mcpConfig);
+      if (!prefix) process.exit(0);
+
+      const title = humanizeTitle(filePath, fileType);
+      const why = `Auto-captured from file write: ${filePath}`;
+      const binary = resolveBinary(configPath);
+
+      const result = spawnSync(
+        process.execPath,
+        [
+          binary,
+          'create',
+          '--project', prefix,
+          '--title', title,
+          '--type', fileType,
+          '--priority', 'medium',
+          '--why', why,
+          '--auto-captured',
+          '--plan-file', filePath,
+        ],
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+
+      const stdout = (result.stdout || '').trim();
+      const createdId = stdout.match(/^([A-Z]+-\d+)/) ? stdout.match(/^([A-Z]+-\d+)/)[1] : null;
+
+      if (createdId) {
+        try {
+          writeSessionState({ active_task: createdId, updated_at: new Date().toISOString() });
+        } catch { /* non-fatal */ }
+        process.stderr.write(`[passive-capture] Created ${createdId} (${fileType}) for ${filePath}\n`);
+      }
+
+    } else if (fileType === 'code_change' && activeTask) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          resolveBinary(configPath),
+          'add-file',
+          activeTask,
+          filePath,
+        ],
+        { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+
+      if (result.status === 0) {
+        process.stderr.write(`[passive-capture] Linked ${filePath} → ${activeTask}\n`);
+      }
+    }
+  } catch (e) {
+    process.stderr.write(`[passive-capture] ERROR: ${e && e.message ? e.message : String(e)}\n`);
+  }
+
+  process.exit(0);
+}

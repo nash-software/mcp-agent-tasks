@@ -570,7 +570,26 @@ export class SqliteIndex {
     `).run(prefix);
   }
 
-  nextId(prefix: string): number {
+  nextId(prefix: string, tasksDir?: string): number {
+    if (tasksDir && fs.existsSync(tasksDir)) {
+      const re = new RegExp(`^${prefix}-(\\d+)`);
+      let onDiskMax = 0;
+      for (const entry of fs.readdirSync(tasksDir)) {
+        const m = re.exec(entry);
+        if (m && m[1]) {
+          const n = parseInt(m[1], 10);
+          if (n > onDiskMax) onDiskMax = n;
+        }
+      }
+      if (onDiskMax > 0) {
+        this.db.prepare(`
+          INSERT INTO projects (prefix, path, storage_mode, tasks_dir, next_id, created)
+          VALUES (?, '', 'local', '', ?, datetime('now'))
+          ON CONFLICT(prefix) DO UPDATE SET next_id = MAX(next_id, excluded.next_id)
+        `).run(prefix, onDiskMax);
+      }
+    }
+
     // Try to increment existing row
     const updateResult = this.db.prepare(`
       UPDATE projects SET next_id=next_id+1 WHERE prefix=? RETURNING next_id

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { resolvePath } from '../lib/normalize-path.js';
 import matter from 'gray-matter';
 import yaml from 'yaml';
 import { McpTasksError } from '../types/errors.js';
@@ -108,15 +109,17 @@ function derivePrefix(projectPath: string): string {
 }
 
 function isArtifactFile(filename: string): boolean {
-  // ALL_CAPS filenames (e.g. TEST_RESULTS.md, SONNET_ROUTING_DECISION.md, PHASE_6_COMPLETION.md)
-  // but not HANDOFF.md (already handled by slug-length guards)
+  // Rule: skip any file that is an agent coordination artifact or report, not a task.
+  // These are identified by:
+  //   1. ALL_CAPS filenames — coordination files (HANDOFF.md), report dumps
+  //      (TEST_RESULTS.md, SONNET_ROUTING_DECISION.md, PHASE_6_COMPLETION.md), etc.
   const base = filename.replace(/\.md$/i, '');
-  if (/^[A-Z][A-Z0-9_-]+$/.test(base) && base !== 'HANDOFF') return true;
-  // Session state files (run-phases output)
+  if (/^[A-Z][A-Z0-9_-]+$/.test(base)) return true;
+  //   2. Session state files emitted by run-phases
   if (/^run-phases-/i.test(filename)) return true;
-  // Completion markers
+  //   3. Completion markers
   if (/-COMPLETE\.md$/i.test(filename)) return true;
-  // Flag files
+  //   4. Flag files
   if (/\.flag$/i.test(filename)) return true;
   return false;
 }
@@ -146,7 +149,7 @@ export async function reconcileLegacy(opts: {
   dryRun?: boolean;
   tasksDirName?: string;
 }): Promise<ReconcileSummary> {
-  const projectPath = path.resolve(opts.projectPath);
+  const projectPath = resolvePath(opts.projectPath);
   const dryRun = opts.dryRun ?? false;
 
   const prefix = opts.idPrefix ?? derivePrefix(projectPath);
@@ -239,14 +242,27 @@ export async function reconcileLegacy(opts: {
         });
 
       if (dryRun) {
-        results.push({
-          file: filename,
-          id,
-          status: inference.frontmatter.status,
-          confidence: inference.confidence,
-          reason: inference.reason,
-          outputPath: null,
-        });
+        if (slugAlreadyExists) {
+          results.push({
+            file: filename,
+            id,
+            status: inference.frontmatter.status,
+            confidence: inference.confidence,
+            reason: inference.reason,
+            outputPath: null,
+            error: 'output file already exists',
+          });
+          skipped++;
+        } else {
+          results.push({
+            file: filename,
+            id,
+            status: inference.frontmatter.status,
+            confidence: inference.confidence,
+            reason: inference.reason,
+            outputPath: null,
+          });
+        }
         continue;
       }
 

@@ -43,8 +43,9 @@ export class TaskStore {
   ) {}
 
   createTask(input: TaskCreateInput): Task {
-    // 1. Get next ID
-    const num = this.sqliteIndex.nextId(input.project);
+    // 1. Get next ID — pass tasksDir so the allocator skips past any
+    // markdown files already on disk (regression: MCPAT clobber 2026-05-05).
+    const num = this.sqliteIndex.nextId(input.project, this.tasksDir);
 
     // 2. Format ID
     const id = this.factory.formatId(input.project, num);

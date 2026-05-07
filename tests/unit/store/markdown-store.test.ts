@@ -159,6 +159,20 @@ describe('MarkdownStore', () => {
       const tmpFile = filePath + '.tmp';
       expect(fs.existsSync(tmpFile)).toBe(false);
     });
+
+    it('refuses to overwrite a file that belongs to a different task ID', () => {
+      // Belt-and-braces guard: if the ID allocator ever drifts and points
+      // a new task at a path occupied by a different existing task, the
+      // write must abort loudly rather than clobber. Same-ID writes (the
+      // legitimate update path) must still succeed — covered by other tests.
+      const filePath = path.join(tmpDir, 'TEST-001.md');
+      const existingDifferentTask = makeTask({ id: 'TEST-001', file_path: filePath, title: 'Original' });
+      store.write(existingDifferentTask);
+
+      const newTaskAtSamePath = makeTask({ id: 'TEST-002', file_path: filePath, title: 'Would clobber' });
+
+      expect(() => store.write(newTaskAtSamePath)).toThrow(McpTasksError);
+    });
   });
 
   describe('frontmatter cap enforcement', () => {

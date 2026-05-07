@@ -3,6 +3,24 @@ export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'spec'
 export type TaskPriority = 'high' | 'medium' | 'low' | 'normal'
 export type MilestoneStatus = 'open' | 'closed'
 
+export interface GitPr {
+  number: number
+  url?: string
+  state: 'open' | 'closed' | 'merged'
+}
+
+export interface GitInfo {
+  branch?: string
+  pr?: GitPr
+}
+
+export interface Transition {
+  from: string
+  to: string
+  at: string
+  reason?: string | null
+}
+
 export interface Task {
   id: string
   title: string
@@ -12,6 +30,15 @@ export interface Task {
   project?: string
   milestone?: string | null
   labels?: string[]
+  // Detail fields
+  why?: string
+  created?: string
+  updated?: string
+  last_activity?: string
+  claimed_by?: string | null
+  git?: GitInfo
+  transitions?: Transition[]
+  complexity?: number
 }
 
 export interface Milestone {

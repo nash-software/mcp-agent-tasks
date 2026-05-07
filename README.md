@@ -86,7 +86,7 @@ Set `SKIP_TASK_GATE=1` to bypass the Claude Code gate when needed.
 
 ## Configuration Reference
 
-`.mcp-tasks.json` (project-local) or `~/.config/mcp-tasks/config.json` (global):
+`~/.config/mcp-tasks/config.json` (global, single source of truth):
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

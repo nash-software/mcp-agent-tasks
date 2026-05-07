@@ -20,7 +20,7 @@ const DEFAULT_CONFIG: McpTasksConfig = {
   projects: [],
 };
 
-const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
+export const GLOBAL_CONFIG_PATH = path.join(os.homedir(), '.config', 'mcp-tasks', 'config.json');
 
 function validateConfig(raw: unknown): McpTasksConfig {
   if (!raw || typeof raw !== 'object') {
@@ -73,31 +73,39 @@ function ensureDefaultConfig(): McpTasksConfig {
   return DEFAULT_CONFIG;
 }
 
+function warnIfLocalConfigPresent(): void {
+  const localPath = path.join(process.cwd(), '.mcp-tasks.json');
+  if (fs.existsSync(localPath)) {
+    process.stderr.write(
+      `[mcp-agent-tasks] WARNING: Found legacy .mcp-tasks.json at ${localPath}. This file is no longer read.\n` +
+        `  Project routing now uses ~/.config/mcp-tasks/config.json.\n` +
+        `  You can safely delete ${localPath}.\n`,
+    );
+  }
+}
+
 export function loadConfig(): McpTasksConfig {
   // 1. Check env-specified config file
   const envConfigPath = process.env['MCP_TASKS_CONFIG'];
   if (envConfigPath) {
     const config = readJsonFile(envConfigPath);
     if (config) {
+      warnIfLocalConfigPresent();
       return applyEnvOverrides(config);
     }
   }
 
-  // 2. Local .mcp-tasks.json
-  const localConfig = readJsonFile(path.join(process.cwd(), '.mcp-tasks.json'));
-  if (localConfig) {
-    return applyEnvOverrides(localConfig);
-  }
-
-  // 3. Global config file
+  // 2. Global config file
   if (fs.existsSync(GLOBAL_CONFIG_PATH)) {
     const globalConfig = readJsonFile(GLOBAL_CONFIG_PATH);
     if (globalConfig) {
+      warnIfLocalConfigPresent();
       return applyEnvOverrides(globalConfig);
     }
   }
 
-  // 4. First run — create default global config
+  // 3. First run — create default global config
+  warnIfLocalConfigPresent();
   return applyEnvOverrides(ensureDefaultConfig());
 }
 
@@ -115,10 +123,28 @@ function applyEnvOverrides(config: McpTasksConfig): McpTasksConfig {
   return result;
 }
 
-export function getDbPath(): string {
+export function getDbPath(config?: McpTasksConfig): string {
   const envDb = process.env['MCP_TASKS_DB'];
   if (envDb) return envDb;
 
-  const config = loadConfig();
-  return path.join(config.storageDir, 'tasks.db');
+  const resolvedConfig = config ?? loadConfig();
+  return path.join(resolvedConfig.storageDir, 'tasks.db');
+}
+
+export function resolveServerDbPath(tasksDir: string, config: McpTasksConfig, projectPrefix?: string): string {
+  const project = projectPrefix
+    ? config.projects.find(p => p.prefix === projectPrefix)
+    : config.projects[0];
+
+  if (project?.storage === 'global') {
+    return getDbPath(config);
+  }
+
+  // No matching project or local storage — check if there's any project at all
+  if (!project) {
+    // No project found: default to global db
+    return getDbPath(config);
+  }
+
+  return path.join(tasksDir, '.index.db');
 }
