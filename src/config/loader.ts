@@ -128,7 +128,7 @@ export function getDbPath(config?: McpTasksConfig): string {
   if (envDb) return envDb;
 
   const resolvedConfig = config ?? loadConfig();
-  return path.join(resolvedConfig.storageDir, 'tasks.db');
+  return path.join(resolvedConfig.storageDir, '.index.db');
 }
 
 export function resolveServerDbPath(tasksDir: string, config: McpTasksConfig, projectPrefix?: string): string {
