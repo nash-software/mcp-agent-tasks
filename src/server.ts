@@ -1,9 +1,10 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadConfig } from './config/loader.js';
+import { loadConfig, GLOBAL_CONFIG_PATH } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
@@ -223,8 +224,38 @@ async function main(): Promise<void> {
 
   process.stderr.write(`[agent-tasks] Server started. Session: ${sessionId}\n`);
 
+  // Watch config file for hot-reload
+  let configDebounce: ReturnType<typeof setTimeout> | null = null;
+  const configWatcher = fs.watch(GLOBAL_CONFIG_PATH, () => {
+    if (configDebounce) clearTimeout(configDebounce);
+    configDebounce = setTimeout(() => {
+      try {
+        const newConfig = loadConfig();
+        const newRegistry = new StoreRegistry(newConfig, sqliteIndex, markdownStore, manifestWriter);
+
+        for (const entry of newConfig.projects) {
+          try {
+            const dir = newRegistry.getTasksDirForPrefix(entry.prefix);
+            const reconciler = new Reconciler(sqliteIndex, dir, entry.prefix);
+            reconciler.reconcile();
+          } catch { /* skip missing dirs */ }
+        }
+
+        ctx.store = newRegistry;
+        ctx.registry = newRegistry;
+        ctx.config = newConfig;
+
+        process.stderr.write(`[agent-tasks] Config reloaded — ${newConfig.projects.length} projects registered\n`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[agent-tasks] Config reload failed: ${msg}\n`);
+      }
+    }, 500);
+  });
+
   // Cleanup on exit
   const shutdown = (): void => {
+    configWatcher.close();
     for (const watcher of watchers) {
       watcher.stop();
     }
