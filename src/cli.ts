@@ -444,13 +444,18 @@ program
   .command('rebuild-index [project]')
   .description('Rebuild SQLite index from markdown files')
   .option('--path <dir>', 'project root directory')
-  .action((projectArg: string | undefined, options: { path?: string }) => {
+  .option('--prune-orphans', 'remove index entries whose markdown files no longer exist', false)
+  .action((projectArg: string | undefined, options: { path?: string; pruneOrphans?: boolean }) => {
     const { tasksDir, project } = resolveTasksDir(options.path, projectArg);
     const resolvedProject = projectArg ?? project;
     const { sqliteIndex } = buildStore(tasksDir, resolvedProject);
     const reconciler = new Reconciler(sqliteIndex, tasksDir, resolvedProject);
     const count = reconciler.reconcile();
     console.log(`✓ Rebuilt index: ${count} tasks reconciled for project ${resolvedProject}`);
+    if (options.pruneOrphans) {
+      const pruned = reconciler.pruneOrphans();
+      console.log(`✓ Pruned ${pruned} orphaned tasks`);
+    }
   });
 
 // ── archive ───────────────────────────────────────────────────────────────────
