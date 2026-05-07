@@ -6,7 +6,7 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
-      threshold: {
+      thresholds: {
         lines: 80,
         functions: 80,
         branches: 80,
