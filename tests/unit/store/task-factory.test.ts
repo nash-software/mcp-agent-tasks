@@ -152,10 +152,11 @@ describe('TaskFactory', () => {
       ...overrides,
     });
 
-    it('creates a plan task with auto_captured=true', () => {
+    it('creates a plan task with auto_captured=true and draft status', () => {
       const event = makeEvent({ inferred_type: 'plan', file_path: 'scratchpads/auth-plan.md' });
       const task = factory.fromCaptureEvent(event, 'TEST-001', TASKS_DIR);
       expect(task.auto_captured).toBe(true);
+      expect(task.status).toBe('draft');
       expect(task.type).toBe('plan');
       expect(task.title).toBe('Auth plan');
       expect(task.plan_file).toBe('scratchpads/auth-plan.md');

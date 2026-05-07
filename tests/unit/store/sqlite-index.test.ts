@@ -332,6 +332,17 @@ describe('SqliteIndex', () => {
       const limited = idx.listTasks({ limit: 2 });
       expect(limited.length).toBeLessThanOrEqual(2);
     });
+
+    it('filters by auto_captured', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ id: 'TEST-010', auto_captured: true }));
+      idx.upsertTask(makeTask({ id: 'TEST-011' }));
+
+      const captured = idx.listTasks({ auto_captured: true });
+      expect(captured.every(t => t.auto_captured === true)).toBe(true);
+      expect(captured.some(t => t.id === 'TEST-010')).toBe(true);
+      expect(captured.some(t => t.id === 'TEST-011')).toBe(false);
+    });
   });
 
   describe('nextId()', () => {

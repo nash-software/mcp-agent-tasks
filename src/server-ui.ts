@@ -119,6 +119,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         const status = url.searchParams.get('status') ?? undefined;
         const milestone = url.searchParams.get('milestone') ?? undefined;
         const label = url.searchParams.get('label') ?? undefined;
+        const autoCapturedParam = url.searchParams.get('auto_captured');
+        const autoCaptured = autoCapturedParam === 'true' ? true
+          : autoCapturedParam === 'false' ? false : undefined;
 
         const indexes = projectFilter
           ? projectIndexes.filter(p => p.prefix === projectFilter)
@@ -128,6 +131,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           p.index.listTasks({
             project: p.prefix,
             status: status as Parameters<typeof p.index.listTasks>[0]['status'],
+            auto_captured: autoCaptured,
             limit: 1000,
           }),
         );
@@ -167,6 +171,30 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
           .slice(0, 50);
         sendJson(res, 200, activity);
+        return;
+      }
+
+      // API: promote draft → todo
+      const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
+      if (promoteMatch && req.method === 'POST') {
+        const taskId = promoteMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendJson(res, 404, { error: 'TASK_NOT_FOUND' });
+          return;
+        }
+        if (task.status !== 'draft') {
+          sendJson(res, 400, { error: 'INVALID_TRANSITION', message: `Task is '${task.status}', not 'draft'` });
+          return;
+        }
+        const now = new Date().toISOString();
+        task.transitions.push({ from: 'draft', to: 'todo', at: now, reason: 'Promoted from staging' });
+        task.status = 'todo';
+        task.updated = now;
+        task.last_activity = now;
+        pIdx!.index.upsertTask(task);
+        sendJson(res, 200, task);
         return;
       }
 

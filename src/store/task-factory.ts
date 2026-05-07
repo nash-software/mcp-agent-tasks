@@ -45,8 +45,7 @@ export class TaskFactory {
       id,
       title: input.title,
       type: input.type,
-      // spec tasks start at draft; all others start at todo
-      status: input.type === 'spec' ? 'draft' : 'todo',
+      status: (input.type === 'spec' || input.auto_captured) ? 'draft' : 'todo',
       priority: input.priority,
       project: input.project,
       tags: input.tags ?? [],

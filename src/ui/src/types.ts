@@ -39,6 +39,7 @@ export interface Task {
   git?: GitInfo
   transitions?: Transition[]
   complexity?: number
+  auto_captured?: boolean
 }
 
 export interface Milestone {
