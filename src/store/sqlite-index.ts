@@ -368,7 +368,7 @@ export class SqliteIndex {
     return this.rowToTask(row);
   }
 
-  listTasks(filters: { status?: TaskStatus; project?: string; priority?: Priority; limit?: number }): Task[] {
+  listTasks(filters: { status?: TaskStatus; project?: string; priority?: Priority; limit?: number; auto_captured?: boolean }): Task[] {
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
@@ -383,6 +383,10 @@ export class SqliteIndex {
     if (filters.priority) {
       conditions.push('priority=?');
       params.push(filters.priority);
+    }
+    if (filters.auto_captured !== undefined) {
+      conditions.push('auto_captured=?');
+      params.push(filters.auto_captured ? 1 : 0);
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
