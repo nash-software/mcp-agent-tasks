@@ -93,6 +93,22 @@ describe('Rebuild index via Reconciler', () => {
     expect(rebuilt1?.priority).toBe('high');
   });
 
+  it('pruneOrphans() removes stale index row when markdown file is deleted after reconcile', () => {
+    // Create a task (writes markdown + inserts into SQLite)
+    const task = store.createTask({ project: 'TEST', title: 'Soon Deleted', type: 'chore', priority: 'low', why: 'y' });
+    expect(idx.getTask(task.id)).not.toBeNull();
+
+    // Delete the markdown file, simulating an external deletion
+    fs.rmSync(task.file_path);
+
+    // pruneOrphans should detect the missing file and remove the row
+    const reconciler = new Reconciler(idx, tasksDir, 'TEST');
+    const pruned = reconciler.pruneOrphans();
+
+    expect(pruned).toBe(1);
+    expect(idx.getTask(task.id)).toBeNull();
+  });
+
   it('reconcile() skips corrupt markdown files and continues', () => {
     // Create 2 valid tasks
     const task1 = store.createTask({ project: 'TEST', title: 'Task One', type: 'feature', priority: 'high', why: 'y' });
