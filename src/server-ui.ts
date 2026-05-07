@@ -147,8 +147,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: milestones
-      if (pathname === '/api/milestones') {
+      // API: milestones (list)
+      if (pathname === '/api/milestones' && req.method === 'GET') {
         const milestones = projectIndexes.flatMap(p => p.milestoneRepo.listMilestones());
         sendJson(res, 200, milestones);
         return;
@@ -171,6 +171,39 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
           .slice(0, 50);
         sendJson(res, 200, activity);
+        return;
+      }
+
+      // API: create milestone
+      if (pathname === '/api/milestones' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              id: string; title: string; project: string; description?: string; due_date?: string;
+            };
+            const pIdx = projectIndexes.find(p => p.prefix === body.project);
+            if (!pIdx) {
+              sendJson(res, 404, { error: 'PROJECT_NOT_FOUND' });
+              return;
+            }
+            const now = new Date().toISOString();
+            pIdx.milestoneRepo.createMilestone({
+              id: body.id,
+              title: body.title,
+              description: body.description,
+              due_date: body.due_date,
+              status: 'open',
+              created: now,
+              project: body.project,
+            });
+            sendJson(res, 201, { id: body.id, title: body.title, status: 'open', project: body.project });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
         return;
       }
 

@@ -8,7 +8,8 @@ describe('serve-ui HTTP server', () => {
   let handle: UiServerHandle;
   let baseUrl: string;
   let tempDir: string;
-  let originalEnv: string | undefined;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
 
   beforeAll(async () => {
     // Set up a temp tasks dir and config so the server has something to work with
@@ -30,10 +31,10 @@ describe('serve-ui HTTP server', () => {
       projects: [],
     }), 'utf-8');
 
-    // Override DB path to use a temp db
-    const dbPath = path.join(tempDir, 'tasks.db');
-    originalEnv = process.env['MCP_TASKS_DB'];
-    process.env['MCP_TASKS_DB'] = dbPath;
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    process.env['MCP_TASKS_DB'] = path.join(tempDir, 'tasks.db');
 
     handle = await startUiServer({ port: 0 });
     baseUrl = handle.url;
@@ -41,12 +42,10 @@ describe('serve-ui HTTP server', () => {
 
   afterAll(async () => {
     await handle.close();
-    // Restore env
-    if (originalEnv === undefined) {
-      delete process.env['MCP_TASKS_DB'];
-    } else {
-      process.env['MCP_TASKS_DB'] = originalEnv;
-    }
+    if (savedDb === undefined) delete process.env['MCP_TASKS_DB'];
+    else process.env['MCP_TASKS_DB'] = savedDb;
+    if (savedConfig === undefined) delete process.env['MCP_TASKS_CONFIG'];
+    else process.env['MCP_TASKS_CONFIG'] = savedConfig;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -101,6 +100,18 @@ describe('serve-ui HTTP server', () => {
     expect(res.status).toBe(404);
     const data = await res.json() as { error: string };
     expect(typeof data.error).toBe('string');
+  });
+
+  it('POST /api/milestones creates a milestone', async () => {
+    const res = await fetch(`${baseUrl}/api/milestones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'M-test-1', title: 'Test Milestone', project: 'default' }),
+    });
+    expect(res.status).toBe(201);
+    const data = await res.json() as { id: string; title: string };
+    expect(data.id).toBe('M-test-1');
+    expect(data.title).toBe('Test Milestone');
   });
 
   it('close() resolves without hanging', async () => {
