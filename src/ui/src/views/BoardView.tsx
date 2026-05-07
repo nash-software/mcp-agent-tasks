@@ -4,7 +4,7 @@ import { useTasks } from '../hooks/useTasks'
 import { TaskCard } from '../components/TaskCard'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'queued',      label: 'Queued' },
+  { status: 'todo',        label: 'Todo' },
   { status: 'in_progress', label: 'In Progress' },
   { status: 'blocked',     label: 'Blocked' },
   { status: 'done',        label: 'Done' },

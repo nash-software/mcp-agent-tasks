@@ -1,6 +1,6 @@
-export type TaskStatus = 'queued' | 'in_progress' | 'blocked' | 'done'
-export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'spec'
-export type TaskPriority = 'high' | 'medium' | 'low' | 'normal'
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved'
+export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan'
+export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
 export type MilestoneStatus = 'open' | 'closed'
 
 export interface GitPr {
@@ -57,9 +57,15 @@ export interface ActivityEntry {
   reason: string | null
 }
 
+export interface StatsData {
+  by_status: Record<TaskStatus, number>
+  completion_rate: number
+  stale_count: number
+}
+
 export interface StatsEntry {
   project: string
-  stats: Record<string, number>
+  stats: StatsData
 }
 
 export interface FilterState {
