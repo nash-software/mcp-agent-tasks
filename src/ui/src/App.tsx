@@ -4,6 +4,7 @@ import { FilterBar } from './components/FilterBar'
 import { BoardView } from './views/BoardView'
 import { RoadmapView } from './views/RoadmapView'
 import { ActivityView } from './views/ActivityView'
+import { InboxView } from './views/InboxView'
 import { TaskDetailPanel } from './components/TaskDetailPanel'
 import { useTasks } from './hooks/useTasks'
 import { useMilestones } from './hooks/useMilestones'
@@ -39,6 +40,7 @@ export function App(): React.JSX.Element {
         {activeTab === 'board'    && <BoardView filters={filters} onTaskClick={setSelectedTask} />}
         {activeTab === 'roadmap'  && <RoadmapView filters={filters} />}
         {activeTab === 'activity' && <ActivityView />}
+        {activeTab === 'inbox'    && <InboxView />}
       </main>
       <TaskDetailPanel task={selectedTask} onClose={() => setSelectedTask(null)} />
     </div>

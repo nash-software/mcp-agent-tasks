@@ -12,4 +12,14 @@ describe('Header stats wiring', () => {
 
     expect(headerSource).toContain('useStats');
   });
+
+  it('Header.tsx includes an inbox tab', () => {
+    const root = process.cwd();
+    const headerSource = fs.readFileSync(
+      path.join(root, 'src', 'ui', 'src', 'components', 'Header.tsx'),
+      'utf-8',
+    );
+
+    expect(headerSource).toContain("'inbox'");
+  });
 });
