@@ -146,6 +146,24 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: projects (for action button)
+      if (pathname === '/api/projects') {
+        const projects = config.projects.map(p => ({ prefix: p.prefix, path: p.path }));
+        sendJson(res, 200, projects);
+        return;
+      }
+
+      // API: config (conductor URLs for action button)
+      if (pathname === '/api/config') {
+        const cfg: Record<string, string> = {};
+        const localUrl = process.env['CONDUCTOR_LOCAL_URL'];
+        const vpsUrl = process.env['CONDUCTOR_VPS_URL'];
+        if (localUrl) cfg.conductorLocalUrl = localUrl;
+        if (vpsUrl) cfg.conductorVpsUrl = vpsUrl;
+        sendJson(res, 200, cfg);
+        return;
+      }
+
       // API: tasks
       if (pathname === '/api/tasks' && req.method !== 'POST') {
         const projectFilter = url.searchParams.get('project') ?? undefined;
