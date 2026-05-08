@@ -23,7 +23,7 @@ export interface TaskFilters {
 }
 
 export function fetchTasks(filters: TaskFilters = {}): Promise<Task[]> {
-  return get<Task[]>(`/api/tasks${qs(filters)}`)
+  return get<Task[]>(`/api/tasks${qs(filters as Record<string, string | undefined>)}`)
 }
 
 export function fetchMilestones(): Promise<Milestone[]> {
@@ -36,6 +36,30 @@ export function fetchActivity(): Promise<ActivityEntry[]> {
 
 export function fetchStats(): Promise<StatsEntry[]> {
   return get<StatsEntry[]>('/api/stats')
+}
+
+export async function transcribeAudio(audioBlob: Blob, filename = 'recording.wav'): Promise<string> {
+  const form = new FormData()
+  form.append('file', audioBlob, filename)
+  const res = await fetch('/api/transcribe', { method: 'POST', body: form })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `Transcription failed: ${res.status}`)
+  }
+  const data = await res.json() as { text: string }
+  return data.text
+}
+
+export async function createDraftTask(data: {
+  title: string; project: string; body?: string
+}): Promise<{ id: string; title: string; status: string; project: string }> {
+  const res = await fetch('/api/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json() as Promise<{ id: string; title: string; status: string; project: string }>
 }
 
 export async function createMilestone(data: {

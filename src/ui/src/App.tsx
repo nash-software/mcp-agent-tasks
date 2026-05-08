@@ -40,7 +40,7 @@ export function App(): React.JSX.Element {
         {activeTab === 'board'    && <BoardView filters={filters} onTaskClick={setSelectedTask} />}
         {activeTab === 'roadmap'  && <RoadmapView filters={filters} />}
         {activeTab === 'activity' && <ActivityView />}
-        {activeTab === 'inbox'    && <InboxView />}
+        {activeTab === 'inbox'    && <InboxView projects={projects} />}
       </main>
       <TaskDetailPanel task={selectedTask} onClose={() => setSelectedTask(null)} />
     </div>

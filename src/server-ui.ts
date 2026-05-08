@@ -55,6 +55,39 @@ function serveStatic(res: ServerResponse, filePath: string): void {
   res.end(content);
 }
 
+interface MultipartFile {
+  filename: string;
+  contentType: string;
+  data: Buffer;
+}
+
+function extractMultipartFile(body: Buffer, boundary: string): MultipartFile | null {
+  const boundaryBuf = Buffer.from('--' + boundary);
+  const parts: Buffer[] = [];
+  let start = 0;
+  while (true) {
+    const idx = body.indexOf(boundaryBuf, start);
+    if (idx === -1) break;
+    if (start > 0) parts.push(body.subarray(start, idx));
+    start = idx + boundaryBuf.length;
+  }
+  for (const part of parts) {
+    const headerEnd = part.indexOf('\r\n\r\n');
+    if (headerEnd === -1) continue;
+    const headers = part.subarray(0, headerEnd).toString();
+    if (!headers.includes('filename=')) continue;
+    const fnMatch = headers.match(/filename="([^"]+)"/);
+    const ctMatch = headers.match(/Content-Type:\s*(.+)/i);
+    const data = part.subarray(headerEnd + 4, part.length - 2);
+    return {
+      filename: fnMatch ? fnMatch[1] : 'audio.wav',
+      contentType: ctMatch ? ctMatch[1].trim() : 'audio/wav',
+      data,
+    };
+  }
+  return null;
+}
+
 interface ProjectIndex {
   prefix: string;
   index: SqliteIndex;
@@ -65,7 +98,7 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
   if (config.projects.length === 0) {
-    // No registered projects — fall back to global DB
+    // No registered projects â€” fall back to global DB
     const idx = new SqliteIndex(getDbPath());
     idx.init();
     return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
@@ -91,7 +124,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
     const pathname = url.pathname;
 
     try {
-      // Static assets — /assets/* (guard against path traversal)
+      // Static assets â€” /assets/* (guard against path traversal)
       if (pathname.startsWith('/assets/')) {
         const resolved = resolve(join(uiDir, pathname));
         if (!resolved.startsWith(resolve(uiDir))) {
@@ -114,7 +147,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       }
 
       // API: tasks
-      if (pathname === '/api/tasks') {
+      if (pathname === '/api/tasks' && req.method !== 'POST') {
         const projectFilter = url.searchParams.get('project') ?? undefined;
         const status = url.searchParams.get('status') ?? undefined;
         const milestone = url.searchParams.get('milestone') ?? undefined;
@@ -213,7 +246,50 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: promote draft → todo
+      // API: create draft task from dashboard
+      if (pathname === '/api/tasks' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              title: string; project: string; body?: string;
+            };
+            if (!body.title || typeof body.title !== 'string' ||
+                !body.project || typeof body.project !== 'string') {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'title and project are required strings' });
+              return;
+            }
+            const pIdx = projectIndexes.find(p => p.prefix === body.project);
+            if (!pIdx) {
+              sendJson(res, 404, { error: 'PROJECT_NOT_FOUND' });
+              return;
+            }
+            const num = pIdx.index.nextId(body.project);
+            const id = `${body.project}-${String(num).padStart(3, '0')}`;
+            const now = new Date().toISOString();
+            const task = {
+              schema_version: 1, id, title: body.title, type: 'plan' as const,
+              status: 'draft' as const, priority: 'medium' as const, project: body.project,
+              tags: [], complexity: 1, complexity_manual: false, why: '',
+              created: now, updated: now, last_activity: now,
+              claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
+              parent: null, children: [], dependencies: [], subtasks: [],
+              git: { commits: [] }, transitions: [], files: [],
+              body: body.body ?? '', file_path: `${id}.md`,
+              auto_captured: false,
+            };
+            pIdx.index.upsertTask(task);
+            sendJson(res, 201, { id, title: body.title, status: 'draft', project: body.project });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: promote draft â†’ todo
       const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
       if (promoteMatch && req.method === 'POST') {
         const taskId = promoteMatch[1];
@@ -234,6 +310,56 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         task.last_activity = now;
         pIdx!.index.upsertTask(task);
         sendJson(res, 200, task);
+        return;
+      }
+
+      // API: transcribe audio via Groq Whisper
+      if (pathname === '/api/transcribe' && req.method === 'POST') {
+        const contentType = req.headers['content-type'] ?? '';
+        if (!contentType.includes('multipart/form-data')) {
+          sendJson(res, 400, { error: 'NO_AUDIO', message: 'Expected multipart/form-data with audio file' });
+          return;
+        }
+        const groqKey = process.env['GROQ_API_KEY'];
+        if (!groqKey) {
+          sendJson(res, 500, { error: 'GROQ_NOT_CONFIGURED', message: 'GROQ_API_KEY not set' });
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const raw = Buffer.concat(chunks);
+            const boundary = contentType.split('boundary=')[1];
+            if (!boundary) {
+              sendJson(res, 400, { error: 'NO_AUDIO', message: 'Missing multipart boundary' });
+              return;
+            }
+            const audioPart = extractMultipartFile(raw, boundary);
+            if (!audioPart) {
+              sendJson(res, 400, { error: 'NO_AUDIO', message: 'No audio file found in request' });
+              return;
+            }
+            const groqForm = new FormData();
+            groqForm.append('file', new Blob([audioPart.data], { type: audioPart.contentType }), audioPart.filename);
+            groqForm.append('model', 'whisper-large-v3-turbo');
+            const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${groqKey}` },
+              body: groqForm,
+            });
+            if (!groqRes.ok) {
+              const errText = await groqRes.text();
+              sendJson(res, 502, { error: 'GROQ_ERROR', message: errText });
+              return;
+            }
+            const result = await groqRes.json() as { text: string };
+            sendJson(res, 200, { text: result.text });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'TRANSCRIBE_FAILED', message: msg });
+          }
+        });
         return;
       }
 

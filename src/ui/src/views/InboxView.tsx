@@ -1,6 +1,7 @@
 import React from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
+import { VoiceCapture } from '../components/VoiceCapture'
 import type { Task } from '../types'
 
 async function promoteTask(id: string): Promise<Task> {
@@ -9,7 +10,11 @@ async function promoteTask(id: string): Promise<Task> {
   return res.json() as Promise<Task>
 }
 
-export function InboxView(): React.JSX.Element {
+interface Props {
+  projects: string[]
+}
+
+export function InboxView({ projects }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
 
   const { data: tasks = [], isLoading, error } = useQuery({
@@ -25,6 +30,8 @@ export function InboxView(): React.JSX.Element {
     },
   })
 
+  const defaultProject = projects[0] ?? 'default'
+
   if (isLoading) {
     return <div className="p-6 text-slate-500 text-sm">Loading...</div>
   }
@@ -33,15 +40,18 @@ export function InboxView(): React.JSX.Element {
     return <div className="p-6 text-red-400 text-sm">Failed to load inbox: {error.message}</div>
   }
 
-  if (tasks.length === 0) {
-    return <div className="p-6 text-slate-500 text-sm italic">No captured tasks awaiting review.</div>
-  }
-
   return (
-    <div className="p-6 space-y-3 max-w-3xl">
-      <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">
+    <div className="p-6 space-y-4 max-w-3xl">
+      <VoiceCapture project={defaultProject} />
+
+      <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
         Captured Tasks ({tasks.length})
       </h2>
+
+      {tasks.length === 0 && (
+        <p className="text-slate-500 text-sm italic">No captured tasks awaiting review.</p>
+      )}
+
       {tasks.map(task => (
         <div
           key={task.id}
