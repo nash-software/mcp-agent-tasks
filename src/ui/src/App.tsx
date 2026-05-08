@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react'
+import React, { useState } from 'react'
 import { Header, type TabId } from './components/Header'
 import { FilterBar } from './components/FilterBar'
 import { BoardView } from './views/BoardView'
