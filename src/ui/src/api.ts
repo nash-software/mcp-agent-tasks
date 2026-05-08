@@ -37,3 +37,15 @@ export function fetchActivity(): Promise<ActivityEntry[]> {
 export function fetchStats(): Promise<StatsEntry[]> {
   return get<StatsEntry[]>('/api/stats')
 }
+
+export async function createMilestone(data: {
+  id: string; title: string; project: string; description?: string; due_date?: string
+}): Promise<Milestone> {
+  const res = await fetch('/api/milestones', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json() as Promise<Milestone>
+}

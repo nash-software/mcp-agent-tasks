@@ -1,8 +1,10 @@
 import React from 'react'
+import { useMutation } from '@tanstack/react-query'
 import type { FilterState } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { Badge } from '../components/Badge'
+import { createMilestone } from '../api'
 
 interface Props {
   filters: FilterState
@@ -13,6 +15,7 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
   const { tasks, isLoading: tLoading } = useTasks({
     project: filters.project || undefined,
   })
+  const mutation = useMutation({ mutationFn: createMilestone })
 
   if (mlLoading || tLoading) {
     return (
@@ -26,6 +29,11 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
 
   return (
     <div className="p-6 space-y-4">
+      <div className="flex justify-end">
+        <button className="px-3 py-1.5 bg-violet-600 text-white text-sm rounded hover:bg-violet-500">
+          New Milestone
+        </button>
+      </div>
       {milestones.length === 0 && (
         <p className="text-slate-500 text-sm">No milestones found.</p>
       )}
