@@ -13,7 +13,12 @@ const GLOBAL_CONFIG_PATH = join(homedir(), '.config', 'mcp-tasks', 'config.json'
 function loadConfig() {
   const configPath = process.env['MCP_TASKS_CONFIG'] ?? GLOBAL_CONFIG_PATH;
   if (!existsSync(configPath)) return { projects: [], tasksDirName: DEFAULT_TASKS_DIR_NAME };
-  return JSON.parse(readFileSync(configPath, 'utf-8'));
+  try {
+    return JSON.parse(readFileSync(configPath, 'utf-8'));
+  } catch (err) {
+    console.error(`Failed to parse config at ${configPath}: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 const config = loadConfig();
