@@ -1,4 +1,4 @@
-﻿import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -264,7 +264,6 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-<<<<<<< HEAD
       // API: create draft task from dashboard
       if (pathname === '/api/tasks' && req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -308,8 +307,6 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-=======
->>>>>>> 85e61b7 (feat: action button — clipboard copy + Conductor dispatch (S9))
       // API: promote draft â†’ todo
       const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
       if (promoteMatch && req.method === 'POST') {
