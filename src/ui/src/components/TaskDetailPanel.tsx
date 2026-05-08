@@ -1,4 +1,4 @@
-﻿import React from 'react'
+import React from 'react'
 import type { Task, TaskStatus } from '../types'
 import { Badge } from './Badge'
 import { ActionButton } from './ActionButton'
@@ -32,7 +32,7 @@ function DateRow({ label, iso }: { label: string; iso?: string }): React.JSX.Ele
   return (
     <div className="flex justify-between text-xs">
       <span className="text-slate-500">{label}</span>
-      <span className="text-slate-300" title={iso}>{abs} Â· {relativeTime(iso)}</span>
+      <span className="text-slate-300" title={iso}>{abs} · {relativeTime(iso)}</span>
     </div>
   )
 }
@@ -65,7 +65,7 @@ export function TaskDetailPanel({ task, onClose }: Props): React.JSX.Element {
                 className="text-slate-500 hover:text-slate-300 flex-shrink-0 mt-0.5 text-lg leading-none"
                 aria-label="Close"
               >
-                Ã—
+                ×
               </button>
             </div>
 

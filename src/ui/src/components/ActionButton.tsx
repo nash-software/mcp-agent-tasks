@@ -53,8 +53,8 @@ export function ActionButton({ task }: Props): React.JSX.Element {
   const [dispatching, setDispatching] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/projects').then(r => r.json()).then(d => setProjects(d as ProjectInfo[]))
-    fetch('/api/config').then(r => r.json()).then(d => setConfig(d as ConductorConfig))
+    fetch('/api/projects').then(r => r.json()).then(d => setProjects(d as ProjectInfo[])).catch(() => {})
+    fetch('/api/config').then(r => r.json()).then(d => setConfig(d as ConductorConfig)).catch(() => {})
   }, [])
 
   const projectPath = projects.find(p => p.prefix === task.project)?.path
