@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+﻿import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,7 +98,7 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
   if (config.projects.length === 0) {
-    // No registered projects — fall back to global DB
+    // No registered projects â€” fall back to global DB
     const idx = new SqliteIndex(getDbPath());
     idx.init();
     return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
@@ -124,7 +124,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
     const pathname = url.pathname;
 
     try {
-      // Static assets — /assets/* (guard against path traversal)
+      // Static assets â€” /assets/* (guard against path traversal)
       if (pathname.startsWith('/assets/')) {
         const resolved = resolve(join(uiDir, pathname));
         if (!resolved.startsWith(resolve(uiDir))) {
@@ -147,7 +147,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       }
 
       // API: tasks
-      if (pathname === '/api/tasks') {
+      if (pathname === '/api/tasks' && req.method !== 'POST') {
         const projectFilter = url.searchParams.get('project') ?? undefined;
         const status = url.searchParams.get('status') ?? undefined;
         const milestone = url.searchParams.get('milestone') ?? undefined;
@@ -246,7 +246,50 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: promote draft → todo
+      // API: create draft task from dashboard
+      if (pathname === '/api/tasks' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              title: string; project: string; body?: string;
+            };
+            if (!body.title || typeof body.title !== 'string' ||
+                !body.project || typeof body.project !== 'string') {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'title and project are required strings' });
+              return;
+            }
+            const pIdx = projectIndexes.find(p => p.prefix === body.project);
+            if (!pIdx) {
+              sendJson(res, 404, { error: 'PROJECT_NOT_FOUND' });
+              return;
+            }
+            const num = pIdx.index.nextId(body.project);
+            const id = `${body.project}-${String(num).padStart(3, '0')}`;
+            const now = new Date().toISOString();
+            const task = {
+              schema_version: 1, id, title: body.title, type: 'plan' as const,
+              status: 'draft' as const, priority: 'medium' as const, project: body.project,
+              tags: [], complexity: 1, complexity_manual: false, why: '',
+              created: now, updated: now, last_activity: now,
+              claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
+              parent: null, children: [], dependencies: [], subtasks: [],
+              git: { commits: [] }, transitions: [], files: [],
+              body: body.body ?? '', file_path: `${id}.md`,
+              auto_captured: false,
+            };
+            pIdx.index.upsertTask(task);
+            sendJson(res, 201, { id, title: body.title, status: 'draft', project: body.project });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: promote draft â†’ todo
       const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
       if (promoteMatch && req.method === 'POST') {
         const taskId = promoteMatch[1];
