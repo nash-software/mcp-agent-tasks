@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+﻿import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,7 +65,7 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
   if (config.projects.length === 0) {
-    // No registered projects — fall back to global DB
+    // No registered projects â€” fall back to global DB
     const idx = new SqliteIndex(getDbPath());
     idx.init();
     return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
@@ -91,7 +91,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
     const pathname = url.pathname;
 
     try {
-      // Static assets — /assets/* (guard against path traversal)
+      // Static assets â€” /assets/* (guard against path traversal)
       if (pathname.startsWith('/assets/')) {
         const resolved = resolve(join(uiDir, pathname));
         if (!resolved.startsWith(resolve(uiDir))) {
@@ -110,6 +110,24 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         } else {
           sendError(res, 404, 'Dashboard not built. Run npm run build first.');
         }
+        return;
+      }
+
+      // API: projects (for action button)
+      if (pathname === '/api/projects') {
+        const projects = config.projects.map(p => ({ prefix: p.prefix, path: p.path }));
+        sendJson(res, 200, projects);
+        return;
+      }
+
+      // API: config (conductor URLs for action button)
+      if (pathname === '/api/config') {
+        const cfg: Record<string, string> = {};
+        const localUrl = process.env['CONDUCTOR_LOCAL_URL'];
+        const vpsUrl = process.env['CONDUCTOR_VPS_URL'];
+        if (localUrl) cfg.conductorLocalUrl = localUrl;
+        if (vpsUrl) cfg.conductorVpsUrl = vpsUrl;
+        sendJson(res, 200, cfg);
         return;
       }
 
@@ -213,7 +231,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: promote draft → todo
+      // API: promote draft â†’ todo
       const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
       if (promoteMatch && req.method === 'POST') {
         const taskId = promoteMatch[1];

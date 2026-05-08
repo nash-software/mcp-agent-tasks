@@ -1,6 +1,7 @@
-import React from 'react'
+﻿import React from 'react'
 import type { Task, TaskStatus } from '../types'
 import { Badge } from './Badge'
+import { ActionButton } from './ActionButton'
 import { relativeTime } from '../lib/time'
 
 interface Props {
@@ -31,7 +32,7 @@ function DateRow({ label, iso }: { label: string; iso?: string }): React.JSX.Ele
   return (
     <div className="flex justify-between text-xs">
       <span className="text-slate-500">{label}</span>
-      <span className="text-slate-300" title={iso}>{abs} · {relativeTime(iso)}</span>
+      <span className="text-slate-300" title={iso}>{abs} Â· {relativeTime(iso)}</span>
     </div>
   )
 }
@@ -64,7 +65,7 @@ export function TaskDetailPanel({ task, onClose }: Props): React.JSX.Element {
                 className="text-slate-500 hover:text-slate-300 flex-shrink-0 mt-0.5 text-lg leading-none"
                 aria-label="Close"
               >
-                ×
+                Ã—
               </button>
             </div>
 
@@ -77,6 +78,9 @@ export function TaskDetailPanel({ task, onClose }: Props): React.JSX.Element {
                 <Badge variant="priority" value={task.priority} />
                 <Badge variant="type" value={task.type} />
               </div>
+
+              {/* Action button */}
+              <ActionButton task={task} />
 
               {/* Project / Milestone */}
               {(task.project || task.milestone) && (
@@ -170,7 +174,7 @@ export function TaskDetailPanel({ task, onClose }: Props): React.JSX.Element {
                       <div key={i} className="flex items-start gap-2 text-xs">
                         <div className="flex items-center gap-1 flex-shrink-0 mt-0.5">
                           <span className={STATUS_COLORS[t.from as TaskStatus] ?? 'text-slate-400'}>{t.from}</span>
-                          <span className="text-slate-600">→</span>
+                          <span className="text-slate-600">â†’</span>
                           <span className={STATUS_COLORS[t.to as TaskStatus] ?? 'text-slate-400'}>{t.to}</span>
                         </div>
                         <div className="text-slate-500 min-w-0">
