@@ -102,6 +102,17 @@ describe('serve-ui HTTP server', () => {
     expect(typeof data.error).toBe('string');
   });
 
+  it('POST /api/milestones with missing fields returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/milestones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: 'default' }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json() as { error: string };
+    expect(data.error).toBe('MISSING_FIELDS');
+  });
+
   it('POST /api/milestones creates a milestone', async () => {
     const res = await fetch(`${baseUrl}/api/milestones`, {
       method: 'POST',

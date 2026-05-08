@@ -183,6 +183,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const body = JSON.parse(Buffer.concat(chunks).toString()) as {
               id: string; title: string; project: string; description?: string; due_date?: string;
             };
+            if (!body.id || typeof body.id !== 'string' ||
+                !body.title || typeof body.title !== 'string' ||
+                !body.project || typeof body.project !== 'string') {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'id, title, and project are required strings' });
+              return;
+            }
             const pIdx = projectIndexes.find(p => p.prefix === body.project);
             if (!pIdx) {
               sendJson(res, 404, { error: 'PROJECT_NOT_FOUND' });

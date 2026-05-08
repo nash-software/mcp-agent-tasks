@@ -15,6 +15,7 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
   const { tasks, isLoading: tLoading } = useTasks({
     project: filters.project || undefined,
   })
+  const mutation = useMutation({ mutationFn: createMilestone })
 
   if (mlLoading || tLoading) {
     return (
@@ -25,8 +26,6 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
       </div>
     )
   }
-
-  const mutation = useMutation({ mutationFn: createMilestone })
 
   return (
     <div className="p-6 space-y-4">
