@@ -1,4 +1,4 @@
-import { createServer, IncomingMessage, ServerResponse } from 'node:http';
+﻿import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +146,24 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: projects (for action button)
+      if (pathname === '/api/projects') {
+        const projects = config.projects.map(p => ({ prefix: p.prefix, path: p.path }));
+        sendJson(res, 200, projects);
+        return;
+      }
+
+      // API: config (conductor URLs for action button)
+      if (pathname === '/api/config') {
+        const cfg: Record<string, string> = {};
+        const localUrl = process.env['CONDUCTOR_LOCAL_URL'];
+        const vpsUrl = process.env['CONDUCTOR_VPS_URL'];
+        if (localUrl) cfg.conductorLocalUrl = localUrl;
+        if (vpsUrl) cfg.conductorVpsUrl = vpsUrl;
+        sendJson(res, 200, cfg);
+        return;
+      }
+
       // API: tasks
       if (pathname === '/api/tasks' && req.method !== 'POST') {
         const projectFilter = url.searchParams.get('project') ?? undefined;
@@ -246,6 +264,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+<<<<<<< HEAD
       // API: create draft task from dashboard
       if (pathname === '/api/tasks' && req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -289,6 +308,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+=======
+>>>>>>> 85e61b7 (feat: action button — clipboard copy + Conductor dispatch (S9))
       // API: promote draft â†’ todo
       const promoteMatch = pathname.match(/^\/api\/tasks\/([A-Z]+-\d+)\/promote$/);
       if (promoteMatch && req.method === 'POST') {
