@@ -101,48 +101,6 @@ async function main(): Promise<void> {
   // Build registry — one TaskStore per unique tasksDir
   const registry = new StoreRegistry(config, sqliteIndex, markdownStore, manifestWriter);
 
-  // Reconcile every project directory into the shared index at startup
-  for (const projectEntry of config.projects) {
-    const tasksDir = registry.getTasksDirForPrefix(projectEntry.prefix);
-    try {
-      const reconciler = new Reconciler(sqliteIndex, tasksDir, projectEntry.prefix);
-      reconciler.reconcile();
-    } catch {
-      // Skip projects whose tasksDir does not exist yet
-    }
-  }
-
-  // File watchers: one per unique tasksDir — syncs markdown changes back into SQLite
-  const watchers: FileWatcher[] = [];
-  for (const tasksDir of registry.allTasksDirs()) {
-    const watcher = new FileWatcher(
-      tasksDir,
-      (filePath) => {
-        try {
-          const task = markdownStore.read(filePath);
-          sqliteIndex.upsertTask(task);
-        } catch {
-          // Skip unparseable files
-        }
-      },
-      (filePath) => {
-        // On delete, remove from index if we can find the task ID from the filename
-        const basename = path.basename(filePath, '.md');
-        if (basename) sqliteIndex.deleteTask(basename);
-      },
-      (filePath) => {
-        try {
-          const task = markdownStore.read(filePath);
-          sqliteIndex.upsertTask(task);
-        } catch {
-          // Skip unparseable files
-        }
-      },
-    );
-    watcher.start();
-    watchers.push(watcher);
-  }
-
   const ctx: ToolContext = {
     store: registry,
     registry,
@@ -219,10 +177,64 @@ async function main(): Promise<void> {
     }
   });
 
+  // Connect transport first so Claude Code's MCP handshake completes immediately
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   process.stderr.write(`[agent-tasks] Server started. Session: ${sessionId}\n`);
+
+  // Reconcile and start file watchers in the background — must not block connect()
+  // watchers declared here so shutdown() can stop them regardless of timing
+  const watchers: FileWatcher[] = [];
+
+  const startWatchers = (): void => {
+    for (const tasksDir of registry.allTasksDirs()) {
+      const watcher = new FileWatcher(
+        tasksDir,
+        (filePath) => {
+          try {
+            const task = markdownStore.read(filePath);
+            sqliteIndex.upsertTask(task);
+          } catch {
+            // Skip unparseable files
+          }
+        },
+        (filePath) => {
+          const basename = path.basename(filePath, '.md');
+          if (basename) sqliteIndex.deleteTask(basename);
+        },
+        (filePath) => {
+          try {
+            const task = markdownStore.read(filePath);
+            sqliteIndex.upsertTask(task);
+          } catch {
+            // Skip unparseable files
+          }
+        },
+      );
+      watcher.start();
+      watchers.push(watcher);
+    }
+  };
+
+  // Process one project per setImmediate tick to yield the event loop between each,
+  // so MCP initialize/tool requests are not blocked by synchronous reconcile work.
+  const reconcileNext = (i: number): void => {
+    if (i >= config.projects.length) {
+      startWatchers();
+      return;
+    }
+    const projectEntry = config.projects[i];
+    try {
+      const tasksDir = registry.getTasksDirForPrefix(projectEntry.prefix);
+      const reconciler = new Reconciler(sqliteIndex, tasksDir, projectEntry.prefix);
+      reconciler.reconcile();
+    } catch {
+      // Skip projects whose tasksDir does not exist yet
+    }
+    setImmediate(() => reconcileNext(i + 1));
+  };
+  setImmediate(() => reconcileNext(0));
 
   // Watch config file for hot-reload
   let configDebounce: ReturnType<typeof setTimeout> | null = null;
