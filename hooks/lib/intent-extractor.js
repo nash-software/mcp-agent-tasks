@@ -143,7 +143,7 @@ function buildPrompt(transcript) {
     if (charBudget <= 0) break;
 
     const role = entry.role;
-    const rawContent = typeof entry.content === 'string' ? entry.content : '';
+    const rawContent = sanitizeContent(typeof entry.content === 'string' ? entry.content : '');
 
     if (rawContent.length <= charBudget) {
       // Message fits within remaining budget — include as-is
