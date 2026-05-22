@@ -53,7 +53,10 @@ export function validate(input: unknown): asserts input is ValidatedInput {
 
 export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<ToolOutput> {
   const storageMode = input.storage_mode ?? 'global';
-  const projectPath = input.project_path ?? process.cwd();
+  let projectPath = input.project_path ?? process.cwd();
+  if (input.project_prefix === 'GEN' && !input.project_path) {
+    projectPath = path.join(os.homedir(), '.mcp-tasks');
+  }
 
   let tasksDir: string;
   let dbPath: string;
