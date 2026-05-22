@@ -953,7 +953,7 @@ program
     log(`Registered MCP server in ${claudeJsonPath}`);
 
     // Load or bootstrap settings.json
-    let settings: { hooks: { PostToolUse: Array<Record<string, unknown>>; SessionStart: Array<Record<string, unknown>> } } = { hooks: { PostToolUse: [], SessionStart: [] } };
+    let settings: { hooks: { PostToolUse: Array<Record<string, unknown>>; SessionStart: Array<Record<string, unknown>>; Stop: Array<Record<string, unknown>> } } = { hooks: { PostToolUse: [], SessionStart: [], Stop: [] } };
     if (fs.existsSync(settingsPath)) {
       try {
         const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
@@ -961,6 +961,7 @@ program
         const h = raw['hooks'] as Record<string, unknown>;
         if (!h['PostToolUse']) h['PostToolUse'] = [];
         if (!h['SessionStart']) h['SessionStart'] = [];
+        if (!h['Stop']) h['Stop'] = [];
         settings = raw as typeof settings;
       } catch { /* use defaults */ }
     }
@@ -1040,6 +1041,51 @@ program
       upsertHookEntry(settings.hooks.SessionStart, sessionEntry, 'session-task-detector.js');
     } else {
       console.error(`✗ session-task-detector.js not found at ${detectorSrc}`);
+    }
+
+    // 6. Copy stop-intent-extractor.js → ~/.claude/hooks/ (version-aware)
+    const stopSrc = path.join(hooksSourceDir, 'stop-intent-extractor.js');
+    const stopDest = path.join(claudeHooksDir, 'stop-intent-extractor.js');
+    if (fs.existsSync(stopSrc)) {
+      const srcVersion = getHookVersion(stopSrc);
+      const destVersion = getHookVersion(stopDest);
+      if (!fs.existsSync(stopDest) || semverGt(srcVersion, destVersion)) {
+        if (!dryRun) {
+          fs.mkdirSync(claudeHooksDir, { recursive: true });
+          fs.copyFileSync(stopSrc, stopDest);
+          // Also copy lib dependencies
+          const libSrcDir = path.join(hooksSourceDir, 'lib');
+          const libDestDir = path.join(claudeHooksDir, 'lib');
+          if (fs.existsSync(libSrcDir)) {
+            if (!dryRun) fs.mkdirSync(libDestDir, { recursive: true });
+            for (const f of ['intent-extractor.js', 'project-router.js']) {
+              const lsrc = path.join(libSrcDir, f);
+              if (fs.existsSync(lsrc)) fs.copyFileSync(lsrc, path.join(libDestDir, f));
+            }
+          }
+        }
+        log(`Installed stop-intent-extractor.js ${srcVersion} → ${stopDest}`);
+      } else {
+        log(`stop-intent-extractor.js already up to date (${destVersion})`);
+      }
+
+      // 7. Add Stop entry
+      const hookScriptPath = path.join(claudeHooksDir, 'stop-intent-extractor.js');
+      const hookCmd = process.platform === 'win32'
+        ? `"${path.join(claudeHooksDir, 'node-hidden.exe')}" "${hookScriptPath}"`
+        : `node "${hookScriptPath}"`;
+      const stopEntry: Record<string, unknown> = {
+        matcher: '',
+        hooks: [{
+          type: 'command',
+          command: hookCmd,
+          timeout: 30000,
+          async: true,
+        }],
+      };
+      upsertHookEntry(settings.hooks.Stop, stopEntry, 'stop-intent-extractor.js');
+    } else {
+      console.error(`✗ stop-intent-extractor.js not found at ${stopSrc}`);
     }
 
     if (!dryRun) {
