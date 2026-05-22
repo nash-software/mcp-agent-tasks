@@ -149,10 +149,10 @@ function readIndexYaml(indexYamlPath, targetPrefix) {
       if (idMatch) {
         // Flush previous block before starting new one
         if (currentId && currentTitle && !skipTitle) {
-          // Only record if prefix matches and ID not already seen
           const prefix = currentId.split('-')[0];
-          if (prefix === targetPrefix && !seenIds.has(currentId)) {
+          if (prefix === targetPrefix) {
             existingTitles.add(currentTitle.toLowerCase());
+            seenIds.add(currentId);
           }
         }
         // Start new block
@@ -193,23 +193,12 @@ function readIndexYaml(indexYamlPath, targetPrefix) {
           // Strip surrounding quotes if present
           const stripped = titleValue.replace(/^['"]|['"]$/g, '');
           currentTitle = stripped;
-          // Mark ID as seen now that we have a valid title for it
-          seenIds.add(currentId);
         }
         continue;
       }
     }
 
     // Flush final block
-    if (currentId && currentTitle && !skipTitle) {
-      const prefix = currentId.split('-')[0];
-      if (prefix === targetPrefix && !seenIds.has(currentId)) {
-        existingTitles.add(currentTitle.toLowerCase());
-      }
-      // If seenIds already has it (was added when title was set), we need to include it
-      // Actually, we added to seenIds when title was found, so we need to check existingTitles directly
-    }
-    // Re-check: add final block's title (seenIds.has was set when title was first found)
     if (currentId && currentTitle && !skipTitle) {
       const prefix = currentId.split('-')[0];
       if (prefix === targetPrefix) {
