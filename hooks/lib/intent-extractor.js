@@ -5,6 +5,7 @@
 // Zero npm imports — builtins only.
 // No side-effects when require()-d; all exports are pure functions.
 
+const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execSync, spawnSync } = require('child_process');
@@ -29,9 +30,12 @@ function pickBestBinary(lines, platform) {
 // Only accepts paths within: os.homedir(), global npm prefix, path.dirname(process.execPath).
 // Rejects /tmp, os.tmpdir(), and world-writable directories.
 function resolveBinary(name) {
-  // If an env var override is provided (for testing), use it directly.
+  // Env override (for testing): only accept if the path exists on disk.
   const envOverride = process.env.MCP_TASKS_CLAUDE_BINARY;
-  if (envOverride) return envOverride;
+  if (envOverride) {
+    if (fs.existsSync(envOverride)) return envOverride;
+    process.stderr.write(`[intent-extractor] MCP_TASKS_CLAUDE_BINARY override not found: ${envOverride}\n`);
+  }
 
   // Try where/which first
   try {
@@ -62,7 +66,7 @@ function resolveBinary(name) {
   const distCli = path.join(projectRoot, 'dist', 'cli.js');
   if (isTrustedPath(distCli)) return distCli;
 
-  return name; // Return bare name; caller handles missing binary
+  return null; // No trusted path found — caller must handle gracefully
 }
 
 function getGlobalNpmPrefix() {
@@ -202,8 +206,12 @@ function extractIntents(transcript, timeoutMs) {
   // Build the prompt
   const prompt = buildPrompt(transcript);
 
-  // Resolve the claude binary
+  // Resolve the claude binary — returns null if no trusted path found
   const claudeBinary = resolveBinary('claude');
+  if (!claudeBinary) {
+    process.stderr.write('[intent-extractor] claude binary not found in trusted paths — skipping LLM call\n');
+    return [];
+  }
 
   // Call claude CLI via spawnSync
   const result = spawnSync(

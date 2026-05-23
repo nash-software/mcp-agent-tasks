@@ -145,7 +145,7 @@ function readIndexYaml(indexYamlPath, targetPrefix) {
       }
 
       // Detect new id: line (a new task block begins)
-      const idMatch = line.match(/^\s*id:\s+(\S+)/);
+      const idMatch = line.match(/^\s*-?\s*id:\s+(\S+)/);
       if (idMatch) {
         // Flush previous block before starting new one
         if (currentId && currentTitle && !skipTitle) {

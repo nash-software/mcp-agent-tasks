@@ -59,7 +59,7 @@ function resolveBinary(name) {
   const distCli = path.join(projectRoot, 'dist', 'cli.js');
   if (isTrustedPath(distCli)) return distCli;
 
-  return name; // Return bare name; caller handles missing binary
+  return null; // No trusted path found — caller must handle gracefully
 }
 
 function getGlobalNpmPrefix() {
@@ -172,8 +172,9 @@ function routeProject(cwd, projectHint, configOverride) {
   });
 
   if (candidates.length > 0) {
-    // Sort by path length descending — longer path = more specific
-    candidates.sort((a, b) => b.path.length - a.path.length);
+    // Sort by normalized path length descending — longer normalized path = more specific.
+    // Must use normalized length (not raw proj.path) to handle ~, relative, and trailing-sep differences.
+    candidates.sort((a, b) => normalizePath(b.path).length - normalizePath(a.path).length);
     const best = candidates[0];
     return {
       prefix: best.prefix,
@@ -258,19 +259,22 @@ function initGenProject(config, configOverride) {
 
     // Try agent-tasks init GEN via spawnSync
     const binary = resolveBinary('agent-tasks');
-    const genHomePath = os.homedir();
-    const initResult = spawnSync(binary, ['init', 'GEN', '--path', genHomePath, '--tasks-dir', genTasksDir], {
-      encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 10000,
-    });
-
-    if (initResult.status === 0) {
-      return { prefix: 'GEN', tasksDir: genTasksDir, isGlobal: true };
+    const genHomePath = path.join(os.homedir(), '.mcp-tasks');
+    if (binary) {
+      const initResult = spawnSync(binary, ['init', 'GEN', '--path', genHomePath, '--tasks-dir', genTasksDir], {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 10000,
+      });
+      if (initResult.status === 0) {
+        return { prefix: 'GEN', tasksDir: genTasksDir, isGlobal: true };
+      }
+      process.stderr.write(`[project-router] agent-tasks init GEN failed (${initResult.status}), using manual config write\n`);
+    } else {
+      process.stderr.write('[project-router] agent-tasks binary not found — using manual config write\n');
     }
 
-    // init failed — fallback: manual config write with temp-file atomic rename
-    process.stderr.write(`[project-router] agent-tasks init GEN failed (${initResult.status}), using manual config write\n`);
+    // init failed or binary unavailable — fallback: manual config write with temp-file atomic rename
     manualWriteGenConfig(configPath, genTasksDir, genHomePath);
     return { prefix: 'GEN', tasksDir: genTasksDir, isGlobal: true };
 
