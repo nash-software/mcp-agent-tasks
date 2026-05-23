@@ -422,12 +422,20 @@ program
     const preToolUse = hooks['PreToolUse'] as Array<Record<string, unknown>>;
 
     const hookEntry = {
-      key: 'task-gate',
-      matcher: '.*',
-      cmd: `node ${dest}`,
+      matcher: 'Edit|Write|MultiEdit',
+      hooks: [{
+        type: 'command',
+        command: `C:/Users/micha/.claude/hooks/node-hidden.exe ${dest}`,
+        timeout: 3000,
+      }],
     };
 
-    const existingIdx = preToolUse.findIndex(h => h['key'] === 'task-gate');
+    const existingIdx = preToolUse.findIndex(h => {
+      const hooksArr = h['hooks'] as Array<Record<string, unknown>> | undefined;
+      return Array.isArray(hooksArr) && hooksArr.some(
+        e => typeof e['command'] === 'string' && (e['command'] as string).includes('task-gate.js')
+      );
+    });
     if (existingIdx >= 0) {
       preToolUse[existingIdx] = hookEntry;
     } else {
@@ -763,10 +771,22 @@ program
     if (!settings['hooks']) settings['hooks'] = {};
     const hooks = settings['hooks'] as Record<string, unknown>;
     if (!hooks['PreToolUse']) hooks['PreToolUse'] = [];
-    const preToolUse = hooks['PreToolUse'] as Array<Record<string, unknown>>;
-    const hookEntry = { key: 'task-gate', matcher: '.*', cmd: `node ${taskGateDest}` };
-    const existingIdx = preToolUse.findIndex(h => h['key'] === 'task-gate');
-    if (existingIdx >= 0) { preToolUse[existingIdx] = hookEntry; } else { preToolUse.push(hookEntry); }
+    const hookEntry = {
+      matcher: 'Edit|Write|MultiEdit',
+      hooks: [{
+        type: 'command',
+        command: `C:/Users/micha/.claude/hooks/node-hidden.exe ${taskGateDest}`,
+        timeout: 3000,
+      }],
+    };
+    const preToolUseHooks = hooks['PreToolUse'] as Array<Record<string, unknown>>;
+    const existingIdx = preToolUseHooks.findIndex(h => {
+      const hooksArr = h['hooks'] as Array<Record<string, unknown>> | undefined;
+      return Array.isArray(hooksArr) && hooksArr.some(
+        e => typeof e['command'] === 'string' && (e['command'] as string).includes('task-gate.js')
+      );
+    });
+    if (existingIdx >= 0) { preToolUseHooks[existingIdx] = hookEntry; } else { preToolUseHooks.push(hookEntry); }
     if (!options.dryRun) {
       fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
     }
@@ -933,7 +953,7 @@ program
     log(`Registered MCP server in ${claudeJsonPath}`);
 
     // Load or bootstrap settings.json
-    let settings: { hooks: { PostToolUse: Array<Record<string, unknown>>; SessionStart: Array<Record<string, unknown>> } } = { hooks: { PostToolUse: [], SessionStart: [] } };
+    let settings: { hooks: { PostToolUse: Array<Record<string, unknown>>; SessionStart: Array<Record<string, unknown>>; Stop: Array<Record<string, unknown>> } } = { hooks: { PostToolUse: [], SessionStart: [], Stop: [] } };
     if (fs.existsSync(settingsPath)) {
       try {
         const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
@@ -941,17 +961,23 @@ program
         const h = raw['hooks'] as Record<string, unknown>;
         if (!h['PostToolUse']) h['PostToolUse'] = [];
         if (!h['SessionStart']) h['SessionStart'] = [];
+        if (!h['Stop']) h['Stop'] = [];
         settings = raw as typeof settings;
       } catch { /* use defaults */ }
     }
 
-    // Helper: dedup hook entry by filename in cmd
+    // Helper: dedup hook entry by filename in hooks[].command
     function upsertHookEntry(
       arr: Array<Record<string, unknown>>,
       entry: Record<string, unknown>,
       filename: string,
     ): void {
-      const idx = arr.findIndex(h => typeof h['cmd'] === 'string' && (h['cmd'] as string).includes(filename));
+      const idx = arr.findIndex(h => {
+        const hooksArr = h['hooks'] as Array<Record<string, unknown>> | undefined;
+        return Array.isArray(hooksArr) && hooksArr.some(
+          e => typeof e['command'] === 'string' && (e['command'] as string).includes(filename)
+        );
+      });
       if (idx >= 0) { arr[idx] = entry; } else { arr.push(entry); }
     }
 
@@ -973,9 +999,13 @@ program
 
       // 3. Add PostToolUse entry
       const postEntry: Record<string, unknown> = {
-        key: 'passive-capture',
-        matcher: '.*',
-        cmd: `node ${passiveDest}`,
+        matcher: 'Write|Edit',
+        hooks: [{
+          type: 'command',
+          command: `C:/Users/micha/.claude/hooks/node-hidden.exe ${passiveDest}`,
+          timeout: 5000,
+          async: true,
+        }],
       };
       upsertHookEntry(settings.hooks.PostToolUse, postEntry, 'passive-capture.js');
     } else {
@@ -1000,12 +1030,62 @@ program
 
       // 5. Add SessionStart entry
       const sessionEntry: Record<string, unknown> = {
-        key: 'session-task-detector',
-        cmd: `node ${detectorDest}`,
+        matcher: '',
+        hooks: [{
+          type: 'command',
+          command: `C:/Users/micha/.claude/hooks/node-hidden.exe ${detectorDest}`,
+          timeout: 3000,
+          async: false,
+        }],
       };
       upsertHookEntry(settings.hooks.SessionStart, sessionEntry, 'session-task-detector.js');
     } else {
       console.error(`✗ session-task-detector.js not found at ${detectorSrc}`);
+    }
+
+    // 6. Copy stop-intent-extractor.js → ~/.claude/hooks/ (version-aware)
+    const stopSrc = path.join(hooksSourceDir, 'stop-intent-extractor.js');
+    const stopDest = path.join(claudeHooksDir, 'stop-intent-extractor.js');
+    if (fs.existsSync(stopSrc)) {
+      const srcVersion = getHookVersion(stopSrc);
+      const destVersion = getHookVersion(stopDest);
+      if (!fs.existsSync(stopDest) || semverGt(srcVersion, destVersion)) {
+        if (!dryRun) {
+          fs.mkdirSync(claudeHooksDir, { recursive: true });
+          fs.copyFileSync(stopSrc, stopDest);
+          // Also copy lib dependencies
+          const libSrcDir = path.join(hooksSourceDir, 'lib');
+          const libDestDir = path.join(claudeHooksDir, 'lib');
+          if (fs.existsSync(libSrcDir)) {
+            if (!dryRun) fs.mkdirSync(libDestDir, { recursive: true });
+            for (const f of ['intent-extractor.js', 'project-router.js']) {
+              const lsrc = path.join(libSrcDir, f);
+              if (fs.existsSync(lsrc)) fs.copyFileSync(lsrc, path.join(libDestDir, f));
+            }
+          }
+        }
+        log(`Installed stop-intent-extractor.js ${srcVersion} → ${stopDest}`);
+      } else {
+        log(`stop-intent-extractor.js already up to date (${destVersion})`);
+      }
+
+      // 7. Add Stop entry
+      const hookScriptPath = path.join(claudeHooksDir, 'stop-intent-extractor.js');
+      const hookCmd = process.platform === 'win32'
+        ? `"${path.join(claudeHooksDir, 'node-hidden.exe')}" "${hookScriptPath}"`
+        : `node "${hookScriptPath}"`;
+      const stopEntry: Record<string, unknown> = {
+        matcher: '',
+        hooks: [{
+          type: 'command',
+          command: hookCmd,
+          timeout: 30000,
+          async: true,
+        }],
+      };
+      upsertHookEntry(settings.hooks.Stop, stopEntry, 'stop-intent-extractor.js');
+    } else {
+      console.error(`✗ stop-intent-extractor.js not found at ${stopSrc}`);
     }
 
     if (!dryRun) {

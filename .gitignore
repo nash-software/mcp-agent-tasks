@@ -26,3 +26,5 @@ agent-tasks/
 .handbook/intermediate/
 .handbook/logs/
 .handbook/diagnose/cache.json
+
+.claude/state/
