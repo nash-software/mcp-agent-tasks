@@ -51,7 +51,7 @@ function writeTempJsonl(entries: Array<{ role: string; content: string }>): stri
 }
 
 function makeTranscript(count: number): Array<{ role: string; content: string }> {
-  const entries = [];
+  const entries: Array<{ role: string; content: string }> = [];
   for (let i = 0; i < count; i++) {
     entries.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `Message ${i}` });
   }
