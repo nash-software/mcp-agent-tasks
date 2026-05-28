@@ -224,7 +224,9 @@ function extractIntents(transcript, timeoutMs) {
     },
   );
 
-  // Handle errors
+  // Handle spawn errors — on Windows, Job Objects block spawning claude from inside
+  // a Claude Code session (EPERM). spawnSync captures this as result.error rather
+  // than throwing, so we catch it here and fall through to keyword extraction.
   if (result.error) {
     process.stderr.write(`[intent-extractor] spawnSync error: ${result.error.message}\n`);
     return [];
