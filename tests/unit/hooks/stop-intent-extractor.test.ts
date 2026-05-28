@@ -4,7 +4,7 @@
  *
  * Pattern mirrors tests/unit/hooks/passive-capture.test.ts
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
@@ -28,12 +28,46 @@ process.exit(0);
   { encoding: 'utf-8' },
 );
 
+/** Temp JSONL files created during tests — cleaned up in afterEach */
+const tempFiles: string[] = [];
+
+afterEach(() => {
+  for (const f of tempFiles) {
+    try { fs.unlinkSync(f); } catch { /* ignore */ }
+  }
+  tempFiles.length = 0;
+});
+
+/**
+ * Write a JSONL transcript fixture to a temp file.
+ * Returns the file path.
+ */
+function writeTempJsonl(entries: Array<{ role: string; content: string }>): string {
+  const filePath = path.join(os.tmpdir(), `stop-intent-test-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
+  const content = entries.map(e => JSON.stringify(e)).join('\n') + '\n';
+  fs.writeFileSync(filePath, content, 'utf-8');
+  tempFiles.push(filePath);
+  return filePath;
+}
+
 function makeTranscript(count: number): Array<{ role: string; content: string }> {
   const entries = [];
   for (let i = 0; i < count; i++) {
     entries.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `Message ${i}` });
   }
   return entries;
+}
+
+/**
+ * Build the real Stop event payload shape that Claude Code sends.
+ */
+function makeStopPayload(transcriptPath: string, cwd = '/some/project'): Record<string, unknown> {
+  return {
+    transcript_path: transcriptPath,
+    cwd,
+    hook_event_name: 'Stop',
+    stop_hook_active: true,
+  };
 }
 
 function runHook(
@@ -59,10 +93,8 @@ function runHook(
 
 describe('stop-intent-extractor hook', () => {
   it('MCP_TASKS_STOP_HOOK_DISABLED=1 → exits 0, no stderr output', () => {
-    const payload = {
-      transcript: makeTranscript(6),
-      cwd: '/some/project',
-    };
+    const transcriptPath = writeTempJsonl(makeTranscript(6));
+    const payload = makeStopPayload(transcriptPath);
     const result = runHook(payload, { MCP_TASKS_STOP_HOOK_DISABLED: '1' });
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
@@ -89,8 +121,8 @@ describe('stop-intent-extractor hook', () => {
     expect(result.stderr).toBe('');
   });
 
-  it('missing transcript field → exits 0 silently (AC-10)', () => {
-    const payload = { cwd: '/some/project' }; // no transcript
+  it('missing transcript_path and no transcript field → exits 0 silently (AC-10)', () => {
+    const payload = { cwd: '/some/project', hook_event_name: 'Stop', stop_hook_active: true }; // no transcript_path or transcript
     const result = runHook(payload, {
       MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
     });
@@ -99,11 +131,21 @@ describe('stop-intent-extractor hook', () => {
     expect(result.stderr).not.toContain('SENTINEL_INVOKED');
   });
 
-  it('transcript < 4 entries → exits 0, no LLM call (AC-7)', () => {
-    const payload = {
-      transcript: makeTranscript(3), // only 3 entries — below threshold
-      cwd: '/some/project',
-    };
+  it('transcript_path points to nonexistent file → exits 0 with stderr warning', () => {
+    const payload = makeStopPayload('/tmp/does-not-exist-zxqwerty.jsonl');
+    const result = runHook(payload, {
+      MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
+    });
+    expect(result.status).toBe(0);
+    // Should log a warning to stderr about the missing file
+    expect(result.stderr).toContain('[stop-intent] could not read transcript_path');
+    // No LLM call
+    expect(result.stderr).not.toContain('SENTINEL_INVOKED');
+  });
+
+  it('transcript_path with < 4 entries → exits 0, no LLM call (AC-7)', () => {
+    const transcriptPath = writeTempJsonl(makeTranscript(3)); // only 3 entries — below threshold
+    const payload = makeStopPayload(transcriptPath);
     const result = runHook(payload, {
       MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
     });
@@ -111,20 +153,18 @@ describe('stop-intent-extractor hook', () => {
     expect(result.stderr).not.toContain('SENTINEL_INVOKED');
   });
 
-  it('transcript with invalid entry shapes → malformed entries filtered (AC-11); hook exits 0', () => {
+  it('transcript_path with invalid entry shapes → malformed entries filtered (AC-11); hook exits 0', () => {
     // Mix of valid + invalid entries — total valid below 4 threshold → exits without LLM
-    const payload = {
-      transcript: [
-        { role: 'user', content: 'Valid user message' },
-        { role: 'assistant', content: 'Valid assistant message' },
-        { role: 'invalid-role', content: 'Should be filtered' }, // invalid role
-        { role: 'user' }, // missing content
-        null, // null entry
-        42, // non-object
-        { content: 'missing role' }, // missing role
-      ],
-      cwd: '/some/project',
-    };
+    const transcriptPath = writeTempJsonl([
+      { role: 'user', content: 'Valid user message' },
+      { role: 'assistant', content: 'Valid assistant message' },
+      { role: 'invalid-role', content: 'Should be filtered' }, // invalid role
+    ]);
+    // Also manually add malformed lines to the JSONL
+    const raw = fs.readFileSync(transcriptPath, 'utf-8');
+    fs.writeFileSync(transcriptPath, raw + 'null\n42\n{"content":"missing role"}\n', 'utf-8');
+
+    const payload = makeStopPayload(transcriptPath);
     const result = runHook(payload, {
       MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
     });
@@ -133,7 +173,38 @@ describe('stop-intent-extractor hook', () => {
     expect(result.stderr).not.toContain('SENTINEL_INVOKED');
   });
 
-  it('all-assistant transcript → exits 0 silently', () => {
+  it('all-assistant transcript (via transcript_path) → exits 0 silently', () => {
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      role: 'assistant',
+      content: `Message ${i}`,
+    }));
+    const transcriptPath = writeTempJsonl(entries);
+    const payload = makeStopPayload(transcriptPath);
+    const result = runHook(payload, {
+      MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('SENTINEL_INVOKED');
+  });
+
+  // ── Legacy fallback path (test-harness / forward compat) ─────────────────────
+  // These tests verify that the hook still accepts a raw `transcript` array in
+  // the payload (no transcript_path), for use in automated test harnesses that
+  // cannot write temp JSONL files.
+
+  it('[legacy] transcript array in payload (no transcript_path) < 4 entries → exits 0, no LLM call', () => {
+    const payload = {
+      transcript: makeTranscript(3),
+      cwd: '/some/project',
+    };
+    const result = runHook(payload, {
+      MCP_TASKS_CLAUDE_BINARY: SENTINEL_BINARY_PATH,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain('SENTINEL_INVOKED');
+  });
+
+  it('[legacy] all-assistant transcript array (no transcript_path) → exits 0 silently', () => {
     const payload = {
       transcript: [
         { role: 'assistant', content: 'Message 1' },
