@@ -1,8 +1,9 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME } from './config/loader.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 
@@ -104,13 +105,22 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
     return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
   }
 
-  return config.projects.map(p => {
+  const indexes = config.projects.map(p => {
     const tasksDir = join(p.path, tasksDirName);
-    const dbPath = existsSync(tasksDir) ? join(tasksDir, '.index.db') : getDbPath();
+    const dbPath = resolveServerDbPath(tasksDir, config, p.prefix);
     const idx = new SqliteIndex(dbPath);
     idx.init();
     return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) };
   });
+
+  const genDbPath = join(homedir(), '.mcp-tasks', 'tasks', 'gen', '.index.db');
+  if (existsSync(genDbPath)) {
+    const genIdx = new SqliteIndex(genDbPath);
+    genIdx.init();
+    indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()) });
+  }
+
+  return indexes;
 }
 
 export async function startUiServer(opts: { port: number; openBrowser?: boolean }): Promise<UiServerHandle> {
