@@ -302,7 +302,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                         <span className={STATUS_DOT[t.from as TaskStatus] ? `text-ink-2` : 'text-ink-muted'}>
                           {t.from}
                         </span>
-                        {/* U+2192 RIGHT ARROW — fixed mojibake (was â†') */}
+                        {/* U+2192 RIGHT ARROW (fixes the mojibake in the old TaskDetailPanel) */}
                         <span className="text-ink-faint" aria-hidden>→</span>
                         <span className={STATUS_DOT[t.to as TaskStatus] ? `text-ink-2` : 'text-ink-muted'}>
                           {t.to}
