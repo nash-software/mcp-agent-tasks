@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
@@ -123,6 +124,96 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   return indexes;
 }
 
+function rerouteTask(taskId: string, targetPrefix: string, projectIndexes: ProjectIndex[]): void {
+  const sourceIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+  if (!sourceIdx) return;
+
+  const targetIdx = projectIndexes.find(p => p.prefix === targetPrefix);
+  if (!targetIdx || targetIdx === sourceIdx) return; // already there or target doesn't exist
+
+  const task = sourceIdx.index.getTask(taskId);
+  if (!task) return;
+
+  // Assign a new ID in the target project
+  const num = targetIdx.index.nextId(targetPrefix);
+  const newId = `${targetPrefix}-${String(num).padStart(3, '0')}`;
+  const now = new Date().toISOString();
+  const rerouted = {
+    ...task,
+    id: newId,
+    project: targetPrefix,
+    file_path: `${newId}.md`,
+    updated: now,
+    last_activity: now,
+  };
+  targetIdx.index.upsertTask(rerouted);
+  sourceIdx.index.deleteTask(taskId);
+}
+
+function spawnBackgroundRouting(
+  text: string,
+  taskId: string,
+  projectIndexes: ProjectIndex[],
+  genIdx: ProjectIndex,
+): void {
+  // Explicit #prefix routing — skip LLM entirely
+  const prefixMatch = text.match(/^#([A-Za-z]+)\s+/);
+  if (prefixMatch) {
+    const candidate = prefixMatch[1].toUpperCase();
+    const match = projectIndexes.find(p => p.prefix === candidate);
+    if (match && match !== genIdx) {
+      rerouteTask(taskId, match.prefix, projectIndexes);
+    }
+    return;
+  }
+
+  // LLM routing via claude CLI
+  const prefixList = projectIndexes.map(p => p.prefix).join(', ');
+  const prompt = `Given this task: '${text}', which project prefix from [${prefixList}] best fits? Reply with ONLY the prefix or GEN.`;
+
+  let finished = false;
+  let stdout = '';
+
+  try {
+    const child = spawn('claude', ['-p', prompt], {
+      detached: false,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+
+    const timer = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        child.kill();
+      }
+    }, 30_000);
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      if (finished) return;
+      finished = true;
+      const resolved = stdout.trim().toUpperCase().replace(/[^A-Z]/g, '');
+      if (resolved && resolved !== genIdx.prefix) {
+        const target = projectIndexes.find(p => p.prefix === resolved);
+        if (target) {
+          rerouteTask(taskId, resolved, projectIndexes);
+        }
+      }
+    });
+
+    child.on('error', () => {
+      clearTimeout(timer);
+      finished = true;
+      // Task stays in GEN — silent fallback
+    });
+  } catch {
+    // Spawn failure — task stays in GEN, no error surfaced
+  }
+}
+
 export async function startUiServer(opts: { port: number; openBrowser?: boolean }): Promise<UiServerHandle> {
   const config = loadConfig();
   const projectIndexes = openProjectIndexes(config);
@@ -163,13 +254,14 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: config (conductor URLs for action button)
+      // API: config (conductor URLs for action button + project prefix list for capture)
       if (pathname === '/api/config') {
-        const cfg: Record<string, string> = {};
+        const cfg: Record<string, unknown> = {};
         const localUrl = process.env['CONDUCTOR_LOCAL_URL'];
         const vpsUrl = process.env['CONDUCTOR_VPS_URL'];
         if (localUrl) cfg.conductorLocalUrl = localUrl;
         if (vpsUrl) cfg.conductorVpsUrl = vpsUrl;
+        cfg.projectPrefixes = projectIndexes.map(p => p.prefix);
         sendJson(res, 200, cfg);
         return;
       }
@@ -467,6 +559,77 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendError(res, 400, msg);
+          }
+        });
+        return;
+      }
+
+      // API: quick capture — instant GEN inbox write + background LLM routing
+      if (pathname === '/api/capture/quick' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { text?: unknown };
+            if (!body.text || typeof body.text !== 'string' || body.text.trim().length === 0) {
+              sendJson(res, 400, { error: 'EMPTY_TEXT', message: 'text is required and must not be empty' });
+              return;
+            }
+            if (body.text.length > 2000) {
+              sendJson(res, 400, { error: 'TEXT_TOO_LONG', message: 'text must be 2000 characters or fewer' });
+              return;
+            }
+            const text = body.text.trim();
+
+            // Resolve the GEN project index (always store to GEN inbox)
+            const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+            if (!genIdx) {
+              sendJson(res, 500, { error: 'NO_PROJECT', message: 'No project index available' });
+              return;
+            }
+
+            const num = genIdx.index.nextId(genIdx.prefix);
+            const taskId = `${genIdx.prefix}-${String(num).padStart(3, '0')}`;
+            const now = new Date().toISOString();
+            const task = {
+              schema_version: 1,
+              id: taskId,
+              title: text.slice(0, 120),
+              type: 'chore' as const,
+              status: 'todo' as const,
+              priority: 'medium' as const,
+              project: genIdx.prefix,
+              tags: [],
+              complexity: 1,
+              complexity_manual: false,
+              why: '',
+              created: now,
+              updated: now,
+              last_activity: now,
+              claimed_by: null,
+              claimed_at: null,
+              claim_ttl_hours: 4,
+              parent: null,
+              children: [],
+              dependencies: [],
+              subtasks: [],
+              git: { commits: [] },
+              transitions: [],
+              files: [],
+              body: text,
+              file_path: `${taskId}.md`,
+              auto_captured: true,
+            };
+            genIdx.index.upsertTask(task);
+
+            // Respond immediately — background routing is fire-and-forget
+            sendJson(res, 200, { taskId, project: genIdx.prefix });
+
+            // Background routing: #prefix explicit, or LLM
+            spawnBackgroundRouting(text, taskId, projectIndexes, genIdx);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
         return;

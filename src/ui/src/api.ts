@@ -80,6 +80,25 @@ export async function scheduleTask(id: string, date: string | null): Promise<Tas
   return res.json() as Promise<Task>
 }
 
+export async function quickCapture(text: string): Promise<{ taskId: string; project: string }> {
+  const res = await fetch('/api/capture/quick', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `Capture failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ taskId: string; project: string }>
+}
+
+export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }> {
+  const res = await fetch('/api/config')
+  if (!res.ok) return {}
+  return res.json() as Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }>
+}
+
 export async function createMilestone(data: {
   id: string; title: string; project: string; description?: string; due_date?: string
 }): Promise<Milestone> {
