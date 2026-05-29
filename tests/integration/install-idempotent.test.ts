@@ -100,17 +100,19 @@ describe('install command idempotency', () => {
     }
 
     const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Settings;
-    const postToolUse = settings.hooks.PostToolUse ?? [];
-    const passiveCaptureEntries = postToolUse.filter(
-      (h) => typeof h['cmd'] === 'string' && (h['cmd'] as string).includes('passive-capture.js'),
-    );
-    expect(passiveCaptureEntries.length).toBe(1);
+    // Hook entries use the Claude Code schema: { matcher, hooks: [{ type, command, ... }] }.
+    // Count entries whose nested hooks[].command references the given script.
+    const entriesReferencing = (group: Array<Record<string, unknown>>, script: string): number =>
+      group.filter((entry) => {
+        const inner = entry['hooks'];
+        return Array.isArray(inner) && inner.some(
+          (h) => typeof (h as Record<string, unknown>)['command'] === 'string' &&
+            ((h as Record<string, unknown>)['command'] as string).includes(script),
+        );
+      }).length;
 
-    const sessionStart = settings.hooks.SessionStart ?? [];
-    const detectorEntries = sessionStart.filter(
-      (h) => typeof h['cmd'] === 'string' && (h['cmd'] as string).includes('session-task-detector.js'),
-    );
-    expect(detectorEntries.length).toBe(1);
+    expect(entriesReferencing(settings.hooks.PostToolUse ?? [], 'passive-capture.js')).toBe(1);
+    expect(entriesReferencing(settings.hooks.SessionStart ?? [], 'session-task-detector.js')).toBe(1);
 
     // Check stdout from r1/r2 is not empty
     expect(r1.stdout.length + r2.stdout.length).toBeGreaterThan(0);
