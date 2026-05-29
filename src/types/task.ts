@@ -94,6 +94,8 @@ export interface TaskFrontmatter {
   scheduled_for?: string | null; // YYYY-MM-DD date committed to for Today view, or null
   agent_status?: AgentStatus;   // Hermes sign-off marker; absence = not signed off to the agent layer
   block_reason?: string;        // shown when status === 'blocked'
+  triage_note?: string;         // Haiku triage explanation (max 500 chars); set when draft stays draft
+  triage_confidence?: number;   // Haiku confidence score 0.0–1.0; set alongside triage_note
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches

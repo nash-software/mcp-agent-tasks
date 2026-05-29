@@ -46,6 +46,8 @@ interface TaskRow {
   scheduled_for: string | null;
   agent_status: string | null;
   block_reason: string | null;
+  triage_note: string | null;
+  triage_confidence: number | null;
 }
 
 interface SubtaskRow {
@@ -134,6 +136,8 @@ export class SqliteIndex {
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
     addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL)");
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
 
     // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
     this.db.exec(`
@@ -250,6 +254,8 @@ export class SqliteIndex {
       ...(row.scheduled_for !== null ? { scheduled_for: row.scheduled_for } : {}),
       ...(row.agent_status !== null ? { agent_status: row.agent_status as AgentStatus } : {}),
       ...(row.block_reason !== null ? { block_reason: row.block_reason } : {}),
+      ...(row.triage_note !== null ? { triage_note: row.triage_note } : {}),
+      ...(row.triage_confidence !== null ? { triage_confidence: row.triage_confidence } : {}),
     };
 
     // Attach references if any exist
@@ -276,7 +282,8 @@ export class SqliteIndex {
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
         file_path, body, schema_version, spec_file,
         milestone, estimate_hours, plan_file, auto_captured,
-        area, scheduled_for, agent_status, block_reason
+        area, scheduled_for, agent_status, block_reason,
+        triage_note, triage_confidence
       ) VALUES (
         @id, @title, @type, @status, @priority, @project,
         @complexity, @complexity_manual, @why, @parent,
@@ -285,7 +292,8 @@ export class SqliteIndex {
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
         @file_path, @body, @schema_version, @spec_file,
         @milestone, @estimate_hours, @plan_file, @auto_captured,
-        @area, @scheduled_for, @agent_status, @block_reason
+        @area, @scheduled_for, @agent_status, @block_reason,
+        @triage_note, @triage_confidence
       )
     `);
 
@@ -326,6 +334,8 @@ export class SqliteIndex {
         scheduled_for: t.scheduled_for ?? null,
         agent_status: t.agent_status ?? null,
         block_reason: t.block_reason ?? null,
+        triage_note: t.triage_note ?? null,
+        triage_confidence: t.triage_confidence ?? null,
       });
 
       // Delete and re-insert related rows
@@ -563,6 +573,18 @@ export class SqliteIndex {
       ORDER BY
         CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
         title ASC
+      LIMIT ?
+    `).all(limit) as TaskRow[];
+    return rows.map(r => this.rowToTask(r));
+  }
+
+  /** Returns draft tasks that have a triage_note (the "Needs your call" queue). */
+  getDraftTasksWithTriageNote(limit: number = 50): Task[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM tasks
+      WHERE status = 'draft'
+        AND triage_note IS NOT NULL
+      ORDER BY last_activity DESC
       LIMIT ?
     `).all(limit) as TaskRow[];
     return rows.map(r => this.rowToTask(r));

@@ -68,6 +68,8 @@
     "area": { "type": "string", "enum": ["client", "personal", "outsource", "internal"] },
     "scheduled_for": { "type": ["string", "null"] },
     "agent_status": { "type": ["string", "null"], "enum": ["scheduled", "running", "done", null] },
-    "block_reason": { "type": ["string", "null"] }
+    "block_reason": { "type": ["string", "null"] },
+    "triage_note": { "type": "string", "maxLength": 500 },
+    "triage_confidence": { "type": "number", "minimum": 0, "maximum": 1 }
   }
 }

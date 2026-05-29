@@ -8,6 +8,7 @@ import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } fr
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
+import type { Priority, Area } from './types/task.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -587,6 +588,222 @@ function spawnBackgroundRouting(
   }
 }
 
+// ── Draft auto-triage (P2-04b) ────────────────────────────────────────────────
+
+/**
+ * Read DRAFT_TRIAGE_THRESHOLD from env at call time (default 0.8, clamped to [0, 1]).
+ * NaN (non-numeric env value) falls back to 0.8.
+ */
+function getDraftTriageThreshold(): number {
+  const raw = parseFloat(process.env['DRAFT_TRIAGE_THRESHOLD'] ?? '0.8');
+  const val = isNaN(raw) ? 0.8 : raw;
+  return Math.min(1.0, Math.max(0.0, val));
+}
+
+function buildTriagePrompt(title: string, captureContext: string | null, knownPrefixes: string): string {
+  const ctx = captureContext ?? 'none';
+  const prefixHint = captureContext ?? 'unknown';
+  return `You are triaging a passively captured draft task. Return JSON only.
+
+Title: ${title}
+Project hint: ${prefixHint}
+Context: ${ctx}
+
+Classify this draft:
+- project: one of [${knownPrefixes}] or 'GEN' if unclear
+- priority: critical|high|medium|low
+- area: client|personal|outsource|internal
+- confidence: 0.0-1.0 (how certain are you of project+priority)
+- needs_human: true if this is a decision/question/ambiguous, false if it's a clear actionable task
+- triage_note: one short sentence explaining low confidence or why needs_human=true (omit if confidence>=0.8 and needs_human=false)`;
+}
+
+interface TriageResponse {
+  project: string;
+  priority: string;
+  area: string;
+  confidence: number;
+  needs_human: boolean;
+  triage_note?: string;
+}
+
+const VALID_PRIORITIES = new Set(['critical', 'high', 'medium', 'low']);
+const VALID_AREAS = new Set(['client', 'personal', 'outsource', 'internal']);
+
+function parseTriageResponse(stdout: string): TriageResponse | null {
+  const match = stdout.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const r = parsed as Record<string, unknown>;
+  if (typeof r['project'] !== 'string') return null;
+  if (typeof r['priority'] !== 'string' || !VALID_PRIORITIES.has(r['priority'])) return null;
+  if (typeof r['area'] !== 'string' || !VALID_AREAS.has(r['area'])) return null;
+  if (typeof r['confidence'] !== 'number') return null;
+  if (typeof r['needs_human'] !== 'boolean') return null;
+  return {
+    project: r['project'] as string,
+    priority: r['priority'] as string,
+    area: r['area'] as string,
+    confidence: r['confidence'] as number,
+    needs_human: r['needs_human'] as boolean,
+    triage_note: typeof r['triage_note'] === 'string' ? r['triage_note'] : undefined,
+  };
+}
+
+function applyFallback(taskId: string, projectIndexes: ProjectIndex[]): void {
+  const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+  if (!pIdx) return;
+  const task = pIdx.index.getTask(taskId);
+  if (!task) return;
+  task.triage_note = 'Auto-triage unavailable — review manually';
+  const now = new Date().toISOString();
+  task.updated = now;
+  task.last_activity = now;
+  // Persist markdown first, then SQLite (source-of-truth pattern from P2-04)
+  const mdPath = join(pIdx.tasksDir, task.file_path);
+  if (existsSync(mdPath)) {
+    try {
+      const mdStore = new MarkdownStore();
+      const mdTask = mdStore.read(mdPath);
+      mdTask.file_path = mdPath;
+      mdTask.triage_note = 'Auto-triage unavailable — review manually';
+      mdTask.updated = now;
+      mdTask.last_activity = now;
+      mdStore.write(mdTask);
+    } catch {
+      // If markdown write fails, still update SQLite — at least the index is updated
+    }
+  }
+  pIdx.index.upsertTask(task);
+}
+
+function applyTriageResult(
+  taskId: string,
+  stdout: string,
+  projectIndexes: ProjectIndex[],
+  threshold: number,
+): void {
+  const parsed = parseTriageResponse(stdout);
+  if (!parsed) {
+    applyFallback(taskId, projectIndexes);
+    return;
+  }
+
+  const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+  if (!pIdx) return;
+  const task = pIdx.index.getTask(taskId);
+  if (!task) return;
+
+  const shouldPromote = parsed.confidence >= threshold && !parsed.needs_human;
+  const now = new Date().toISOString();
+  task.updated = now;
+  task.last_activity = now;
+
+  if (shouldPromote && task.status === 'draft') {
+    // Auto-promote: patch project/priority/area, transition to todo
+    const targetPrefix = parsed.project.toUpperCase();
+    const targetIdx = projectIndexes.find(p => p.prefix === targetPrefix) ?? pIdx;
+    task.project = targetIdx.prefix;
+    task.priority = parsed.priority as Priority;
+    if (VALID_AREAS.has(parsed.area)) task.area = parsed.area as Area;
+    task.status = 'todo';
+    task.transitions.push({ from: 'draft', to: 'todo', at: now, reason: 'Auto-promoted by Haiku triage' });
+    // Clear triage_note on promoted tasks
+    delete task.triage_note;
+    delete task.triage_confidence;
+  } else {
+    // Flag path: stays draft, write note + confidence
+    task.triage_note = parsed.triage_note ?? `Confidence: ${parsed.confidence}; needs_human: ${String(parsed.needs_human)}`;
+    task.triage_confidence = parsed.confidence;
+  }
+
+  // Persist markdown first, then SQLite
+  const mdPath = join(pIdx.tasksDir, task.file_path);
+  if (existsSync(mdPath)) {
+    try {
+      const mdStore = new MarkdownStore();
+      const mdTask = mdStore.read(mdPath);
+      mdTask.file_path = mdPath;
+      mdTask.status = task.status;
+      mdTask.priority = task.priority;
+      mdTask.project = task.project;
+      if (task.area !== undefined) mdTask.area = task.area;
+      mdTask.transitions = task.transitions;
+      mdTask.updated = now;
+      mdTask.last_activity = now;
+      if (task.triage_note !== undefined) {
+        mdTask.triage_note = task.triage_note;
+      } else {
+        delete mdTask.triage_note;
+      }
+      if (task.triage_confidence !== undefined) {
+        mdTask.triage_confidence = task.triage_confidence;
+      } else {
+        delete mdTask.triage_confidence;
+      }
+      mdStore.write(mdTask);
+    } catch {
+      // Non-fatal: if markdown write fails continue with SQLite update
+    }
+  }
+  pIdx.index.upsertTask(task);
+}
+
+function spawnBackgroundTriage(
+  taskId: string,
+  title: string,
+  captureContext: string | null,
+  projectIndexes: ProjectIndex[],
+): void {
+  const knownPrefixes = projectIndexes.map(p => p.prefix).join(', ');
+  const prompt = buildTriagePrompt(title, captureContext, knownPrefixes);
+  const threshold = getDraftTriageThreshold();
+
+  let finished = false;
+  let stdout = '';
+
+  try {
+    const child = spawn('claude', [
+      '--model', 'claude-haiku-4-5-20251001',
+      '-p', prompt,
+    ], { detached: false, stdio: ['ignore', 'pipe', 'ignore'] });
+
+    const timer = setTimeout(() => {
+      if (!finished) {
+        finished = true;
+        child.kill();
+        applyFallback(taskId, projectIndexes);
+      }
+    }, 30_000);
+
+    child.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+
+    child.on('close', () => {
+      clearTimeout(timer);
+      if (finished) return;
+      finished = true;
+      applyTriageResult(taskId, stdout, projectIndexes, threshold);
+    });
+
+    child.on('error', () => {
+      clearTimeout(timer);
+      if (finished) return;
+      finished = true;
+      applyFallback(taskId, projectIndexes);
+    });
+  } catch {
+    applyFallback(taskId, projectIndexes);
+  }
+}
+
 export async function startUiServer(opts: { port: number; openBrowser?: boolean }): Promise<UiServerHandle> {
   const config = loadConfig();
   const projectIndexes = openProjectIndexes(config);
@@ -773,12 +990,34 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               auto_captured: false,
             };
             pIdx.index.upsertTask(task);
+            // Fire-and-forget Haiku auto-triage on the new draft (does not block the response).
+            spawnBackgroundTriage(id, body.title, body.body ?? null, projectIndexes);
             sendJson(res, 201, { id, title: body.title, status: 'draft', project: body.project });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: re-run draft auto-triage on demand (P2-04b)
+      const triageMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/triage$/);
+      if (triageMatch && req.method === 'POST') {
+        const taskId = triageMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        if (task.status !== 'draft') {
+          sendJson(res, 400, { error: 'INVALID_TRANSITION', message: `Task is '${task.status}', not 'draft'` });
+          return;
+        }
+        // Fire-and-forget; respond immediately with accepted (triage applies asynchronously).
+        spawnBackgroundTriage(taskId, task.title, task.why || null, projectIndexes);
+        sendJson(res, 202, { id: taskId, status: 'triage_started' });
         return;
       }
 
