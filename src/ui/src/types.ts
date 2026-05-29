@@ -89,13 +89,6 @@ export interface StatsEntry {
   stats: StatsData
 }
 
-export interface FilterState {
-  project: string
-  status: string
-  milestone: string
-  label: string
-}
-
 export interface ArtifactEntry {
   path: string
   project: string

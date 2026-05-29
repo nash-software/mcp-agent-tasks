@@ -1,12 +1,13 @@
 import React, { useState, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { FilterState, Task } from '../types'
+import type { Task } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone } from '../api'
+import { type Filter, matchFilter } from '../lib/filter'
 
 interface Props {
-  filters: FilterState
+  filter: Filter
 }
 
 /** Derive the first project prefix found among milestone-related tasks. */
@@ -17,12 +18,10 @@ function deriveProject(related: Task[]): string | null {
   return null
 }
 
-export function RoadmapView({ filters }: Props): React.JSX.Element {
+export function RoadmapView({ filter }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
   const { milestones, isLoading: mlLoading, error: mlError } = useMilestones()
-  const { tasks, isLoading: tLoading } = useTasks({
-    project: filters.project || undefined,
-  })
+  const { tasks, isLoading: tLoading } = useTasks()
 
   // Inline create form state
   const [showForm, setShowForm]     = useState(false)
@@ -78,6 +77,16 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
       </div>
     )
   }
+
+  // Milestones carry no `area` — derive project from related tasks, then matchFilter
+  // (area resolved via areaOfProject). A milestone whose project can't be derived passes
+  // only when no project filter is active.
+  const visibleMilestones = milestones.filter(ms => {
+    const related = tasks.filter(t => t.milestone === ms.id)
+    const project = deriveProject(related)
+    if (project == null) return filter.projects.length === 0 && filter.areas.length === 0
+    return matchFilter(filter, project)
+  })
 
   return (
     <div className="p-6 space-y-4">
@@ -137,12 +146,14 @@ export function RoadmapView({ filters }: Props): React.JSX.Element {
       )}
 
       {/* Empty state */}
-      {milestones.length === 0 && (
-        <p className="text-ink-muted text-sm">No milestones found.</p>
+      {visibleMilestones.length === 0 && (
+        <p className="text-ink-muted text-sm">
+          {milestones.length === 0 ? 'No milestones found.' : 'No milestones match this filter.'}
+        </p>
       )}
 
       {/* Milestone cards */}
-      {milestones.map(ms => {
+      {visibleMilestones.map(ms => {
         const related   = tasks.filter(t => t.milestone === ms.id)
         const done      = related.filter(t => t.status === 'done').length
         const pct       = related.length > 0 ? Math.round((done / related.length) * 100) : 0

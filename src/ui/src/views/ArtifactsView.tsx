@@ -14,6 +14,7 @@ import { useArtifacts } from '../hooks/useArtifacts'
 import { markArtifactOpened } from '../api'
 import { PrefixBadge } from '../components/atoms'
 import type { ArtifactEntry, PanelState } from '../types'
+import { type Filter, matchFilter } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -200,10 +201,11 @@ function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): Rea
 // ── ArtifactsView ─────────────────────────────────────────────────────────────
 
 interface ArtifactsViewProps {
+  filter: Filter
   onOpenPanel: (panel: PanelState) => void
 }
 
-export function ArtifactsView({ onOpenPanel }: ArtifactsViewProps): React.JSX.Element {
+export function ArtifactsView({ filter, onOpenPanel }: ArtifactsViewProps): React.JSX.Element {
   const { artifacts, isLoading } = useArtifacts()
   const [toastMsg, setToastMsg] = useState<string | null>(null)
 
@@ -212,8 +214,11 @@ export function ArtifactsView({ onOpenPanel }: ArtifactsViewProps): React.JSX.El
     setTimeout(() => setToastMsg(null), 2200)
   }, [])
 
+  // Artifacts carry no `area` — matchFilter derives it from the project via areaOfProject.
+  const filtered = artifacts.filter(a => matchFilter(filter, a.project))
+
   // AC-2: explicit client-side sort by staleDays descending — never rely on API ordering
-  const sorted = sortByStaleDesc(artifacts)
+  const sorted = sortByStaleDesc(filtered)
   const unvisited = sorted.filter(a => a.last_opened_at === null).length
 
   return (
@@ -244,14 +249,23 @@ export function ArtifactsView({ onOpenPanel }: ArtifactsViewProps): React.JSX.El
         <p className="text-ink-muted text-sm">Loading…</p>
       )}
 
-      {/* Empty state — AC-6 */}
+      {/* Empty state — AC-6 (distinguishes "no data" from "filtered to nothing") */}
       {!isLoading && sorted.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Files size={32} className="text-ink-faint mb-4" />
-          <p className="text-ink-2 font-medium text-sm mb-1">No artifacts yet</p>
-          <p className="text-ink-muted text-sm max-w-xs">
-            They'll appear here automatically whenever Claude creates or edits files for you.
-          </p>
+          {artifacts.length > 0 ? (
+            <>
+              <p className="text-ink-2 font-medium text-sm mb-1">No artifacts match this filter</p>
+              <p className="text-ink-muted text-sm max-w-xs">Clear the filter to see all artifacts.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-ink-2 font-medium text-sm mb-1">No artifacts yet</p>
+              <p className="text-ink-muted text-sm max-w-xs">
+                They'll appear here automatically whenever Claude creates or edits files for you.
+              </p>
+            </>
+          )}
         </div>
       )}
 
