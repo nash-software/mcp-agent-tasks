@@ -1,3 +1,37 @@
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --accent: #0070F3;
+    --accent-hover: #0062D6;
+    --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+    --row-h: 40px;
+    --nav-w: 216px;
+    --ambient-w: 296px;
+    --page-pad: 24px;
+    --section-gap: 24px;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply font-sans;
+    font-feature-settings: "ss03", "calt", "kern", "liga";
+  }
+
+  /* DENSITY_TEST_MARKER */
+  [data-density="compact"] {
+    --row-h: 34px;
+  }
+
+  [data-density="airy"] {
+    --row-h: 46px;
+  }
+}
