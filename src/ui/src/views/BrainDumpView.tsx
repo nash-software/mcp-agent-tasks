@@ -1,8 +1,11 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useBrainDump } from '../hooks/useBrainDump'
 import { CandidateCard } from '../components/CandidateCard'
 import { useAcrStatus } from '../hooks/useAcrStatus'
 import type { BrainDumpCandidate } from '../hooks/useBrainDump'
+
+// Abort timeout in milliseconds for the parse request
+const PARSE_TIMEOUT_MS = 60_000
 
 // Inline voice capture for brain dump — appends transcript instead of creating a task
 function VoiceButton({ onTranscript }: { onTranscript: (text: string) => void }): React.JSX.Element {
@@ -59,38 +62,41 @@ function VoiceButton({ onTranscript }: { onTranscript: (text: string) => void })
   }, [])
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col items-end gap-1">
       {state === 'idle' && (
         <button
           onClick={startRecording}
-          className="w-8 h-8 rounded-full bg-violet-700 hover:bg-violet-600 flex items-center justify-center text-white text-sm transition-colors"
+          className="w-8 h-8 rounded-full bg-surface-2 hover:bg-surface-3 border border-surface-3 flex items-center justify-center text-ink-muted hover:text-ink transition-colors"
           title="Record voice (appends to text)"
           type="button"
         >
-          🎙
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" y1="19" x2="12" y2="22" />
+          </svg>
         </button>
       )}
       {state === 'recording' && (
         <button
           onClick={stopRecording}
-          className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 flex items-center justify-center text-white text-xs transition-colors animate-pulse"
+          className="w-8 h-8 rounded-full bg-status-red/20 border border-status-red/40 flex items-center justify-center text-status-red transition-colors animate-pulse"
           title="Stop recording"
           type="button"
         >
-          ⏹
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+          </svg>
         </button>
       )}
       {state === 'transcribing' && (
-        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-          <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 rounded-full bg-surface-2 border border-surface-3 flex items-center justify-center">
+          <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         </div>
       )}
-      <span className="text-xs text-slate-500">
-        {state === 'idle' && 'Voice'}
-        {state === 'recording' && 'Recording…'}
-        {state === 'transcribing' && 'Transcribing…'}
-      </span>
-      {error && <span className="text-xs text-red-400">{error}</span>}
+      {error && (
+        <span className="text-xs text-status-red text-right max-w-[120px] leading-tight">{error}</span>
+      )}
     </div>
   )
 }
@@ -104,32 +110,66 @@ interface CardState {
 
 interface Props {
   projects: string[]
+  /** Optional prefill text (P2-03 entry point). When supplied, prefills the textarea and focuses it. */
+  initialText?: string
 }
 
-export function BrainDumpView({ projects }: Props): React.JSX.Element {
-  const [dump, setDump] = useState('')
+export function BrainDumpView({ projects, initialText }: Props): React.JSX.Element {
+  const [dump, setDump] = useState(initialText ?? '')
   const [cards, setCards] = useState<CardState[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
   const [createdCount, setCreatedCount] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const { parseMutation, commitMutation, dispatchMutation } = useBrainDump()
   const { data: acrStatus } = useAcrStatus()
   const acrOffline = acrStatus?.offline ?? false
 
+  // P2-03 entry point: when initialText changes to a new non-empty value, prefill and focus
+  useEffect(() => {
+    if (initialText !== undefined && initialText !== '') {
+      setDump(initialText)
+      setCards([])
+      setParseError(null)
+      setCreatedCount(null)
+      setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 0)
+    }
+  }, [initialText])
+
   const handleTranscript = useCallback((text: string) => {
     setDump(prev => prev ? prev + ' ' + text : text)
   }, [])
+
+  const phase: 'input' | 'processing' | 'review' | 'done' = (() => {
+    if (parseMutation.isPending) return 'processing'
+    if (createdCount !== null && cards.length > 0 && cards.every(c => c.committed || c.dispatched)) return 'done'
+    if (createdCount !== null && cards.length === 0) return 'done'
+    if (cards.length > 0) return 'review'
+    return 'input'
+  })()
 
   const handleSubmit = useCallback(() => {
     if (!dump.trim() || parseMutation.isPending) return
     setParseError(null)
     setCards([])
     setCreatedCount(null)
+
+    // Create a new AbortController for the 60s timeout
+    const controller = new AbortController()
+    abortRef.current = controller
+    const timeoutId = setTimeout(() => {
+      controller.abort()
+    }, PARSE_TIMEOUT_MS)
+
     parseMutation.mutate(dump.trim(), {
       onSuccess: (result) => {
-        if (result.error && result.candidates.length === 0) {
-          setParseError(result.error)
+        clearTimeout(timeoutId)
+        if (result.candidates.length === 0) {
+          // parse failure — text preserved by not clearing dump
+          setParseError('Couldn\'t parse this — here\'s your text back.')
           return
         }
         setCards(result.candidates.map(c => ({
@@ -139,8 +179,9 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
           acrOffline: false,
         })))
       },
-      onError: (err) => {
-        setParseError(err instanceof Error ? err.message : 'Request failed')
+      onError: () => {
+        clearTimeout(timeoutId)
+        setParseError('Couldn\'t parse this — here\'s your text back.')
       },
     })
   }, [dump, parseMutation])
@@ -156,7 +197,14 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
     commitMutation.mutate([candidate], {
       onSuccess: (result) => {
         if (result.created.length > 0) {
-          setCards(prev => prev.map((c, i) => i === index ? { ...c, committed: true } : c))
+          setCards(prev => {
+            const next = prev.map((c, i) => i === index ? { ...c, committed: true } : c)
+            const allDone = next.every(c => c.committed || c.dispatched)
+            if (allDone) {
+              setCreatedCount(prev.filter(c => c.committed).length + 1)
+            }
+            return next
+          })
         }
       },
     })
@@ -167,18 +215,32 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
       { title: candidate.title, detail: candidate.why ?? candidate.area },
       {
         onSuccess: (result) => {
-          setCards(prev => prev.map((c, i) =>
-            i === index
-              ? { ...c, dispatched: true, acrOffline: Boolean(result.error) }
-              : c,
-          ))
+          setCards(prev => {
+            const next = prev.map((c, i) =>
+              i === index
+                ? { ...c, dispatched: true, acrOffline: Boolean(result.error) }
+                : c,
+            )
+            const allDone = next.every(c => c.committed || c.dispatched)
+            if (allDone) {
+              setCreatedCount(prev.filter(c => c.committed).length)
+            }
+            return next
+          })
         },
       },
     )
   }, [dispatchMutation])
 
   const handleRemove = useCallback((index: number) => {
-    setCards(prev => prev.filter((_, i) => i !== index))
+    setCards(prev => {
+      const next = prev.filter((_, i) => i !== index)
+      if (next.length === 0) {
+        // All removed — treat as done with whatever was committed
+        setCreatedCount(prev.filter(c => c.committed).length)
+      }
+      return next
+    })
   }, [])
 
   const handleCreateAll = useCallback(() => {
@@ -194,85 +256,148 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
         onSuccess: (result) => {
           if (result.created.length > 0) {
             const committedIndexes = new Set(pending.slice(0, result.created.length).map(p => p.index))
-            setCards(prev => prev.map((c, i) =>
-              committedIndexes.has(i) ? { ...c, committed: true } : c,
-            ))
-            setCreatedCount(result.created.length)
+            setCards(prev => {
+              const next = prev.map((c, i) =>
+                committedIndexes.has(i) ? { ...c, committed: true } : c,
+              )
+              setCreatedCount(next.filter(c => c.committed).length)
+              return next
+            })
           }
         },
       },
     )
   }, [cards, commitMutation])
 
+  const handleDumpAgain = useCallback(() => {
+    setDump('')
+    setCards([])
+    setParseError(null)
+    setCreatedCount(null)
+    parseMutation.reset()
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [parseMutation])
+
   const pendingCount = cards.filter(c => !c.committed && !c.dispatched).length
 
-  return (
-    <div className="p-6 space-y-4 max-w-3xl">
-      <div className="space-y-1">
-        <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Brain Dump</h2>
-        <p className="text-xs text-slate-500">
-          Dump your thoughts — tasks, ideas, anything. Press Ctrl+Enter to parse.
-        </p>
-      </div>
+  const charCount = dump.length
+  const lineCount = dump ? dump.split('\n').length : 0
+  const estimatedTaskCount = dump.trim()
+    ? Math.max(1, dump.split(/\n+/).filter(l => l.trim()).length)
+    : 0
 
-      <div className="space-y-2">
-        <textarea
-          ref={textareaRef}
-          value={dump}
-          onChange={(e) => setDump(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={5}
-          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200
-            placeholder-slate-500 focus:outline-none focus:border-violet-500 resize-y"
-          placeholder="Brain dump here — tasks, ideas, anything. Press Cmd/Ctrl+Enter to process."
-          disabled={parseMutation.isPending}
-        />
-
-        <div className="flex items-center justify-between gap-3">
-          <VoiceButton onTranscript={handleTranscript} />
+  // Done state
+  if (phase === 'done') {
+    const n = createdCount ?? 0
+    return (
+      <div className="p-6 max-w-3xl">
+        <div className="rounded-card bg-surface-1 border border-surface-3 p-8 flex flex-col items-center gap-4 text-center">
+          <div className="w-12 h-12 rounded-full bg-status-green/15 flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-status-green">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <div className="space-y-1">
+            <p className="text-ink font-medium">
+              {n} task{n !== 1 ? 's' : ''} created
+            </p>
+            <p className="text-ink-muted text-sm">They&apos;re in your inbox and ready to commit to today.</p>
+          </div>
           <button
-            onClick={handleSubmit}
-            disabled={!dump.trim() || parseMutation.isPending}
-            className="px-4 py-1.5 text-sm font-medium rounded bg-violet-700 text-white hover:bg-violet-600
-              disabled:opacity-50 transition-colors flex items-center gap-2"
+            onClick={handleDumpAgain}
+            className="mt-2 px-5 py-2 rounded-input bg-surface-2 hover:bg-surface-3 text-ink text-sm font-medium transition-colors border border-surface-3"
             type="button"
           >
-            {parseMutation.isPending && (
-              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            )}
-            {parseMutation.isPending ? 'Parsing your dump…' : 'Parse'}
+            Dump again
           </button>
         </div>
       </div>
+    )
+  }
 
-      {/* Error state */}
-      {parseError && (
-        <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3 text-sm text-red-300">
-          {parseError}
-        </div>
-      )}
+  return (
+    <div className="p-6 space-y-5 max-w-3xl">
+      {/* Header */}
+      <div className="space-y-0.5">
+        <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Brain Dump</h2>
+      </div>
 
-      {/* Created confirmation */}
-      {createdCount !== null && createdCount > 0 && cards.every(c => c.committed || c.dispatched) && (
-        <div className="bg-emerald-900/30 border border-emerald-700 rounded-lg px-4 py-3 text-sm text-emerald-300">
-          {createdCount} task{createdCount !== 1 ? 's' : ''} created.
-        </div>
-      )}
-
-      {/* Candidates */}
-      {cards.length > 0 && (
+      {/* Input + processing area */}
+      {(phase === 'input' || phase === 'processing') && (
         <div className="space-y-3">
+          {/* Textarea wrapper with mic top-right */}
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={dump}
+              onChange={(e) => setDump(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={8}
+              className="w-full bg-surface-1 border border-surface-3 rounded-card px-4 py-3 pr-14 text-sm text-ink
+                placeholder-ink-faint focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30
+                resize-y disabled:opacity-60 transition-colors"
+              placeholder="Write anything. Tasks, ideas, worries, plans. ⌘+Enter to process."
+              disabled={parseMutation.isPending}
+            />
+            {/* Mic button — top right, absolute inside wrapper */}
+            <div className="absolute top-3 right-3">
+              <VoiceButton onTranscript={handleTranscript} />
+            </div>
+            {/* Char/line counter — bottom left */}
+            <span className="absolute bottom-3 left-4 text-xs text-ink-faint font-mono tabular-nums pointer-events-none">
+              {charCount > 0 ? `${charCount} chars · ${lineCount} line${lineCount !== 1 ? 's' : ''}` : ''}
+            </span>
+          </div>
+
+          {/* Processing inline message */}
+          {parseMutation.isPending && (
+            <div className="flex items-center gap-2 text-sm text-ink-muted">
+              <div className="w-3.5 h-3.5 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Parsing {estimatedTaskCount} task{estimatedTaskCount !== 1 ? 's' : ''} from your dump…</span>
+            </div>
+          )}
+
+          {/* Parse failure message */}
+          {parseError && (
+            <div className="rounded-input bg-status-red/10 border border-status-red/30 px-4 py-3 text-sm text-status-red">
+              {parseError}
+            </div>
+          )}
+
+          {/* Process CTA row */}
+          <div className="flex items-center justify-end">
+            <button
+              onClick={handleSubmit}
+              disabled={!dump.trim() || parseMutation.isPending}
+              className="px-4 py-2 text-sm font-medium rounded-input bg-accent hover:bg-accent-hover text-white
+                disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+              type="button"
+            >
+              Process
+              <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-sans leading-none">⌘↵</kbd>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Candidate review list */}
+      {phase === 'review' && (
+        <div className="space-y-3">
+          {/* Bulk action bar */}
           {pendingCount > 1 && (
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-400">{cards.length} candidate{cards.length !== 1 ? 's' : ''}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">
+                {cards.length} candidate{cards.length !== 1 ? 's' : ''}
+              </span>
               <button
                 onClick={handleCreateAll}
                 disabled={commitMutation.isPending}
-                className="px-3 py-1 text-xs font-medium rounded bg-emerald-800 text-emerald-200
-                  hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                className="px-3 py-1.5 text-xs font-medium rounded-input bg-status-green/15 text-status-green
+                  hover:bg-status-green/25 border border-status-green/30
+                  disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 type="button"
               >
-                Create all tasks
+                Create all {pendingCount}
               </button>
             </div>
           )}
@@ -288,6 +413,7 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
               committed={c.committed}
               dispatched={c.dispatched}
               acrOffline={c.dispatched ? c.acrOffline : acrOffline}
+              autoFocus={i === 0}
             />
           ))}
         </div>
