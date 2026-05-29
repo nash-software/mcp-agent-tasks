@@ -93,6 +93,27 @@ describe('Rebuild index via Reconciler', () => {
     expect(rebuilt1?.priority).toBe('high');
   });
 
+  it('agent_status survives a DB delete + reconcile (P2-04 AC-3)', () => {
+    // Create a task, then sign it off (set agent_status) the way the signoff endpoint does:
+    // mutate the task object and persist to markdown + index directly.
+    const task = store.createTask({ project: 'TEST', title: 'Signed off', type: 'feature', priority: 'high', why: 'y' });
+    const signed = { ...task, agent_status: 'scheduled' as const };
+    new MarkdownStore().write(signed);
+    idx.upsertTask(signed);
+    expect(idx.getTask(task.id)?.agent_status).toBe('scheduled');
+
+    // Nuke the DB and rebuild from markdown only.
+    idx.close();
+    fs.rmSync(dbPath);
+    secondaryIdx = new SqliteIndex(dbPath);
+    secondaryIdx.init();
+    const reconciler = new Reconciler(secondaryIdx, tasksDir, 'TEST');
+    reconciler.reconcile();
+
+    // The sign-off marker must have survived the round-trip through markdown.
+    expect(secondaryIdx.getTask(task.id)?.agent_status).toBe('scheduled');
+  });
+
   it('pruneOrphans() removes stale index row when markdown file is deleted after reconcile', () => {
     // Create a task (writes markdown + inserts into SQLite)
     const task = store.createTask({ project: 'TEST', title: 'Soon Deleted', type: 'chore', priority: 'low', why: 'y' });
