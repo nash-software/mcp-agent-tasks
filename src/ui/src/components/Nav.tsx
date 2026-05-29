@@ -2,15 +2,36 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { NAV } from '../lib/nav'
 import { useAcrStatus } from '../hooks/useAcrStatus'
-import type { ViewId } from '../types'
+import { AreaDot } from './atoms'
+import type { ViewId, TaskArea } from '../types'
+import type { FilterBarProject } from './FilterBar'
 
 interface NavProps {
   view: ViewId
   onViewChange: (v: ViewId) => void
   onPaletteOpen: () => void
+  /** Pinned project prefixes (P2-02). */
+  favorites: string[]
+  /** Open-task count per prefix (P2-02, derived once in App). */
+  projectCounts: Record<string, number>
+  /** All known projects (same list as FilterBar). */
+  filterProjects: FilterBarProject[]
+  /** Toggle a project in the global filter (P2-01). */
+  onToggleProject: (prefix: string) => void
+  /** Area map for resolving project area — prefix → area (P2-01, built in App). */
+  areaMap: Record<string, TaskArea>
 }
 
-export function Nav({ view, onViewChange, onPaletteOpen }: NavProps): React.JSX.Element {
+export function Nav({
+  view,
+  onViewChange,
+  onPaletteOpen,
+  favorites,
+  projectCounts,
+  filterProjects,
+  onToggleProject,
+  areaMap,
+}: NavProps): React.JSX.Element {
   const acrQ = useAcrStatus()
 
   const brainQ = useQuery({
@@ -28,6 +49,13 @@ export function Nav({ view, onViewChange, onPaletteOpen }: NavProps): React.JSX.
 
   const acrOffline = acrQ.data?.offline ?? true
   const brainOffline = brainQ.data?.offline ?? true
+
+  // Build a lookup from filterProjects for resolving area per pinned prefix.
+  const projectByPrefix = React.useMemo(() => {
+    const m: Record<string, FilterBarProject> = {}
+    for (const p of filterProjects) m[p.prefix] = p
+    return m
+  }, [filterProjects])
 
   return (
     <nav className="nav flex flex-col h-full bg-bg border-r border-surface-3 py-3">
@@ -53,13 +81,41 @@ export function Nav({ view, onViewChange, onPaletteOpen }: NavProps): React.JSX.
         ))}
       </div>
 
-      {/* Favourites placeholder */}
-      <div className="mt-4 px-3 py-1 text-ink-faint text-xs uppercase tracking-wide overflow-hidden whitespace-nowrap">
-        Favourites
-      </div>
-      <div className="px-3 py-1 text-ink-faint text-xs italic overflow-hidden whitespace-nowrap">
-        — none yet —
-      </div>
+      {/* Favourites group — only rendered when at least one project is pinned */}
+      {favorites.length > 0 && (
+        <div className="mt-4">
+          <div className="px-3 py-1 text-ink-faint text-xs uppercase tracking-wide overflow-hidden whitespace-nowrap">
+            Favourites
+          </div>
+          <div className="flex flex-col gap-0.5 px-2 mt-0.5">
+            {favorites.map(prefix => {
+              const proj = projectByPrefix[prefix]
+              // Skip-render stale pins whose project can't be resolved
+              if (!proj) return null
+              const area = proj.area ?? areaMap[prefix] ?? null
+              const count = projectCounts[prefix]
+              return (
+                <button
+                  key={prefix}
+                  onClick={() => onToggleProject(prefix)}
+                  title={`${proj.name} — click to filter everywhere`}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-colors ${
+                    'text-ink-muted hover:bg-surface-2 hover:text-ink'
+                  }`}
+                >
+                  {area && <AreaDot area={area} />}
+                  <span className="font-mono text-xs overflow-hidden whitespace-nowrap">{prefix}</span>
+                  {count != null && count > 0 && (
+                    <span className="ml-auto text-xs text-ink-faint font-mono tabular-nums overflow-hidden whitespace-nowrap">
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="mt-auto px-3 py-2 border-t border-surface-3 flex flex-col gap-2">
