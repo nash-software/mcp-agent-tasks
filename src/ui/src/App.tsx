@@ -5,6 +5,7 @@ import { BoardView } from './views/BoardView'
 import { RoadmapView } from './views/RoadmapView'
 import { ActivityView } from './views/ActivityView'
 import { InboxView } from './views/InboxView'
+import { TodayView } from './views/TodayView'
 import { TaskDetailPanel } from './components/TaskDetailPanel'
 import { useTasks } from './hooks/useTasks'
 import { useMilestones } from './hooks/useMilestones'
@@ -13,7 +14,7 @@ import type { FilterState, Task } from './types'
 const EMPTY_FILTERS: FilterState = { project: '', status: '', milestone: '', label: '' }
 
 export function App(): React.JSX.Element {
-  const [activeTab, setActiveTab] = useState<TabId>('board')
+  const [activeTab, setActiveTab] = useState<TabId>('today')
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
 
@@ -24,10 +25,12 @@ export function App(): React.JSX.Element {
   const projects = [...new Set(allTasks.map(t => t.project).filter((p): p is string => Boolean(p)))].sort()
   const labels = [...new Set(allTasks.flatMap(t => t.labels ?? []))].sort()
 
+  const showFilterBar = activeTab !== 'activity' && activeTab !== 'today'
+
   return (
     <div className="bg-slate-950 text-slate-200 min-h-screen flex flex-col">
       <Header activeTab={activeTab} onTabChange={setActiveTab} />
-      {activeTab !== 'activity' && (
+      {showFilterBar && (
         <FilterBar
           projects={projects}
           milestones={milestones}
@@ -37,6 +40,7 @@ export function App(): React.JSX.Element {
         />
       )}
       <main className="flex-1">
+        {activeTab === 'today'    && <TodayView />}
         {activeTab === 'board'    && <BoardView filters={filters} onTaskClick={setSelectedTask} />}
         {activeTab === 'roadmap'  && <RoadmapView filters={filters} />}
         {activeTab === 'activity' && <ActivityView />}

@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -60,6 +60,24 @@ export async function createDraftTask(data: {
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json() as Promise<{ id: string; title: string; status: string; project: string }>
+}
+
+export function fetchToday(targetMinutes?: number): Promise<TodayResponse> {
+  const params = targetMinutes !== undefined ? `?target=${targetMinutes}` : ''
+  return get<TodayResponse>(`/api/today${params}`)
+}
+
+export async function scheduleTask(id: string, date: string | null): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/schedule`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Schedule failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
 }
 
 export async function createMilestone(data: {
