@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -232,6 +232,145 @@ function readArtifacts(): ArtifactEntry[] {
   });
 
   return entries;
+}
+
+// ── Hermes agent layer: skills + agent-log file stores (P2-04) ──────────────────
+// App-level stores (not per-project). Mirror the artifacts-opened.json / artifacts.jsonl
+// pattern. The base dir honors the MCP_TASKS_DIR env override for testability; default
+// is the same ~/.mcp-tasks dir used by the artifacts stores above.
+export type Engine = 'hermes' | 'n8n' | 'acr';
+
+export interface Skill {
+  id: string;
+  name: string;
+  project: string;
+  engine: Engine;
+  desc: string;
+  match: string[];
+  runs: number;
+  minutesSaved: number;
+  lastRun: string;
+  origin: string;
+}
+
+export interface AgentLog {
+  id: string;
+  kind: 'run' | 'research' | 'promote';
+  title: string;
+  project: string;
+  savedMin: number;
+  at: string;
+  skill?: string;
+}
+
+export interface ProposalBody {
+  name: string;
+  engine: Engine;
+  desc?: string;
+  match?: string[];
+  project?: string;
+  taskId?: string;
+  origin?: string;
+}
+
+function hermesStoreDir(): string {
+  const override = process.env['MCP_TASKS_DIR'];
+  return override && override.trim() !== '' ? override : MCP_TASKS_DIR;
+}
+
+function skillsJsonPath(): string {
+  return join(hermesStoreDir(), 'skills.json');
+}
+
+function agentLogJsonlPath(): string {
+  return join(hermesStoreDir(), 'agent-log.jsonl');
+}
+
+function isEngine(x: unknown): x is Engine {
+  return x === 'hermes' || x === 'n8n' || x === 'acr';
+}
+
+function slug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'skill';
+}
+
+function readSkills(): Skill[] {
+  const file = skillsJsonPath();
+  if (!existsSync(file)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as unknown;
+    return Array.isArray(parsed) ? (parsed as Skill[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSkills(skills: Skill[]): void {
+  const dir = hermesStoreDir();
+  mkdirSync(dir, { recursive: true });
+  const file = skillsJsonPath();
+  // Unique temp name (pid + time + rand) so concurrent writers never collide on the tmp file.
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+  writeFileSync(tmp, JSON.stringify(skills, null, 2), 'utf-8');
+  renameSync(tmp, file); // atomic swap on NTFS + POSIX
+}
+
+function appendSkill(skill: Skill): void {
+  const all = readSkills();
+  all.push(skill);
+  writeSkills(all);
+}
+
+function createSkillFromProposal(b: ProposalBody): Skill {
+  const existing = new Set(readSkills().map(s => s.id));
+  const base = `sk-${slug(b.name)}`;
+  let id = base;
+  let n = 2;
+  while (existing.has(id)) {
+    id = `${base}-${n}`;
+    n += 1;
+  }
+  const project = b.project ?? '—';
+  return {
+    id,
+    name: b.name,
+    project,
+    engine: b.engine,
+    desc: b.desc ?? '',
+    match: b.match ?? [],
+    runs: 0,
+    minutesSaved: 0,
+    lastRun: '',
+    origin: b.origin ?? `promoted from ${b.taskId ?? 'a task'}`,
+  };
+}
+
+function readAgentLog(): AgentLog[] {
+  const file = agentLogJsonlPath();
+  if (!existsSync(file)) return [];
+  let lines: string[];
+  try {
+    lines = readFileSync(file, 'utf-8').split('\n').filter(l => l.trim() !== '');
+  } catch {
+    return [];
+  }
+  const entries: AgentLog[] = [];
+  for (const line of lines) {
+    try {
+      entries.push(JSON.parse(line) as AgentLog);
+    } catch { /* skip malformed line */ }
+  }
+  return entries.reverse(); // newest-first
+}
+
+/** Append an agent-log entry. Exported for P2-06 action handlers to log runs/promotes. */
+export function appendAgentLog(entry: AgentLog): void {
+  const dir = hermesStoreDir();
+  mkdirSync(dir, { recursive: true });
+  appendFileSync(agentLogJsonlPath(), JSON.stringify(entry) + '\n', 'utf-8');
 }
 
 const MIME: Record<string, string> = {
@@ -774,6 +913,29 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Hermes sign-off — POST sets agent_status='scheduled', DELETE clears it (P2-04)
+      const signoffMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/signoff$/);
+      if (signoffMatch && (req.method === 'POST' || req.method === 'DELETE')) {
+        const taskId = signoffMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        const now = new Date().toISOString();
+        if (req.method === 'POST') {
+          task.agent_status = 'scheduled';
+        } else {
+          delete task.agent_status; // DELETE clears the sign-off marker (idempotent)
+        }
+        task.updated = now;
+        task.last_activity = now;
+        pIdx!.index.upsertTask(task);
+        sendJson(res, 200, task);
+        return;
+      }
+
       // API: quick capture — instant GEN inbox write + background LLM routing
       if (pathname === '/api/capture/quick' && req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -1128,6 +1290,38 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: skills library (P2-04) — app-level, JSON file store
+      if (pathname === '/api/skills' && req.method === 'GET') {
+        sendJson(res, 200, readSkills()); // [] when file missing
+        return;
+      }
+      if (pathname === '/api/skills' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const b = JSON.parse(Buffer.concat(chunks).toString()) as ProposalBody;
+            if (!b.name || typeof b.name !== 'string' || !isEngine(b.engine)) {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'name and engine are required' });
+              return;
+            }
+            const skill = createSkillFromProposal(b);
+            appendSkill(skill);
+            sendJson(res, 201, skill);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: agent activity log (P2-04) — append-only JSONL, newest-first
+      if (pathname === '/api/agent/log' && req.method === 'GET') {
+        sendJson(res, 200, readAgentLog()); // [] when file missing
         return;
       }
 
