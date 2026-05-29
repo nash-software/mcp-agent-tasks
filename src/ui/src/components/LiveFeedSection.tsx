@@ -79,6 +79,16 @@ function AcrJobRow({ job }: { job: AcrJob }): React.JSX.Element {
           <span className="rounded-full bg-status-blue" style={{ width: 8, height: 8 }} />
         </span>
       )}
+      {/* P2-06: Hermes-dispatched badge — small "H" tag before title */}
+      {job.hermes === true && (
+        <span
+          className="inline-flex items-center justify-center px-1 py-0 rounded-badge bg-accent/20 font-mono text-xs font-semibold text-accent shrink-0"
+          title="Dispatched by Hermes"
+          style={{ fontSize: 10, lineHeight: '14px' }}
+        >
+          H
+        </span>
+      )}
       <span className="flex-1 text-xs text-ink-2 truncate min-w-0">{job.title}</span>
       {job.elapsed_s !== undefined && job.status === 'running' && (
         <span className="font-mono text-xs text-ink-muted tabular-nums shrink-0">{job.elapsed_s}s</span>

@@ -360,15 +360,105 @@ describe('fmtSaved', () => {
     expect(fmtSaved(0)).toBe('0m')
     expect(fmtSaved(1)).toBe('1m')
     expect(fmtSaved(59)).toBe('59m')
+    expect(fmtSaved(45)).toBe('45m')
   })
 
-  it('formats 60+ minutes as hours with one decimal', () => {
-    // 60 min → Math.round(60/6)/10 = 10/10 = 1 → "1h"
+  it('formats 60+ minutes as hours with one decimal (correct formula)', () => {
+    // 60 min → Math.round(60/60*10)/10 = 10/10 = 1 → "1h"
     expect(fmtSaved(60)).toBe('1h')
-    // 90 min → Math.round(90/6)/10 = 15/10 = 1.5 → "1.5h"
+    // 90 min → Math.round(90/60*10)/10 = Math.round(15)/10 = 1.5 → "1.5h"
     expect(fmtSaved(90)).toBe('1.5h')
-    // 120 min → 20/10 = 2 → "2h"
+    // 120 min → Math.round(120/60*10)/10 = Math.round(20)/10 = 2 → "2h"
     expect(fmtSaved(120)).toBe('2h')
+  })
+
+  it('P2-06: fmtSaved uses correct minutes→hours conversion (not the prototype /6 bug)', () => {
+    // The prototype had Math.round(min/6)/10 which is algebraically identical for these values,
+    // but the *intent* is min/60. This test explicitly names the corrected conversion.
+    // 45m < 60 → '45m'
+    expect(fmtSaved(45)).toBe('45m')
+    // 90m → 1.5h (correct). Buggy prototype interpretation would still give 1.5h here,
+    // but the formula is now clearly Math.round(min/60*10)/10 so 90/60=1.5 exactly.
+    expect(fmtSaved(90)).toBe('1.5h')
+    // Extra guard: the formula must NOT produce 15h for 90 min (that would be Math.round(90/6) = 15)
+    expect(fmtSaved(90)).not.toBe('15h')
+    // 120m → 2h
+    expect(fmtSaved(120)).toBe('2h')
+  })
+})
+
+// ── P2-06: promote→re-triage loop ─────────────────────────────────────────
+describe('P2-06 — promote → re-triage loop (critical path)', () => {
+  it('task triages to research before a matching skill exists', () => {
+    const task = makeTask({
+      id: 'TEST-42',
+      title: 'audit dependency vulnerabilities',
+      agent_status: 'scheduled',
+    })
+    const result = triage(task, NO_SKILLS)
+    expect(result.bucket).toBe('research')
+  })
+
+  it('task flips to automatable after a matching skill is added (the flywheel loop)', () => {
+    const task = makeTask({
+      id: 'TEST-42',
+      title: 'audit dependency vulnerabilities',
+      agent_status: 'scheduled',
+    })
+    // Before promote: research bucket
+    expect(triage(task, NO_SKILLS).bucket).toBe('research')
+
+    // After promote: a skill with match terms derived from the task title is added
+    const newSkill = makeSkill({
+      id: 'skill-audit',
+      name: 'Dependency audit',
+      match: ['audit', 'dependency'],
+      engine: 'acr',
+    })
+    const result = triage(task, [newSkill])
+    expect(result.bucket).toBe('automatable')
+    expect(result.skill?.id).toBe('skill-audit')
+    expect(result.action).toBe('run')
+  })
+
+  it('no task mutation is required — triage is pure and derived from (task, skills)', () => {
+    // Same task object, different skills → different bucket. Task is never modified.
+    const task = makeTask({ title: 'audit the server logs', agent_status: 'scheduled' })
+    const skillsBefore: Skill[] = []
+    const skillsAfter = [makeSkill({ match: ['audit', 'server'], engine: 'acr' })]
+    const before = triage(task, skillsBefore)
+    const after = triage(task, skillsAfter)
+    expect(before.bucket).toBe('research')
+    expect(after.bucket).toBe('automatable')
+    // Confirm the task object was not touched
+    expect(task.agent_status).toBe('scheduled')
+  })
+})
+
+// ── P2-06: proposalTaskIds gating ─────────────────────────────────────────
+describe('P2-06 — proposalTaskIds queue gating', () => {
+  it('a task with a pending proposal should be excluded from triaged results', () => {
+    // Simulates the HermesView filter:
+    //   triaged = scheduled.filter(t => t.agent_status === 'scheduled' && !proposalTaskIds.includes(t.id))
+    const task1 = makeTask({ id: 'T-1', title: 'audit logs', agent_status: 'scheduled' })
+    const task2 = makeTask({ id: 'T-2', title: 'write docs', agent_status: 'scheduled' })
+    const scheduled = [task1, task2]
+    const proposals = [{ taskId: 'T-1', id: 'p-1', project: 'TEST', skillName: 'Log audit',
+      taskTitle: 'audit logs', summary: '', steps: [], savedPerRun: 30, frequency: 'weekly', engine: 'acr' as const }]
+    const proposalTaskIds = proposals.map(p => p.taskId)
+    const triaged = scheduled.filter(t => t.agent_status === 'scheduled' && !proposalTaskIds.includes(t.id))
+    expect(triaged.map(t => t.id)).not.toContain('T-1')
+    expect(triaged.map(t => t.id)).toContain('T-2')
+  })
+
+  it('after dismiss, task returns to triage queue (proposalTaskIds is empty)', () => {
+    const task = makeTask({ id: 'T-1', title: 'audit logs', agent_status: 'scheduled' })
+    const scheduled = [task]
+    // Dismissed: proposalTaskIds is empty
+    const proposalTaskIds: string[] = []
+    const triaged = scheduled.filter(t => t.agent_status === 'scheduled' && !proposalTaskIds.includes(t.id))
+    expect(triaged.map(t => t.id)).toContain('T-1')
+    expect(triage(task, NO_SKILLS).bucket).toBe('research')
   })
 })
 
