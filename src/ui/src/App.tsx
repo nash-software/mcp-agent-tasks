@@ -72,12 +72,44 @@ export function App(): React.JSX.Element {
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
 
-  // Favourites are owned by P2-02 — consume an empty set + no-op until it ships.
-  const favorites: string[] = []
-  const onToggleFav = useCallback((_prefix: string): void => { /* P2-02 */ }, [])
+  // ─── Favourites (P2-02) — persisted to localStorage('lifeos-favs') ──────────
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('lifeos-favs')
+      if (!raw) return []
+      const parsed = JSON.parse(raw) as unknown
+      if (Array.isArray(parsed) && parsed.every((x): x is string => typeof x === 'string')) {
+        return parsed
+      }
+      return []
+    } catch {
+      return []
+    }
+  })
+
+  const toggleFav = useCallback((prefix: string): void => {
+    setFavorites(fs => fs.includes(prefix) ? fs.filter(x => x !== prefix) : [...fs, prefix])
+  }, [])
 
   useEffect(() => { localStorage.setItem('lifeos-view', view) }, [view])
   useEffect(() => { localStorage.setItem('lifeos-filter', JSON.stringify(filter)) }, [filter])
+  useEffect(() => {
+    try {
+      localStorage.setItem('lifeos-favs', JSON.stringify(favorites))
+    } catch {
+      // localStorage may be unavailable — fail silently
+    }
+  }, [favorites])
+
+  // Prune favourites whose project is no longer in the known set (once projects loads).
+  useEffect(() => {
+    if (projectEntries.length === 0) return
+    const known = new Set(projectEntries.map(p => p.prefix))
+    setFavorites(fs => {
+      const pruned = fs.filter(f => known.has(f))
+      return pruned.length === fs.length ? fs : pruned
+    })
+  }, [projectEntries])
 
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
@@ -370,7 +402,17 @@ export function App(): React.JSX.Element {
       />
 
       {/* left nav */}
-      <Nav view={view} onViewChange={handleViewChange} onPaletteOpen={() => setCmdkOpen(true)} />
+      <Nav
+        view={view}
+        onViewChange={handleViewChange}
+        onPaletteOpen={() => setCmdkOpen(true)}
+        favorites={favorites}
+        projectCounts={projectCounts}
+        filterProjects={filterProjects}
+        onToggleProject={toggleProject}
+        activeProjects={filter.projects}
+        areaMap={areaMap}
+      />
 
       {/* main scroll region */}
       <main className="main">
@@ -383,7 +425,7 @@ export function App(): React.JSX.Element {
             projectCounts={projectCounts}
             onToggleProject={toggleProject}
             onToggleArea={toggleArea}
-            onToggleFav={onToggleFav}
+            onToggleFav={toggleFav}
             onClear={clearFilter}
           />
         )}
