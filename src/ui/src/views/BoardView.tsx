@@ -2,7 +2,7 @@ import React from 'react'
 import type { Task, TaskStatus, PanelState } from '../types'
 import { useTasks } from '../hooks/useTasks'
 import { TaskCard } from '../components/TaskCard'
-import { type Filter, matchFilter } from '../lib/filter'
+import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
   { status: 'todo',        label: 'Queued' },
@@ -13,12 +13,13 @@ const COLUMNS: { status: TaskStatus; label: string }[] = [
 
 interface Props {
   filter: Filter
+  areaMap?: Record<string, Area>
   onOpenPanel: (panel: PanelState) => void
 }
 
-export function BoardView({ filter, onOpenPanel }: Props): React.JSX.Element {
+export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
   const { tasks: allTasks, isLoading, error } = useTasks()
-  const tasks = allTasks.filter(t => matchFilter(filter, t.project ?? '', t.area))
+  const tasks = allTasks.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
 
   if (isLoading) {
     return (

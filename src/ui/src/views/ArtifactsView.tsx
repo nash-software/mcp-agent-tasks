@@ -14,7 +14,7 @@ import { useArtifacts } from '../hooks/useArtifacts'
 import { markArtifactOpened } from '../api'
 import { PrefixBadge } from '../components/atoms'
 import type { ArtifactEntry, PanelState } from '../types'
-import { type Filter, matchFilter } from '../lib/filter'
+import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -202,10 +202,11 @@ function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): Rea
 
 interface ArtifactsViewProps {
   filter: Filter
+  areaMap?: Record<string, Area>
   onOpenPanel: (panel: PanelState) => void
 }
 
-export function ArtifactsView({ filter, onOpenPanel }: ArtifactsViewProps): React.JSX.Element {
+export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsViewProps): React.JSX.Element {
   const { artifacts, isLoading } = useArtifacts()
   const [toastMsg, setToastMsg] = useState<string | null>(null)
 
@@ -214,8 +215,8 @@ export function ArtifactsView({ filter, onOpenPanel }: ArtifactsViewProps): Reac
     setTimeout(() => setToastMsg(null), 2200)
   }, [])
 
-  // Artifacts carry no `area` — matchFilter derives it from the project via areaOfProject.
-  const filtered = artifacts.filter(a => matchFilter(filter, a.project))
+  // Artifacts carry no `area` — matchFilter derives it from the project via areaMap.
+  const filtered = artifacts.filter(a => matchFilter(filter, a.project, undefined, areaMap))
 
   // AC-2: explicit client-side sort by staleDays descending — never rely on API ordering
   const sorted = sortByStaleDesc(filtered)

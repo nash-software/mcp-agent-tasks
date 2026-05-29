@@ -21,7 +21,7 @@ import type { ViewId, PanelState, Task, TaskPriority, TaskArea } from './types'
 import { localToday } from './lib/format'
 import { fetchProjects, type ProjectEntry } from './api'
 import { useQuery } from '@tanstack/react-query'
-import { type Filter, EMPTY_FILTER, filterActive, setAreaMap } from './lib/filter'
+import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
 
@@ -95,9 +95,6 @@ export function App(): React.JSX.Element {
     }
     return map
   }, [allTasks])
-
-  // Inject the prefix→area map into the pure filter helpers whenever tasks change.
-  useEffect(() => { setAreaMap(areaMap) }, [areaMap])
 
   const projectCounts = useMemo((): Record<string, number> => {
     const counts: Record<string, number> = {}
@@ -305,12 +302,13 @@ export function App(): React.JSX.Element {
     })
 
     // 4. Filter group (P2-01) — one "Filter by <PREFIX>" per known project + Clear all
+    // Label is always "Filter by <PREFIX>" (toggles on/off); "Clear all filters" appears only
+    // when a filter is active — per spec §4 palette requirements.
     for (const p of filterProjects) {
-      const isOn = filter.projects.includes(p.prefix)
       cmds.push({
         id: `filter-project-${p.prefix}`,
         cat: 'Filter',
-        label: `${isOn ? 'Unfilter' : 'Filter'} by ${p.prefix}`,
+        label: `Filter by ${p.prefix}`,
         sub: p.area ?? undefined,
         run: () => { toggleProject(p.prefix) },
       })
@@ -393,18 +391,19 @@ export function App(): React.JSX.Element {
           {view === 'today'     && (
             <TodayView
               filter={filter}
+              areaMap={areaMap}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSel}
               onOpenDetail={(task) => setPanel({ mode: 'detail', taskId: task.id })}
               onVisibleIdsChange={setVisibleIds}
             />
           )}
-          {view === 'board'     && <BoardView filter={filter} onOpenPanel={setPanel} />}
+          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesPlaceholder />}
           {view === 'braindump' && <BrainDumpView projects={[]} />}
-          {view === 'artifacts' && <ArtifactsView filter={filter} onOpenPanel={setPanel} />}
-          {view === 'roadmap'   && <RoadmapView filter={filter} />}
-          {view === 'activity'  && <ActivityView filter={filter} onOpenPanel={setPanel} />}
+          {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
+          {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
+          {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
         </div>
       </main>
 

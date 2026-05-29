@@ -5,9 +5,10 @@
  * unit-testable in isolation. Ported verbatim from `design_handoff_life_os/reference/filters.jsx`
  * (lines 4–16), retyped with `Filter` / `Area` and an explicit `null` guard on the derived area.
  *
- * The prototype read a global `window.projById`; the real app injects a `prefix -> area` map at
- * App level (reduced from the loaded `['tasks']` cache, where `area` is denormalised onto every
- * task) via `setAreaMap`, keeping these helpers free of React/query state.
+ * The prototype read a global `window.projById`; the real app passes a `prefix -> area` map
+ * explicitly to `matchFilter` and `areaOfProject`, keeping these helpers free of ambient state.
+ * App.tsx builds the map synchronously via useMemo (available on first render) and threads it
+ * into every matchFilter call site across the 5 views.
  */
 import type { TaskArea } from '../types'
 
@@ -23,32 +24,13 @@ export interface Filter {
 
 export const EMPTY_FILTER: Filter = { projects: [], areas: [] }
 
-// ── Area map (injected at App level) ───────────────────────────────────────
-//
-// Design note (F2): the `areaMap` is intentionally module-global rather than threaded as an
-// explicit parameter through every `matchFilter` call site. The single root-level owner is
-// `App.tsx`, which reduces the `['tasks']` react-query cache to a `prefix → area` map and calls
-// `setAreaMap` inside a `useEffect` — guaranteed to run before any filter-consuming view renders.
-// There are 6 call sites spread across 5 view files; most views don't receive `areaMap` as a prop
-// and obtaining it would require either a new context/hook or heavy prop drilling. The current
-// single-root injection is the accepted trade-off: one owner, one write point, zero race risk.
-
-let areaMap: Record<string, Area> = {}
-
-/**
- * Set the prefix→area lookup used by `areaOfProject` for records that don't carry their own area.
- * App reduces the `['tasks']` cache (`task.project → task.area`) and calls this on change.
- * Must be called before any view that uses `matchFilter` renders — App's useEffect ensures this.
- */
-export function setAreaMap(map: Record<string, Area>): void {
-  areaMap = map
-}
-
 /**
  * Resolve a project prefix to its life-area, or `null` when unknown (no task seen yet for that
  * prefix). Mirrors the prototype's `p ? p.area : null` contract — never throws.
+ * @param prefix  Project prefix to look up.
+ * @param areaMap Explicit prefix→area map (built synchronously in App via useMemo).
  */
-export function areaOfProject(prefix: string): Area | null {
+export function areaOfProject(prefix: string, areaMap: Record<string, Area>): Area | null {
   return areaMap[prefix] ?? null
 }
 
@@ -66,11 +48,20 @@ export function projectOfId(id: string): string {
  * AND across dimensions, OR within each. Empty dimension = no constraint.
  * Records without an `area` field omit the arg; the area is then derived via `areaOfProject`.
  * An area that cannot be derived (`null`) fails any active area filter (explicit guard).
+ * @param filter  Active filter state.
+ * @param project Project prefix of the item being tested.
+ * @param area    Optional explicit area (wins over the derived value when provided).
+ * @param areaMap Explicit prefix→area map for derivation. Pass `{}` when no derivation is needed.
  */
-export function matchFilter(filter: Filter, project: string, area?: Area): boolean {
+export function matchFilter(
+  filter: Filter,
+  project: string,
+  area?: Area,
+  areaMap: Record<string, Area> = {},
+): boolean {
   if (filter.projects.length && !filter.projects.includes(project)) return false
   if (filter.areas.length) {
-    const a = area ?? areaOfProject(project)
+    const a = area ?? areaOfProject(project, areaMap)
     if (a == null || !filter.areas.includes(a)) return false
   }
   return true

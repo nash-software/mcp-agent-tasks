@@ -3,10 +3,11 @@ import type { TaskStatus, PanelState } from '../types'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
 import { STATUS_DOT } from '../lib/tokens'
-import { type Filter, matchFilter, projectOfId } from '../lib/filter'
+import { type Filter, matchFilter, projectOfId, type Area } from '../lib/filter'
 
 interface Props {
   filter: Filter
+  areaMap?: Record<string, Area>
   onOpenPanel: (panel: PanelState) => void
 }
 
@@ -30,12 +31,12 @@ function statusLabel(s: string): string {
   return s.replace(/_/g, ' ')
 }
 
-export function ActivityView({ filter, onOpenPanel }: Props): React.JSX.Element {
+export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
   const { activity, isLoading, error } = useActivity()
 
   // Activity rows expose a task id but no `project` field — derive the prefix with projectOfId,
-  // then matchFilter (area resolved via areaOfProject).
-  const filtered = activity.filter(e => matchFilter(filter, projectOfId(e.task_id)))
+  // then matchFilter (area resolved via areaMap).
+  const filtered = activity.filter(e => matchFilter(filter, projectOfId(e.task_id), undefined, areaMap))
 
   if (isLoading) {
     return (

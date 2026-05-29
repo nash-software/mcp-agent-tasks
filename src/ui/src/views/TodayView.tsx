@@ -17,7 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
 import { PRI_RANK, localToday } from '../lib/format'
-import { type Filter, matchFilter } from '../lib/filter'
+import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -58,6 +58,7 @@ function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
 
 interface TodayViewProps {
   filter: Filter
+  areaMap?: Record<string, Area>
   selectedTaskId?: string | null
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
@@ -68,6 +69,7 @@ interface TodayViewProps {
 
 export function TodayView({
   filter,
+  areaMap = {},
   selectedTaskId,
   onSelectTask,
   onOpenDetail,
@@ -117,11 +119,11 @@ export function TodayView({
   const committedList = sortCommitted(
     committed
       .filter(t => t.status !== 'in_progress' && t.status !== 'cancelled')
-      .filter(t => matchFilter(filter, t.project ?? '', t.area))
+      .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
   // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
-  const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area))
+  const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   const candidatesByArea = groupByArea(filteredCandidates)
 
   // Flatten visible IDs for keyboard navigation (hero first, then committed, then candidates)

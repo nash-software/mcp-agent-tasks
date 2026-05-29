@@ -4,10 +4,11 @@ import type { Task } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone } from '../api'
-import { type Filter, matchFilter } from '../lib/filter'
+import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 interface Props {
   filter: Filter
+  areaMap?: Record<string, Area>
 }
 
 /** Derive the first project prefix found among milestone-related tasks. */
@@ -30,7 +31,7 @@ function relatedProjects(related: Task[]): string[] {
   return Array.from(seen)
 }
 
-export function RoadmapView({ filter }: Props): React.JSX.Element {
+export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
   const { milestones, isLoading: mlLoading, error: mlError } = useMilestones()
   const { tasks, isLoading: tLoading } = useTasks()
@@ -98,7 +99,7 @@ export function RoadmapView({ filter }: Props): React.JSX.Element {
     const related  = tasks.filter(t => t.milestone === ms.id)
     const projects = relatedProjects(related)
     if (projects.length === 0) return filter.projects.length === 0 && filter.areas.length === 0
-    return projects.some(p => matchFilter(filter, p))
+    return projects.some(p => matchFilter(filter, p, undefined, areaMap))
   })
 
   return (
