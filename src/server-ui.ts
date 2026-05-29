@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
+import { MarkdownStore } from './store/markdown-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -297,12 +298,21 @@ function slug(name: string): string {
     .replace(/^-+|-+$/g, '') || 'skill';
 }
 
+function isValidSkill(s: unknown): s is Skill {
+  if (typeof s !== 'object' || s === null) return false;
+  const o = s as Record<string, unknown>;
+  return typeof o['id'] === 'string'
+    && typeof o['name'] === 'string'
+    && typeof o['engine'] === 'string';
+}
+
 function readSkills(): Skill[] {
   const file = skillsJsonPath();
   if (!existsSync(file)) return [];
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf-8')) as unknown;
-    return Array.isArray(parsed) ? (parsed as Skill[]) : [];
+    // Shape-validate each entry; drop malformed records rather than returning corrupt data.
+    return Array.isArray(parsed) ? parsed.filter(isValidSkill) : [];
   } catch {
     return [];
   }
@@ -454,16 +464,18 @@ interface ProjectIndex {
   prefix: string;
   index: SqliteIndex;
   milestoneRepo: MilestoneRepository;
+  tasksDir: string;  // directory holding the project's markdown task files (for markdown write-through)
 }
 
 function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex[] {
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
   if (config.projects.length === 0) {
-    // No registered projects â€” fall back to global DB
-    const idx = new SqliteIndex(getDbPath());
+    // No registered projects — fall back to global DB
+    const dbPath = getDbPath();
+    const idx = new SqliteIndex(dbPath);
     idx.init();
-    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
+    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir: dirname(dbPath) }];
   }
 
   const indexes = config.projects.map(p => {
@@ -471,14 +483,15 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
     const dbPath = resolveServerDbPath(tasksDir, config, p.prefix);
     const idx = new SqliteIndex(dbPath);
     idx.init();
-    return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) };
+    return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir };
   });
 
-  const genDbPath = join(homedir(), '.mcp-tasks', 'tasks', 'gen', '.index.db');
+  const genTasksDir = join(homedir(), '.mcp-tasks', 'tasks', 'gen');
+  const genDbPath = join(genTasksDir, '.index.db');
   if (existsSync(genDbPath)) {
     const genIdx = new SqliteIndex(genDbPath);
     genIdx.init();
-    indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()) });
+    indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()), tasksDir: genTasksDir });
   }
 
   return indexes;
@@ -953,10 +966,27 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         }
         task.updated = now;
         task.last_activity = now;
-        // Persist via raw SqliteIndex — consistent with all sibling server-ui endpoints
-        // (reroute, schedule, etc.). markdown-sync for serve-ui is a separate pre-existing
-        // concern that applies equally to every endpoint here, not specific to signoff.
         pIdx!.index.upsertTask(task);
+        // Durability: agent_status is a new field with no other markdown writer, so unlike
+        // status/scheduled_for it would be lost on rebuild-index (which rebuilds SQLite FROM
+        // markdown). Write it through to the task's markdown frontmatter via read-modify-write
+        // (preserves body + all other fields). Best-effort: if the markdown file is missing,
+        // the SQLite update above still stands.
+        try {
+          const mdPath = join(pIdx!.tasksDir, task.file_path);
+          if (existsSync(mdPath)) {
+            const mdStore = new MarkdownStore();
+            const mdTask = mdStore.read(mdPath);
+            mdTask.file_path = mdPath; // MarkdownStore.write targets task.file_path directly
+            if (req.method === 'POST') mdTask.agent_status = 'scheduled';
+            else delete mdTask.agent_status;
+            mdTask.updated = now;
+            mdTask.last_activity = now;
+            mdStore.write(mdTask);
+          }
+        } catch (mdErr) {
+          console.error(`[signoff] markdown write-through failed for ${taskId}:`, mdErr instanceof Error ? mdErr.message : mdErr);
+        }
         sendJson(res, 200, task);
         return;
       }
@@ -1325,8 +1355,21 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       }
       if (pathname === '/api/skills' && req.method === 'POST') {
         const chunks: Buffer[] = [];
-        req.on('data', (c: Buffer) => chunks.push(c));
+        let bodyBytes = 0;
+        let bodyTooLarge = false;
+        const MAX_SKILL_BODY = 100 * 1024; // 100KB cap — guards against oversized-payload memory pressure
+        req.on('data', (c: Buffer) => {
+          bodyBytes += c.length;
+          if (bodyBytes > MAX_SKILL_BODY) {
+            bodyTooLarge = true;
+            sendJson(res, 413, { error: 'PAYLOAD_TOO_LARGE', message: 'skill body must be 100KB or fewer' });
+            req.destroy();
+            return;
+          }
+          chunks.push(c);
+        });
         req.on('end', () => {
+          if (bodyTooLarge) return;
           try {
             const b = JSON.parse(Buffer.concat(chunks).toString()) as ProposalBody;
             if (!b.name || typeof b.name !== 'string' || !isEngine(b.engine)) {

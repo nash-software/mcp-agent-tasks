@@ -124,9 +124,13 @@ interface AgentLog {
 3. **`agent_status` survives `rebuild-index`:** delete the SQLite DB, run `rebuild-index`, and the
    reconciled task still reports `agent_status: 'scheduled'` from the rebuilt index.
 4. **`POST /api/tasks/:id/signoff`** sets `agent_status: 'scheduled'`, bumps `updated`/`last_activity`,
-   upserts, and returns the full updated task (200). On a nonexistent ID returns 404 `TASK_NOT_FOUND`.
+   upserts (SQLite **and** markdown frontmatter write-through, so the field survives `rebuild-index`),
+   and returns the full updated task (200). On a nonexistent ID returns 404 `TASK_NOT_FOUND`.
    **`DELETE /api/tasks/:id/signoff`** clears `agent_status` (field removed) and returns the task (200);
    404 on nonexistent ID.
+   **Lifecycle guard:** both POST and DELETE return **409 `INVALID_TRANSITION`** when the task is
+   already `running` or `done` — sign-off and un-sign-off are only valid while absent/`scheduled`
+   (un-sign-off only while `scheduled`). So the contract is **200 | 404 | 409**.
 5. **`GET /api/skills`** returns the skills array (`[]` when the store file is missing — never an error).
    **`POST /api/skills`** validates the proposal body, creates a `Skill` (id generated, `runs: 0`),
    appends it atomically, and returns the created skill (201). Rejects missing `name`/`engine` with 400.

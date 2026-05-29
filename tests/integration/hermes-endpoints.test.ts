@@ -122,6 +122,43 @@ describe('Hermes backend endpoints (P2-04)', () => {
     expect(data.error).toBe('TASK_NOT_FOUND');
   });
 
+  it('signoff endpoint writes agent_status to markdown and it survives rebuild (durability)', async () => {
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const { MarkdownStore } = await import('../../src/store/markdown-store.js');
+    const { Reconciler } = await import('../../src/store/reconciler.js');
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    const dbPath = path.join(tasksDir, '.index.db');
+    const ts = new Date().toISOString();
+    const base = {
+      schema_version: 1 as const, id: 'TST-002', title: 'Durable signoff', type: 'feature' as const,
+      status: 'todo' as const, priority: 'medium' as const, project: 'TST', tags: [], complexity: 1,
+      complexity_manual: false, why: 'test', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: 'Original body must be preserved.',
+    };
+    // Write the markdown file on disk (absolute path target) and seed SQLite (relative file_path).
+    new MarkdownStore().write({ ...base, file_path: path.join(tasksDir, 'TST-002.md') });
+    const seed = new SqliteIndex(dbPath); seed.init(); seed.ensureProject('TST');
+    seed.upsertTask({ ...base, file_path: 'TST-002.md' });
+    seed.close();
+
+    // Sign off via the HTTP endpoint.
+    const res = await fetch(`${baseUrl}/api/tasks/TST-002/signoff`, { method: 'POST' });
+    expect(res.status).toBe(200);
+
+    // The endpoint must have written agent_status into the markdown frontmatter (body preserved).
+    const md = new MarkdownStore().read(path.join(tasksDir, 'TST-002.md'));
+    expect(md.agent_status).toBe('scheduled');
+    expect(md.body).toContain('Original body must be preserved.');
+
+    // Rebuild a fresh SQLite index purely from markdown — agent_status must survive.
+    const rebuilt = new SqliteIndex(path.join(tempDir, 'rebuild.db')); rebuilt.init();
+    new Reconciler(rebuilt, tasksDir, 'TST').reconcile();
+    expect(rebuilt.getTask('TST-002')?.agent_status).toBe('scheduled');
+    rebuilt.close();
+  });
+
   // ── skills ────────────────────────────────────────────────────────────────
 
   it('GET /api/skills returns [] when the store file is missing', async () => {
