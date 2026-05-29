@@ -391,6 +391,87 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: today view — committed tasks + candidates + capacity
+      if (pathname === '/api/today' && req.method === 'GET') {
+        const today = new Date().toISOString().slice(0, 10);
+        const targetParam = url.searchParams.get('target');
+        let targetMinutes = 360;
+        if (targetParam !== null) {
+          const parsed = parseInt(targetParam, 10);
+          if (!Number.isFinite(parsed) || parsed < 60 || parsed > 600) {
+            sendError(res, 400, 'target must be an integer between 60 and 600');
+            return;
+          }
+          targetMinutes = parsed;
+        }
+
+        const committed = projectIndexes.flatMap(p => p.index.getTasksByScheduledDate(today));
+        committed.sort((a, b) => {
+          const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+          const pa = priorityOrder[a.priority] ?? 4;
+          const pb = priorityOrder[b.priority] ?? 4;
+          if (pa !== pb) return pa - pb;
+          return a.title.localeCompare(b.title);
+        });
+
+        const candidates = projectIndexes
+          .flatMap(p => p.index.getCandidates(20))
+          .sort((a, b) => {
+            const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+            const pa = priorityOrder[a.priority] ?? 4;
+            const pb = priorityOrder[b.priority] ?? 4;
+            if (pa !== pb) return pa - pb;
+            return a.title.localeCompare(b.title);
+          })
+          .slice(0, 20);
+
+        const committedMinutes = committed.reduce((sum, t) => {
+          return sum + ((t.estimate_hours ?? 0) * 60);
+        }, 0);
+
+        sendJson(res, 200, {
+          committed,
+          candidates,
+          capacity: { committedMinutes, targetMinutes },
+        });
+        return;
+      }
+
+      // API: schedule a task for a specific date (or clear it)
+      const scheduleMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/schedule$/);
+      if (scheduleMatch && req.method === 'POST') {
+        const taskId = scheduleMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { date: string | null };
+            if (body.date !== null && body.date !== undefined) {
+              if (typeof body.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
+                sendError(res, 400, 'date must be YYYY-MM-DD or null');
+                return;
+              }
+            }
+            const now = new Date().toISOString();
+            task.scheduled_for = body.date ?? null;
+            task.updated = now;
+            task.last_activity = now;
+            pIdx!.index.upsertTask(task);
+            sendJson(res, 200, task);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendError(res, 400, msg);
+          }
+        });
+        return;
+      }
+
       sendError(res, 404, `Unknown route: ${pathname}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
