@@ -198,3 +198,14 @@ export async function updateTaskPriority(
   }
   return res.json() as Promise<Task>
 }
+
+export interface ProjectEntry {
+  prefix: string
+  path: string
+}
+
+export async function fetchProjects(): Promise<ProjectEntry[]> {
+  const res = await fetch('/api/projects')
+  if (!res.ok) return []
+  return res.json() as Promise<ProjectEntry[]>
+}

@@ -1,20 +1,20 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 
 export interface CaptureOverlayState {
-  isOpen: boolean
-  open: () => void
-  close: () => void
-  toggle: () => void
+  registerFocus: (fn: () => void) => void
+  focus: () => void
 }
 
 export function useCaptureOverlay(): CaptureOverlayState {
-  const [isOpen, setIsOpen] = useState(false)
+  const focusFnRef = useRef<(() => void) | null>(null)
 
-  const open = useCallback(() => setIsOpen(true), [])
-  const close = useCallback(() => setIsOpen(false), [])
-  const toggle = useCallback(() => setIsOpen(v => !v), [])
+  const registerFocus = useCallback((fn: () => void): void => {
+    focusFnRef.current = fn
+  }, [])
 
-  // Keyboard handler moved to useGlobalKeyboard (P1-02)
+  const focus = useCallback((): void => {
+    focusFnRef.current?.()
+  }, [])
 
-  return { isOpen, open, close, toggle }
+  return { registerFocus, focus }
 }
