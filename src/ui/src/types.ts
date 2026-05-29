@@ -110,3 +110,15 @@ export interface AcrStatusResponse {
   offline: boolean
   jobs: AcrJob[]
 }
+
+export interface BrainResult {
+  title: string
+  snippet: string
+  source?: string
+}
+
+export interface BrainSearchResponse {
+  results: BrainResult[]
+  query: string
+  offline?: boolean
+}

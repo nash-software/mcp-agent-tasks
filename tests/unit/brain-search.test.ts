@@ -1,0 +1,216 @@
+/**
+ * Unit tests for GET /api/brain/search
+ * - online path: mock brain MCP fetch returns results
+ * - offline path: ECONNREFUSED → returns { offline: true, results: [] }, HTTP 200
+ * - validation: empty q → 400
+ */
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { startUiServer, type UiServerHandle } from '../../src/server-ui.js';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+const BRAIN_MCP_PATTERN = 'localhost:8093';
+
+/** Wrap globalThis.fetch: brain MCP calls (localhost:8093) get the mock;
+ *  all other calls (to the test server) use the real fetch. */
+function stubBrainFetch(
+  realFetch: typeof fetch,
+  brainImpl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
+): MockInstance {
+  return vi.spyOn(globalThis, 'fetch').mockImplementation(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes(BRAIN_MCP_PATTERN)) {
+        return brainImpl(input, init);
+      }
+      return realFetch(input, init);
+    },
+  );
+}
+
+function makeTempEnv(): { tempDir: string; configPath: string; dbPath: string } {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'brain-search-test-'));
+  const tasksDir = path.join(tempDir, 'agent-tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+
+  // Ensure GEN global dir exists
+  const genDbDir = path.join(os.homedir(), '.mcp-tasks', 'tasks', 'gen');
+  fs.mkdirSync(genDbDir, { recursive: true });
+
+  const configPath = path.join(tempDir, 'config.json');
+  const dbPath = path.join(tempDir, 'test.db');
+
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'TEST', path: tempDir }],
+    }),
+    'utf-8',
+  );
+
+  return { tempDir, configPath, dbPath };
+}
+
+async function startServer(configPath: string, dbPath: string): Promise<{ handle: UiServerHandle; baseUrl: string }> {
+  process.env['MCP_TASKS_CONFIG'] = configPath;
+  process.env['MCP_TASKS_DB'] = dbPath;
+  const handle = await startUiServer({ port: 0 });
+  return { handle, baseUrl: handle.url };
+}
+
+// ─── GET /api/brain/search — online path ────────────────────────────────────
+
+describe('GET /api/brain/search — online path', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  const realFetch = globalThis.fetch.bind(globalThis);
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+    const env = makeTempEnv();
+    tempDir = env.tempDir;
+    ({ handle, baseUrl } = await startServer(env.configPath, env.dbPath));
+  });
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns results array when brain MCP responds (online path)', async () => {
+    const brainResults = [
+      { title: 'TypeScript tips', snippet: 'Use strict mode for safer code.', source: 'https://example.com/ts' },
+    ];
+
+    stubBrainFetch(realFetch, () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: { content: [{ text: JSON.stringify(brainResults) }] },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/brain/search?q=typescript`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: Array<{ title: string }>; query: string; offline?: boolean };
+    expect(body.offline).toBeUndefined();
+    expect(body.query).toBe('typescript');
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results).toHaveLength(1);
+    expect(body.results[0].title).toBe('TypeScript tips');
+  });
+});
+
+// ─── GET /api/brain/search — offline path ───────────────────────────────────
+
+describe('GET /api/brain/search — offline path', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  const realFetch = globalThis.fetch.bind(globalThis);
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+    const env = makeTempEnv();
+    tempDir = env.tempDir;
+    ({ handle, baseUrl } = await startServer(env.configPath, env.dbPath));
+  });
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns { offline: true, results: [] } and HTTP 200 when brain is unreachable', async () => {
+    const connError = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8093'), { code: 'ECONNREFUSED' });
+
+    stubBrainFetch(realFetch, () => Promise.reject(connError));
+
+    const res = await realFetch(`${baseUrl}/api/brain/search?q=typescript`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: unknown[]; query: string; offline?: boolean };
+    expect(body.offline).toBe(true);
+    expect(body.results).toEqual([]);
+    expect(body.query).toBe('typescript');
+  });
+});
+
+// ─── GET /api/brain/search — validation ─────────────────────────────────────
+
+describe('GET /api/brain/search — validation', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  const realFetch = globalThis.fetch.bind(globalThis);
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+    const env = makeTempEnv();
+    tempDir = env.tempDir;
+    ({ handle, baseUrl } = await startServer(env.configPath, env.dbPath));
+  });
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns 400 when q param is missing', async () => {
+    const res = await realFetch(`${baseUrl}/api/brain/search`);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when q param is empty', async () => {
+    const res = await realFetch(`${baseUrl}/api/brain/search?q=`);
+    expect(res.status).toBe(400);
+  });
+});
