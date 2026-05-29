@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,112 @@ export interface ActivityEntry {
 export interface UiServerHandle {
   url: string;
   close: () => Promise<void>;
+}
+
+export interface ArtifactEntry {
+  path: string;
+  project: string;
+  created_at: string;
+  last_opened_at: string | null;
+  task_id: string | null;
+  staleDays: number;
+}
+
+// ── artifacts opened store ────────────────────────────────────────────────────
+// In-memory cache of artifacts-opened.json, loaded lazily on first request.
+const MCP_TASKS_DIR = join(homedir(), '.mcp-tasks');
+const ARTIFACTS_JSONL = join(MCP_TASKS_DIR, 'artifacts.jsonl');
+const ARTIFACTS_OPENED_JSON = join(MCP_TASKS_DIR, 'artifacts-opened.json');
+
+let openedStore: Record<string, string> | null = null;
+
+function loadOpenedStore(): Record<string, string> {
+  if (openedStore !== null) return openedStore;
+  try {
+    if (existsSync(ARTIFACTS_OPENED_JSON)) {
+      const raw = readFileSync(ARTIFACTS_OPENED_JSON, 'utf-8');
+      openedStore = JSON.parse(raw) as Record<string, string>;
+    } else {
+      openedStore = {};
+    }
+  } catch {
+    openedStore = {};
+  }
+  return openedStore;
+}
+
+function saveOpenedStore(store: Record<string, string>): void {
+  try {
+    mkdirSync(MCP_TASKS_DIR, { recursive: true });
+    const tmp = ARTIFACTS_OPENED_JSON + '.tmp.' + process.pid;
+    writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf-8');
+    renameSync(tmp, ARTIFACTS_OPENED_JSON);
+  } catch { /* non-fatal */ }
+}
+
+function readArtifacts(): ArtifactEntry[] {
+  if (!existsSync(ARTIFACTS_JSONL)) return [];
+  let lines: string[];
+  try {
+    lines = readFileSync(ARTIFACTS_JSONL, 'utf-8').split('\n').filter(l => l.trim() !== '');
+  } catch {
+    return [];
+  }
+
+  interface RawRecord {
+    path?: unknown;
+    project?: unknown;
+    created_at?: unknown;
+    task_id?: unknown;
+  }
+
+  // Parse and collect — keep latest created_at per path
+  const byPath = new Map<string, { project: string; created_at: string; task_id: string | null }>();
+  const now = Date.now();
+  const thirtyDaysMs = 30 * 86_400_000;
+
+  for (const line of lines) {
+    try {
+      const r = JSON.parse(line) as RawRecord;
+      if (typeof r.path !== 'string' || typeof r.created_at !== 'string') continue;
+      const createdMs = new Date(r.created_at).getTime();
+      if (isNaN(createdMs) || now - createdMs > thirtyDaysMs) continue;
+      const existing = byPath.get(r.path);
+      if (!existing || new Date(r.created_at) > new Date(existing.created_at)) {
+        byPath.set(r.path, {
+          project: typeof r.project === 'string' ? r.project : 'GEN',
+          created_at: r.created_at,
+          task_id: typeof r.task_id === 'string' ? r.task_id : null,
+        });
+      }
+    } catch { /* skip bad line */ }
+  }
+
+  const opened = loadOpenedStore();
+
+  const entries: ArtifactEntry[] = [];
+  for (const [p, rec] of byPath) {
+    const createdMs = new Date(rec.created_at).getTime();
+    const staleDays = Math.floor((now - createdMs) / 86_400_000);
+    entries.push({
+      path: p,
+      project: rec.project,
+      created_at: rec.created_at,
+      last_opened_at: opened[p] ?? null,
+      task_id: rec.task_id,
+      staleDays,
+    });
+  }
+
+  // Sort: null last_opened_at first (never opened = most stale), then ascending by last_opened_at
+  entries.sort((a, b) => {
+    if (a.last_opened_at === null && b.last_opened_at === null) return 0;
+    if (a.last_opened_at === null) return -1;
+    if (b.last_opened_at === null) return 1;
+    return new Date(a.last_opened_at).getTime() - new Date(b.last_opened_at).getTime();
+  });
+
+  return entries;
 }
 
 const MIME: Record<string, string> = {
@@ -831,6 +937,41 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               // ECONNREFUSED, timeout, or any network error — ACR is offline
               sendJson(res, 200, { error: 'ACR offline' });
             }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: artifacts list
+      if (pathname === '/api/artifacts' && req.method === 'GET') {
+        try {
+          const entries = readArtifacts();
+          sendJson(res, 200, entries);
+        } catch {
+          sendJson(res, 200, []);
+        }
+        return;
+      }
+
+      // API: mark artifact opened
+      if (pathname === '/api/artifacts/opened' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { path?: unknown };
+            if (!body.path || typeof body.path !== 'string') {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'path is required' });
+              return;
+            }
+            const store = loadOpenedStore();
+            store[body.path] = new Date().toISOString();
+            openedStore = store;
+            saveOpenedStore(store);
+            sendJson(res, 200, { ok: true });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
