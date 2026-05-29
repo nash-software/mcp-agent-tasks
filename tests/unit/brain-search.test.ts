@@ -12,9 +12,9 @@ import { startUiServer, type UiServerHandle } from '../../src/server-ui.js';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-const BRAIN_MCP_PATTERN = 'localhost:8093';
+const BRAIN_MCP_PATTERN = 'nash-vps.tail5c5009.ts.net:8093';
 
-/** Wrap globalThis.fetch: brain MCP calls (localhost:8093) get the mock;
+/** Wrap globalThis.fetch: brain MCP calls (nash-vps Tailscale) get the mock;
  *  all other calls (to the test server) use the real fetch. */
 function stubBrainFetch(
   realFetch: typeof fetch,
