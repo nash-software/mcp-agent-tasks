@@ -221,9 +221,10 @@ describe('CaptureOverlay source structure', () => {
     expect(fs.existsSync(filePath)).toBe(true);
   });
 
-  it('useCaptureOverlay listens for Ctrl+Space', () => {
+  // P1-02: Ctrl+Space handler moved from useCaptureOverlay to useGlobalKeyboard
+  it('useGlobalKeyboard listens for Ctrl+Space', () => {
     const source = fs.readFileSync(
-      path.join(process.cwd(), 'src', 'ui', 'src', 'hooks', 'useCaptureOverlay.ts'),
+      path.join(process.cwd(), 'src', 'ui', 'src', 'hooks', 'useGlobalKeyboard.ts'),
       'utf-8',
     );
     expect(source).toContain("e.ctrlKey");

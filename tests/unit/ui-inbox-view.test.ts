@@ -2,36 +2,27 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-describe('InboxView exists and is wired', () => {
-  it('InboxView.tsx exists in views directory', () => {
+// P1-02: InboxView was deleted — folded into auto-triage in P2-04b.
+// These tests confirm the deletion is complete and App.tsx no longer references it.
+describe('InboxView removed (P1-02)', () => {
+  it('InboxView.tsx no longer exists in views directory', () => {
     const filePath = path.join(process.cwd(), 'src', 'ui', 'src', 'views', 'InboxView.tsx');
-    expect(fs.existsSync(filePath)).toBe(true);
+    expect(fs.existsSync(filePath)).toBe(false);
   });
 
-  it('InboxView.tsx fetches draft tasks', () => {
-    const source = fs.readFileSync(
-      path.join(process.cwd(), 'src', 'ui', 'src', 'views', 'InboxView.tsx'),
-      'utf-8',
-    );
-    expect(source).toContain("'draft'");
-    expect(source).toContain('fetchTasks');
-  });
-
-  it('App.tsx renders InboxView for inbox tab', () => {
+  it('App.tsx does not import InboxView', () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), 'src', 'ui', 'src', 'App.tsx'),
       'utf-8',
     );
-    expect(source).toContain('InboxView');
-    expect(source).toContain("'inbox'");
+    expect(source).not.toContain('InboxView');
   });
 
-  it('InboxView.tsx has a promote action', () => {
+  it('App.tsx does not reference the inbox ViewId', () => {
     const source = fs.readFileSync(
-      path.join(process.cwd(), 'src', 'ui', 'src', 'views', 'InboxView.tsx'),
+      path.join(process.cwd(), 'src', 'ui', 'src', 'App.tsx'),
       'utf-8',
     );
-    expect(source).toContain('promote');
-    expect(source).toContain('/promote');
+    expect(source).not.toContain("'inbox'");
   });
 });

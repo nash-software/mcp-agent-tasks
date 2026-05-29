@@ -118,12 +118,15 @@ describe('App.tsx — TodayView integration', () => {
     expect(readUiFile('App.tsx')).toContain('TodayView');
   });
 
-  it('defaults to the today tab', () => {
-    expect(readUiFile('App.tsx')).toContain("useState<TabId>('today')");
+  // P1-02: App.tsx switched from TabId/activeTab to ViewId/view state with localStorage
+  it('defaults to the today view via readStoredView', () => {
+    const source = readUiFile('App.tsx');
+    expect(source).toContain('readStoredView');
+    expect(source).toContain("'today'");
   });
 
-  it('renders TodayView when today tab is active', () => {
-    expect(readUiFile('App.tsx')).toContain("activeTab === 'today'");
+  it('renders TodayView when view is today', () => {
+    expect(readUiFile('App.tsx')).toContain("view === 'today'");
   });
 });
 
