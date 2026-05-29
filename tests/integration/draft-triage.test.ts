@@ -119,6 +119,16 @@ describe('applyTriageResult', () => {
     expect(t?.triage_confidence).toBe(0.4);
   });
 
+  it('flag path persists the Haiku-suggested priority + area (for the needs-your-call UI)', () => {
+    const stdout = '{"project":"TST","priority":"critical","area":"outsource","confidence":0.5,"needs_human":false,"triage_note":"unsure"}';
+    applyTriageResult('TST-001', stdout, projectIndexes as never, 0.8);
+    const t = projectIndexes[0].index.getTask('TST-001');
+    expect(t?.status).toBe('draft');           // not promoted
+    expect(t?.priority).toBe('critical');       // suggestion persisted
+    expect(t?.area).toBe('outsource');          // suggestion persisted
+    expect(t?.triage_confidence).toBe(0.5);
+  });
+
   it('flags a needs_human draft even at high confidence', () => {
     const stdout = '{"project":"TST","priority":"high","area":"client","confidence":0.99,"needs_human":true,"triage_note":"looks like a decision"}';
     applyTriageResult('TST-001', stdout, projectIndexes as never, 0.8);
