@@ -292,12 +292,14 @@ export async function postAgentSchedule(taskId: string): Promise<{ error?: strin
 export interface PromoteSkillPayload {
   name: string
   desc: string
-  engine: string
+  engine: Engine
   match: string[]
   runs: 0
   minutesSaved: 0
   origin: string
   project: string
+  /** Proposal savings — client-only, used for the optimistic promote log entry (server ignores). */
+  savedPerRun?: number
 }
 
 /** Promote a proposal → a committed Skill. POST /api/skills. Source:'hermes'. */
