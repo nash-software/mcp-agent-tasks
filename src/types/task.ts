@@ -1,6 +1,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved';
 export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
+export type Area = 'client' | 'personal' | 'outsource' | 'internal';
 
 export interface TaskReference {
   type: 'closes' | 'blocks' | 'related';
@@ -88,6 +89,8 @@ export interface TaskFrontmatter {
   auto_captured?: boolean;      // true if created by passive-capture hook
   labels?: string[];            // alias for tags (backward-compat: tags still works)
   references?: TaskReference[]; // cross-refs to other tasks
+  area?: Area;                  // PARA area; if absent, derived via area-resolution helper
+  scheduled_for?: string | null; // YYYY-MM-DD date committed to for Today view, or null
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches

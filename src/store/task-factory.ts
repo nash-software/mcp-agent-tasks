@@ -65,6 +65,7 @@ export class TaskFactory {
       git: { commits: [] },
       transitions: [],
       files: input.files ?? [],
+      scheduled_for: null,
       body: templateBody ?? '',
       file_path: path.join(tasksDir, id + '.md'),
     };

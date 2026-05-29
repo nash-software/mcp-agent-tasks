@@ -64,6 +64,8 @@
       }
     },
     "transitions": { "type": "array" },
-    "files": { "type": "array", "items": { "type": "string" } }
+    "files": { "type": "array", "items": { "type": "string" } },
+    "area": { "type": "string", "enum": ["client", "personal", "outsource", "internal"] },
+    "scheduled_for": { "type": ["string", "null"] }
   }
 }
