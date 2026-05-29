@@ -2,6 +2,7 @@ export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived
 export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 export type Area = 'client' | 'personal' | 'outsource' | 'internal';
+export type AgentStatus = 'scheduled' | 'running' | 'done';
 
 export interface TaskReference {
   type: 'closes' | 'blocks' | 'related';
@@ -91,6 +92,8 @@ export interface TaskFrontmatter {
   references?: TaskReference[]; // cross-refs to other tasks
   area?: Area;                  // PARA area; if absent, derived via area-resolution helper
   scheduled_for?: string | null; // YYYY-MM-DD date committed to for Today view, or null
+  agent_status?: AgentStatus;   // Hermes sign-off marker; absence = not signed off to the agent layer
+  block_reason?: string;        // shown when status === 'blocked'
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches

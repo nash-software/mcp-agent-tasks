@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { stringify as yamlStringify } from 'yaml';
-import type { Task, TaskFrontmatter, TaskReference, Area } from '../types/task.js';
+import type { Task, TaskFrontmatter, TaskReference, Area, AgentStatus } from '../types/task.js';
 import { McpTasksError } from '../types/errors.js';
 
 const SCHEMA_VERSION = 1;
@@ -84,6 +84,8 @@ export class MarkdownStore {
       references?: unknown;
       area?: Area;
       scheduled_for?: string | Date | null;
+      agent_status?: AgentStatus;
+      block_reason?: string;
     };
 
     if (fm.schema_version !== SCHEMA_VERSION) {
@@ -151,6 +153,8 @@ export class MarkdownStore {
       ...(fm.auto_captured !== undefined ? { auto_captured: fm.auto_captured } : {}),
       ...(fm.area !== undefined ? { area: fm.area } : {}),
       ...(fm.scheduled_for !== undefined ? { scheduled_for: toDateStringOrNull(fm.scheduled_for) } : {}),
+      ...(fm.agent_status !== undefined ? { agent_status: fm.agent_status } : {}),
+      ...(fm.block_reason !== undefined ? { block_reason: fm.block_reason } : {}),
     };
 
     // Parse and validate references
@@ -194,6 +198,8 @@ export class MarkdownStore {
     if (task.references === undefined) delete frontmatterToWrite['references'];
     if (task.area === undefined) delete frontmatterToWrite['area'];
     if (task.scheduled_for === undefined || task.scheduled_for === null) delete frontmatterToWrite['scheduled_for'];
+    if (task.agent_status === undefined) delete frontmatterToWrite['agent_status'];
+    if (task.block_reason === undefined) delete frontmatterToWrite['block_reason'];
 
     // Remove labels/tags if both are empty to keep output clean
     if (!task.tags?.length) {

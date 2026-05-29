@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
+import { MarkdownStore } from './store/markdown-store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -234,6 +235,165 @@ function readArtifacts(): ArtifactEntry[] {
   return entries;
 }
 
+// ── Hermes agent layer: skills + agent-log file stores (P2-04) ──────────────────
+// App-level stores (not per-project). Mirror the artifacts-opened.json / artifacts.jsonl
+// pattern. The base dir honors the MCP_TASKS_DIR env override for testability; default
+// is the same ~/.mcp-tasks dir used by the artifacts stores above.
+export type Engine = 'hermes' | 'n8n' | 'acr';
+
+export interface Skill {
+  id: string;
+  name: string;
+  project: string;
+  engine: Engine;
+  desc: string;
+  match: string[];
+  runs: number;
+  minutesSaved: number;
+  lastRun: string;
+  origin: string;
+}
+
+export interface AgentLog {
+  id: string;
+  kind: 'run' | 'research' | 'promote';
+  title: string;
+  project: string;
+  savedMin: number;
+  at: string;
+  skill?: string;
+}
+
+export interface ProposalBody {
+  name: string;
+  engine: Engine;
+  desc?: string;
+  match?: string[];
+  project?: string;
+  taskId?: string;
+  origin?: string;
+}
+
+function hermesStoreDir(): string {
+  const override = process.env['MCP_TASKS_DIR'];
+  return override && override.trim() !== '' ? override : MCP_TASKS_DIR;
+}
+
+function skillsJsonPath(): string {
+  return join(hermesStoreDir(), 'skills.json');
+}
+
+function agentLogJsonlPath(): string {
+  return join(hermesStoreDir(), 'agent-log.jsonl');
+}
+
+function isEngine(x: unknown): x is Engine {
+  return x === 'hermes' || x === 'n8n' || x === 'acr';
+}
+
+function slug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'skill';
+}
+
+function isValidSkill(s: unknown): s is Skill {
+  if (typeof s !== 'object' || s === null) return false;
+  const o = s as Record<string, unknown>;
+  return typeof o['id'] === 'string'
+    && typeof o['name'] === 'string'
+    && typeof o['engine'] === 'string';
+}
+
+function readSkills(): Skill[] {
+  const file = skillsJsonPath();
+  if (!existsSync(file)) return [];
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as unknown;
+    // Shape-validate each entry; drop malformed records rather than returning corrupt data.
+    return Array.isArray(parsed) ? parsed.filter(isValidSkill) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSkills(skills: Skill[]): void {
+  const dir = hermesStoreDir();
+  mkdirSync(dir, { recursive: true });
+  const file = skillsJsonPath();
+  // Unique temp name (pid + time + rand) so concurrent writers never collide on the tmp file.
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+  writeFileSync(tmp, JSON.stringify(skills, null, 2), 'utf-8');
+  renameSync(tmp, file); // atomic swap on NTFS + POSIX
+}
+
+// In-process serialization for skill writes. Concurrent POST /api/skills calls all
+// chain onto this promise so read-modify-write is never interleaved (F2).
+//
+// Resilience: the queue tail advances even when a task rejects. The `run` promise
+// carries the real result (resolved or rejected) back to the caller, while
+// `_skillsWriteQueue` is always settled to `undefined` so the NEXT caller is
+// never poisoned by a previous failure.
+let _skillsWriteQueue: Promise<unknown> = Promise.resolve();
+
+function withSkillsLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  const run = _skillsWriteQueue.then(fn, fn); // continue regardless of prior outcome
+  // Keep the chain alive but swallow rejection so the NEXT caller isn't poisoned.
+  _skillsWriteQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function createSkillFromProposal(b: ProposalBody): Skill {
+  // Must be called inside withSkillsLock so the ID-uniqueness check sees the latest file.
+  const existing = new Set(readSkills().map(s => s.id));
+  const base = `sk-${slug(b.name)}`;
+  let id = base;
+  let n = 2;
+  while (existing.has(id)) {
+    id = `${base}-${n}`;
+    n += 1;
+  }
+  const project = b.project ?? '—';
+  return {
+    id,
+    name: b.name,
+    project,
+    engine: b.engine,
+    desc: b.desc ?? '',
+    match: b.match ?? [],
+    runs: 0,
+    minutesSaved: 0,
+    lastRun: '',
+    origin: b.origin ?? `promoted from ${b.taskId ?? 'a task'}`,
+  };
+}
+
+function readAgentLog(): AgentLog[] {
+  const file = agentLogJsonlPath();
+  if (!existsSync(file)) return [];
+  let lines: string[];
+  try {
+    lines = readFileSync(file, 'utf-8').split('\n').filter(l => l.trim() !== '');
+  } catch {
+    return [];
+  }
+  const entries: AgentLog[] = [];
+  for (const line of lines) {
+    try {
+      entries.push(JSON.parse(line) as AgentLog);
+    } catch { /* skip malformed line */ }
+  }
+  return entries.reverse(); // newest-first
+}
+
+/** Append an agent-log entry. Exported for P2-06 action handlers to log runs/promotes. */
+export function appendAgentLog(entry: AgentLog): void {
+  const dir = hermesStoreDir();
+  mkdirSync(dir, { recursive: true });
+  appendFileSync(agentLogJsonlPath(), JSON.stringify(entry) + '\n', 'utf-8');
+}
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript',
@@ -304,16 +464,18 @@ interface ProjectIndex {
   prefix: string;
   index: SqliteIndex;
   milestoneRepo: MilestoneRepository;
+  tasksDir: string;  // directory holding the project's markdown task files (for markdown write-through)
 }
 
 function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex[] {
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
   if (config.projects.length === 0) {
-    // No registered projects â€” fall back to global DB
-    const idx = new SqliteIndex(getDbPath());
+    // No registered projects — fall back to global DB
+    const dbPath = getDbPath();
+    const idx = new SqliteIndex(dbPath);
     idx.init();
-    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) }];
+    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir: dirname(dbPath) }];
   }
 
   const indexes = config.projects.map(p => {
@@ -321,14 +483,15 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
     const dbPath = resolveServerDbPath(tasksDir, config, p.prefix);
     const idx = new SqliteIndex(dbPath);
     idx.init();
-    return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()) };
+    return { prefix: p.prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir };
   });
 
-  const genDbPath = join(homedir(), '.mcp-tasks', 'tasks', 'gen', '.index.db');
+  const genTasksDir = join(homedir(), '.mcp-tasks', 'tasks', 'gen');
+  const genDbPath = join(genTasksDir, '.index.db');
   if (existsSync(genDbPath)) {
     const genIdx = new SqliteIndex(genDbPath);
     genIdx.init();
-    indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()) });
+    indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()), tasksDir: genTasksDir });
   }
 
   return indexes;
@@ -774,6 +937,64 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Hermes sign-off — POST sets agent_status='scheduled', DELETE clears it (P2-04)
+      const signoffMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/signoff$/);
+      if (signoffMatch && (req.method === 'POST' || req.method === 'DELETE')) {
+        const taskId = signoffMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        const now = new Date().toISOString();
+        const currentAgentStatus = task.agent_status as string | undefined;
+        if (req.method === 'POST') {
+          // F4: only allow scheduling when agent_status is absent or already 'scheduled'
+          if (currentAgentStatus === 'running' || currentAgentStatus === 'done') {
+            sendJson(res, 409, { error: 'INVALID_TRANSITION', message: 'task is already running or done' });
+            return;
+          }
+          task.agent_status = 'scheduled';
+        } else {
+          // F1: only allow clearing when agent_status is absent or 'scheduled'; running/done is locked
+          if (currentAgentStatus === 'running' || currentAgentStatus === 'done') {
+            sendJson(res, 409, { error: 'INVALID_TRANSITION', message: 'cannot unsignoff a task that is running or done' });
+            return;
+          }
+          delete task.agent_status; // DELETE clears the sign-off marker (idempotent when already absent)
+        }
+        task.updated = now;
+        task.last_activity = now;
+        // Durability + atomicity: markdown is the source of truth (rebuild-index rebuilds SQLite
+        // FROM markdown), and agent_status has no other markdown writer. Write markdown FIRST and
+        // fail closed — if the markdown write throws we return 500 WITHOUT touching SQLite, so we
+        // never acknowledge a sign-off that wouldn't survive a rebuild (no split-brain state).
+        // When the task has no markdown file on disk (SQLite-only task), there is nothing to lose
+        // to a rebuild, so SQLite alone is correct.
+        const mdPath = join(pIdx!.tasksDir, task.file_path);
+        if (existsSync(mdPath)) {
+          try {
+            const mdStore = new MarkdownStore();
+            const mdTask = mdStore.read(mdPath);
+            mdTask.file_path = mdPath; // MarkdownStore.write targets task.file_path directly
+            if (req.method === 'POST') mdTask.agent_status = 'scheduled';
+            else delete mdTask.agent_status;
+            mdTask.updated = now;
+            mdTask.last_activity = now;
+            mdStore.write(mdTask); // throws → caught below; SQLite is left untouched
+          } catch (mdErr) {
+            const msg = mdErr instanceof Error ? mdErr.message : String(mdErr);
+            console.error(`[signoff] markdown write failed for ${taskId}, aborting (SQLite untouched):`, msg);
+            sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist sign-off' });
+            return;
+          }
+        }
+        pIdx!.index.upsertTask(task); // index update only after markdown is durable
+        sendJson(res, 200, task);
+        return;
+      }
+
       // API: quick capture — instant GEN inbox write + background LLM routing
       if (pathname === '/api/capture/quick' && req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -1128,6 +1349,83 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: skills library (P2-04) — app-level, JSON file store
+      if (pathname === '/api/skills' && req.method === 'GET') {
+        sendJson(res, 200, readSkills()); // [] when file missing
+        return;
+      }
+      if (pathname === '/api/skills' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        let bodyBytes = 0;
+        let bodyTooLarge = false;
+        const MAX_SKILL_BODY = 100 * 1024; // 100KB cap — guards against oversized-payload memory pressure
+        req.on('data', (c: Buffer) => {
+          bodyBytes += c.length;
+          if (bodyBytes > MAX_SKILL_BODY) {
+            bodyTooLarge = true;
+            sendJson(res, 413, { error: 'PAYLOAD_TOO_LARGE', message: 'skill body must be 100KB or fewer' });
+            req.destroy();
+            return;
+          }
+          chunks.push(c);
+        });
+        req.on('end', () => {
+          if (bodyTooLarge) return;
+          try {
+            const b = JSON.parse(Buffer.concat(chunks).toString()) as ProposalBody;
+            if (!b.name || typeof b.name !== 'string' || !isEngine(b.engine)) {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'name and engine are required' });
+              return;
+            }
+            // Validate optional fields: type mismatches are rejected with 400 INVALID_FIELD.
+            if (b.match !== undefined && (!Array.isArray(b.match) || b.match.some(m => typeof m !== 'string'))) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'match must be an array of strings' });
+              return;
+            }
+            if (b.project !== undefined && typeof b.project !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'project must be a string' });
+              return;
+            }
+            if (b.desc !== undefined && typeof b.desc !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'desc must be a string' });
+              return;
+            }
+            if (b.desc !== undefined && typeof b.desc === 'string' && b.desc.length > 500) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'desc must be 500 characters or fewer' });
+              return;
+            }
+            if (b.origin !== undefined && typeof b.origin !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'origin must be a string' });
+              return;
+            }
+            // Build and append the skill inside the serialization lock so concurrent
+            // POSTs never interleave their read-modify-write (F2).
+            let skill!: Skill;
+            withSkillsLock(() => {
+              skill = createSkillFromProposal(b);
+              const all = readSkills();
+              all.push(skill);
+              writeSkills(all);
+            }).then(() => {
+              sendJson(res, 201, skill);
+            }).catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'WRITE_ERROR', message: msg });
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: agent activity log (P2-04) — append-only JSONL, newest-first
+      if (pathname === '/api/agent/log' && req.method === 'GET') {
+        sendJson(res, 200, readAgentLog()); // [] when file missing
         return;
       }
 
