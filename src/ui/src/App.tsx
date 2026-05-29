@@ -160,8 +160,8 @@ export function App(): React.JSX.Element {
       </main>
 
       {/* ambient right rail — P1-05 will replace with real LiveFeed rail */}
-      <aside className="ambient bg-surface-1 border-l border-surface-3 overflow-y-auto">
-        <LiveFeedSection />
+      <aside className="ambient bg-surface-1 border-l border-surface-3 overflow-hidden">
+        <LiveFeedSection onOpenPanel={setPanel} />
       </aside>
 
       {/* capture overlay (modal) */}
