@@ -18,6 +18,8 @@ interface NavProps {
   filterProjects: FilterBarProject[]
   /** Toggle a project in the global filter (P2-01). */
   onToggleProject: (prefix: string) => void
+  /** Prefixes currently active in the global filter — pinned rows show active treatment. */
+  activeProjects: string[]
   /** Area map for resolving project area — prefix → area (P2-01, built in App). */
   areaMap: Record<string, TaskArea>
 }
@@ -30,6 +32,7 @@ export function Nav({
   projectCounts,
   filterProjects,
   onToggleProject,
+  activeProjects,
   areaMap,
 }: NavProps): React.JSX.Element {
   const acrQ = useAcrStatus()
@@ -94,13 +97,17 @@ export function Nav({
               if (!proj) return null
               const area = proj.area ?? areaMap[prefix] ?? null
               const count = projectCounts[prefix]
+              const active = activeProjects.includes(prefix)
               return (
                 <button
                   key={prefix}
                   onClick={() => onToggleProject(prefix)}
                   title={`${proj.name} — click to filter everywhere`}
+                  aria-pressed={active}
                   className={`flex items-center gap-2 w-full px-3 py-2 rounded text-sm transition-colors ${
-                    'text-ink-muted hover:bg-surface-2 hover:text-ink'
+                    active
+                      ? 'bg-surface-2 text-ink ring-1 ring-inset ring-accent/40'
+                      : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
                   }`}
                 >
                   {area && <AreaDot area={area} />}

@@ -410,6 +410,7 @@ export function App(): React.JSX.Element {
         projectCounts={projectCounts}
         filterProjects={filterProjects}
         onToggleProject={toggleProject}
+        activeProjects={filter.projects}
         areaMap={areaMap}
       />
 
