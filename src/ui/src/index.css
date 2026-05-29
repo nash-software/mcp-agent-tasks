@@ -69,6 +69,82 @@
   overflow: hidden;
 }
 
+
+/* -- Global capture bar (P1-06) -------------------------------------------- */
+.capture-bar {
+  grid-area: capture;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--color-surface-3, #27272a);
+  background: var(--color-bg, #09090b);
+}
+.capture-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: calc(var(--nav-w) - 16px);
+  flex-shrink: 0;
+}
+.capture-brand .logo {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--accent, #0070f3);
+  flex-shrink: 0; display: grid; place-items: center;
+}
+.capture-brand .logo::after {
+  content: ""; width: 8px; height: 8px; border-radius: 2px; background: #fff;
+}
+.capture-brand .name { font-weight: 600; font-size: 13.5px; letter-spacing: -0.01em; color: var(--color-text, #fafafa); }
+.capture-brand .name span { color: var(--color-muted, #71717a); font-weight: 500; }
+.capture-input-wrap {
+  flex: 1; display: flex; align-items: center; gap: 10px;
+  height: 34px; padding: 0 10px 0 12px;
+  background: var(--color-surface-1, #111113);
+  border: 1px solid var(--color-surface-3, #27272a);
+  border-radius: 6px;
+  transition: border-color 120ms ease, background 120ms ease;
+  position: relative;
+}
+.capture-input-wrap:focus-within { border-color: var(--accent, #0070f3); background: var(--color-surface-2, #18181b); }
+.capture-input-wrap .lead { color: var(--color-muted, #71717a); display: flex; flex-shrink: 0; }
+.capture-input {
+  flex: 1; background: none; border: none; outline: none;
+  color: var(--color-text, #fafafa); font-size: 13.5px; font-family: inherit; min-width: 0;
+}
+.capture-input::placeholder { color: var(--color-muted-2, #52525b); }
+.capture-hint { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.capture-hint kbd {
+  padding: 1px 5px; font-size: 10px; font-family: inherit; border-radius: 3px;
+  background: var(--color-surface-3, #27272a); color: var(--color-muted, #71717a);
+  border: 1px solid var(--color-surface-3, #27272a);
+}
+.expand-btn, .mic-btn {
+  width: 28px; height: 28px; border-radius: 6px; color: var(--color-muted, #71717a);
+  display: grid; place-items: center;
+  transition: background 100ms ease, color 100ms ease;
+  flex-shrink: 0; background: none; border: none; cursor: pointer; padding: 0;
+}
+.expand-btn:hover, .mic-btn:hover { background: var(--color-surface-2, #18181b); color: var(--color-text-2, #a1a1aa); }
+.mic-btn.recording { color: #ef4444; background: color-mix(in srgb, #ef4444 14%, transparent); animation: pulse 1s ease-in-out infinite; }
+.mic-btn:disabled { opacity: 0.5; cursor: default; }
+.capture-ac {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--color-surface-1, #111113); border: 1px solid var(--color-surface-3, #27272a);
+  border-radius: 6px; padding: 4px; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.capture-ac .ac-row { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 5px; cursor: pointer; }
+.capture-ac .ac-row.sel { background: var(--color-surface-2, #18181b); }
+.capture-ac .ac-prefix { font-family: var(--font-mono, ui-monospace, "SF Mono", monospace); font-size: 11px; font-weight: 600; color: var(--color-text-2, #a1a1aa); }
+.capture-flash {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; gap: 6px;
+  color: #22c55e; font-size: 12.5px; font-weight: 500; pointer-events: none;
+  animation: captureFlashIn 150ms ease;
+}
+.capture-error { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #ef4444; pointer-events: none; white-space: nowrap; }
+@keyframes captureFlashIn { from { opacity: 0; transform: translateY(-50%) scale(0.96); } }
+
 /* tablet 768–1199px: ambient becomes bottom drawer, nav icon-only (56px wide) */
 @media (max-width: 1199px) {
   .app-shell {

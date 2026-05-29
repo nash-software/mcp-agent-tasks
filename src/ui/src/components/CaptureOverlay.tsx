@@ -1,143 +1,246 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { quickCapture, fetchConfig } from '../api'
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+} from 'react'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { Plus, Expand, Mic, MicOff, Check, Loader2 } from 'lucide-react'
+import { quickCapture, fetchProjects } from '../api'
+import { useVoiceTranscribe } from '../hooks/useVoiceTranscribe'
 
 interface Props {
-  onClose: () => void
-  onCaptured?: () => void
+  /** Called with the current text when Shift+Enter or expand icon is clicked (P2-03 affordance). */
+  onExpand: (text: string) => void
+  /** Called by App to register the focus function so Ctrl+Space can target this input. */
+  registerFocus: (fn: () => void) => void
 }
 
-export function CaptureOverlay({ onClose, onCaptured }: Props): React.JSX.Element {
+export function CaptureOverlay({ onExpand, registerFocus }: Props): React.JSX.Element {
   const [text, setText] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [projectPrefixes, setProjectPrefixes] = useState<string[]>([])
+  const [retryHint, setRetryHint] = useState(false)
+  const [flash, setFlash] = useState(false)
+  const [acSelIdx, setAcSelIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const queryClient = useQueryClient()
 
-  // Focus input on mount
+  // Register focus callback with parent (App -> useGlobalKeyboard)
   useEffect(() => {
+    registerFocus(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    })
+  }, [registerFocus])
+
+  // Fetch project list for #prefix autocomplete
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Autocomplete: match #token at the end of the input value
+  const acMatches = useMemo(() => {
+    const m = text.match(/#(\w*)$/)
+    if (!m) return null
+    const q = m[1].toLowerCase()
+    return projects.filter(p => p.prefix.toLowerCase().includes(q))
+  }, [text, projects])
+
+  // Reset autocomplete selection when matches change
+  useEffect(() => {
+    setAcSelIdx(0)
+  }, [acMatches?.length])
+
+  // TanStack mutation for quick capture
+  const captureMutation = useMutation({
+    mutationFn: (t: string) => quickCapture(t),
+    onSuccess: () => {
+      setText('')
+      setRetryHint(false)
+      setFlash(true)
+      setTimeout(() => setFlash(false), 600)
+      void queryClient.invalidateQueries({ queryKey: ['today'] })
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    },
+    onError: () => {
+      setRetryHint(true)
+    },
+  })
+
+  const handleSubmit = useCallback((): void => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setRetryHint(false)
+    captureMutation.mutate(trimmed)
+  }, [text, captureMutation])
+
+  const pickProject = useCallback((prefix: string): void => {
+    setText(prev => prev.replace(/#\w*$/, `#${prefix} `))
     inputRef.current?.focus()
   }, [])
 
-  // Fetch project prefixes once for #prefix autocomplete
-  useEffect(() => {
-    fetchConfig()
-      .then(cfg => setProjectPrefixes(cfg.projectPrefixes ?? []))
-      .catch(() => {})
-  }, [])
-
-  // Determine autocomplete matches when text starts with #
-  const prefixQuery = text.startsWith('#') ? text.slice(1).split(' ')[0].toUpperCase() : ''
-  const suggestions = prefixQuery
-    ? projectPrefixes.filter(p => p.startsWith(prefixQuery) && p !== prefixQuery)
-    : []
-
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) onClose()
-    },
-    [onClose],
-  )
-
-  const handleSubmit = useCallback(async () => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    setError(null)
-    try {
-      await quickCapture(trimmed)
-      setText('')
-      onCaptured?.()
-      onClose()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Capture failed — try again')
-    }
-  }, [text, onClose, onCaptured])
+  const handleExpand = useCallback((): void => {
+    onExpand(text)
+    setText('')
+  }, [text, onExpand])
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: React.KeyboardEvent<HTMLInputElement>): void => {
+      // Shift+Enter -> Brain Dump handoff (P2-03 affordance)
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault()
+        handleExpand()
+        return
+      }
+
+      // Autocomplete navigation
+      if (acMatches && acMatches.length > 0) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setAcSelIdx(s => Math.min(s + 1, acMatches.length - 1))
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setAcSelIdx(s => Math.max(s - 1, 0))
+          return
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && text.match(/#\w*$/))) {
+          e.preventDefault()
+          const selected = acMatches[acSelIdx]
+          if (selected) pickProject(selected.prefix)
+          return
+        }
+      }
+
       if (e.key === 'Enter') {
         e.preventDefault()
-        void handleSubmit()
+        handleSubmit()
       }
-      // Escape is handled at document level via useCaptureOverlay
     },
-    [handleSubmit],
+    [acMatches, acSelIdx, text, handleExpand, handleSubmit, pickProject],
   )
 
-  const applySuggestion = useCallback(
-    (prefix: string) => {
-      setText(`#${prefix} `)
-      inputRef.current?.focus()
-    },
-    [],
-  )
+  // Voice transcribe - append result to the input
+  const handleTranscript = useCallback((transcript: string): void => {
+    setText(prev => prev ? `${prev} ${transcript}` : transcript)
+    inputRef.current?.focus()
+  }, [])
+
+  const voice = useVoiceTranscribe(handleTranscript)
+
+  const handleMicClick = useCallback((): void => {
+    if (voice.state === 'idle') {
+      void voice.startRecording()
+    } else if (voice.state === 'recording') {
+      voice.stopRecording()
+    }
+  }, [voice])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backdropFilter: 'blur(4px)', backgroundColor: 'rgba(0,0,0,0.6)' }}
-      onClick={handleBackdropClick}
-    >
-      {/* Panel */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg mx-4 p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs text-slate-400 font-medium tracking-wide uppercase">
-            Quick Capture
-          </span>
-          <span className="text-xs text-slate-500">→ GEN inbox</span>
-        </div>
+    <header className="capture-bar">
+      {/* Brand block - aligns with left nav width */}
+      <div className="capture-brand">
+        <div className="logo" aria-hidden="true" />
+        <span className="name">
+          Life<span>OS</span>
+        </span>
+      </div>
+
+      {/* Input row */}
+      <div className="capture-input-wrap">
+        <span className="lead" aria-hidden="true">
+          <Plus size={15} />
+        </span>
 
         <input
           ref={inputRef}
           type="text"
           value={text}
-          onChange={e => { setText(e.target.value); setError(null) }}
+          onChange={e => {
+            setText(e.target.value)
+            setRetryHint(false)
+          }}
           onKeyDown={handleKeyDown}
-          placeholder="What's on your mind? (#PREFIX to route directly)"
-          className="w-full bg-slate-800 text-slate-100 placeholder-slate-500 border border-slate-600 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          placeholder="Capture anything — Enter to save · ⇧Enter for Brain Dump · #project"
+          className="capture-input"
           maxLength={2000}
+          aria-label="Quick capture"
+          autoComplete="off"
         />
 
-        {/* #prefix autocomplete suggestions */}
-        {suggestions.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {suggestions.map(p => (
-              <button
-                key={p}
-                onClick={() => applySuggestion(p)}
-                className="px-2 py-0.5 text-xs rounded bg-slate-700 text-indigo-300 hover:bg-slate-600 transition-colors"
+        {flash && (
+          <span className="capture-flash" aria-live="polite">
+            <Check size={14} />
+            Captured
+          </span>
+        )}
+
+        {retryHint && !flash && (
+          <span className="capture-error" aria-live="polite">
+            couldn't save — Enter to retry
+          </span>
+        )}
+
+        {voice.error && !flash && !retryHint && (
+          <span className="capture-error" aria-live="polite">
+            {voice.error}
+          </span>
+        )}
+
+        {!flash && !retryHint && !voice.error && (
+          <span className="capture-hint">
+            <kbd>Ctrl</kbd>
+            <kbd>Space</kbd>
+          </span>
+        )}
+
+        <button
+          className="expand-btn"
+          onClick={handleExpand}
+          title="Open in Brain Dump (⇧Enter)"
+          aria-label="Open in Brain Dump"
+          type="button"
+        >
+          <Expand size={15} />
+        </button>
+
+        <button
+          className={`mic-btn${voice.state === 'recording' ? ' recording' : ''}`}
+          onClick={handleMicClick}
+          title="Voice capture"
+          aria-label={voice.state === 'recording' ? 'Stop recording' : 'Voice capture'}
+          type="button"
+          disabled={voice.state === 'transcribing'}
+        >
+          {voice.state === 'transcribing' ? (
+            <Loader2 size={15} className="animate-spin" />
+          ) : voice.state === 'recording' ? (
+            <MicOff size={15} />
+          ) : (
+            <Mic size={15} />
+          )}
+        </button>
+
+        {acMatches && acMatches.length > 0 && (
+          <div className="capture-ac" role="listbox">
+            {acMatches.map((p, i) => (
+              <div
+                key={p.prefix}
+                className={`ac-row${i === acSelIdx ? ' sel' : ''}`}
+                role="option"
+                aria-selected={i === acSelIdx}
+                onMouseEnter={() => setAcSelIdx(i)}
+                onClick={() => pickProject(p.prefix)}
               >
-                #{p}
-              </button>
+                <span className="ac-prefix">#{p.prefix}</span>
+              </div>
             ))}
           </div>
         )}
-
-        {error && (
-          <p className="mt-2 text-xs text-red-400">{error}</p>
-        )}
-
-        <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-          <span>Enter to capture · Esc or click outside to close</span>
-          <span>{text.length}/2000</span>
-        </div>
       </div>
-    </div>
-  )
-}
-
-export function CaptureToast(): React.JSX.Element {
-  const [visible, setVisible] = useState(true)
-
-  useEffect(() => {
-    const t = setTimeout(() => setVisible(false), 1800)
-    return () => clearTimeout(t)
-  }, [])
-
-  return (
-    <div
-      className="fixed bottom-6 right-6 z-[60] px-4 py-2 rounded-lg bg-emerald-700 text-emerald-100 text-sm font-medium shadow-lg transition-opacity duration-300"
-      style={{ opacity: visible ? 1 : 0, pointerEvents: 'none' }}
-    >
-      Captured ✓
-    </div>
+    </header>
   )
 }
