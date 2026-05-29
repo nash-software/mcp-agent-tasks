@@ -259,6 +259,9 @@ export async function dispatchToAcr(taskId: string, opts: { source: 'hermes'; sk
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId, ...opts }),
   })
+  // The endpoint returns 200 with {jobId} or {error:'ACR offline'}; a non-2xx is a real failure
+  // that must reject so the mutation's onError rollback fires (don't treat 4xx/5xx as success).
+  if (!res.ok) throw new Error(`dispatchToAcr failed: HTTP ${res.status}`)
   return res.json() as Promise<{ jobId?: string; error?: string }>
 }
 
@@ -268,6 +271,7 @@ export async function postAgentResearch(taskId: string): Promise<{ proposalId?: 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId }),
   })
+  if (!res.ok) throw new Error(`postAgentResearch failed: HTTP ${res.status}`)
   return res.json() as Promise<{ proposalId?: string; error?: string }>
 }
 
@@ -277,5 +281,6 @@ export async function postAgentSchedule(taskId: string): Promise<{ error?: strin
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId }),
   })
+  if (!res.ok) throw new Error(`postAgentSchedule failed: HTTP ${res.status}`)
   return res.json() as Promise<{ error?: string }>
 }

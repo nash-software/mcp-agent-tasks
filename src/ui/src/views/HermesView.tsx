@@ -258,23 +258,28 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
 
   // ── Action dispatcher ────────────────────────────────────────────────────
   const handleAction = useCallback((action: string, task: Task, tri: Triage): void => {
+    const wantsAcr = action === 'approve' || action === 'acr' ||
+      (action === 'run' && tri.skill?.engine === 'acr')
+    // Never dispatch to ACR while it's offline — surface nothing, just skip (button is also disabled).
+    if (wantsAcr && acrOffline) return
+
     switch (action) {
       case 'run': {
-        // For acr engine, dispatch to ACR; otherwise optimistic run via hermes/n8n
         if (tri.skill?.engine === 'acr') {
           dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill.id })
         } else {
-          // Optimistic: mark running, increment budget
+          // Optimistic run via hermes/n8n: mark running.
           qc.setQueryData<Task[]>(['tasks'], (old = []) =>
             old.map((t) => t.id === task.id ? { ...t, agent_status: 'running' } : t),
           )
-          incrementJobsToday()
         }
+        incrementJobsToday() // one job consumed, regardless of engine
         break
       }
       case 'approve':
       case 'acr': {
         dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill?.id })
+        incrementJobsToday()
         break
       }
       case 'research': {
@@ -290,13 +295,13 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
         // No-op for P2-05; P2-06 wires up real draft/assist
         break
     }
-  }, [qc, dispatchAcrMut, researchMut, scheduleMut, incrementJobsToday])
+  }, [qc, acrOffline, dispatchAcrMut, researchMut, scheduleMut, incrementJobsToday])
 
   const handleDispatch = useCallback((): void => {
     if (!recommended || budgetLeft <= 0) return
+    // handleAction owns the budget increment + ACR-offline guard.
     handleAction('run', recommended.task, recommended.tri)
-    incrementJobsToday()
-  }, [recommended, budgetLeft, handleAction, incrementJobsToday])
+  }, [recommended, budgetLeft, handleAction])
 
   const handleOpen = useCallback((task: Task): void => {
     onOpenPanel?.({ ...task })
@@ -372,9 +377,13 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
 
           <button
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-input bg-accent text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-accent-hover transition-colors"
-            disabled={!recommended || budgetLeft <= 0}
+            disabled={!recommended || budgetLeft <= 0 || (recommended?.tri.skill?.engine === 'acr' && acrOffline)}
             onClick={handleDispatch}
-            title={recommended ? `Run: ${recommended.task.title}` : 'Nothing queued to auto-run'}
+            title={
+              !recommended ? 'Nothing queued to auto-run'
+              : recommended.tri.skill?.engine === 'acr' && acrOffline ? 'ACR is offline — cannot dispatch'
+              : `Run: ${recommended.task.title}`
+            }
           >
             <Zap size={13} />
             {budgetLeft <= 0 ? 'Budget spent' : 'Dispatch next job'}
