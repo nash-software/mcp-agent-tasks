@@ -13,6 +13,7 @@ export interface GitPr {
 export interface GitInfo {
   branch?: string
   pr?: GitPr
+  commits?: string[]   // short SHAs — epic §4 git.commits[]
 }
 
 export interface Transition {
@@ -44,6 +45,10 @@ export interface Task {
   area?: TaskArea
   scheduled_for?: string | null
   estimate_hours?: number | null
+  spec_file?: string     // epic §4 linked doc
+  plan_file?: string     // epic §4 linked doc
+  block_reason?: string  // epic §4 — shown when status==='blocked'
+  tags?: string[]        // epic §4 alias for labels
 }
 
 export interface TodayCapacity {

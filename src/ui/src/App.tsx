@@ -6,7 +6,7 @@ import { RoadmapView } from './views/RoadmapView'
 import { ActivityView } from './views/ActivityView'
 import { BrainDumpView } from './views/BrainDumpView'
 import { ArtifactsView } from './views/ArtifactsView'
-import { TaskDetailPanel } from './components/TaskDetailPanel'
+import { TaskPanel } from './components/TaskPanel'
 import { CaptureOverlay, CaptureToast } from './components/CaptureOverlay'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { useTasks } from './hooks/useTasks'
@@ -116,8 +116,15 @@ export function App(): React.JSX.Element {
         <CaptureOverlay onClose={capture.close} onCaptured={handleCaptured} />
       )}
 
-      {/* panel — P1-04 will replace with peek/detail modes */}
-      {panel && <TaskDetailPanel task={panelTask} onClose={() => setPanel(null)} />}
+      {/* panel — P1-04 peek / detail slide-in (absolute inside .main) */}
+      {panel && (
+        <TaskPanel
+          panel={panel}
+          task={panelTask ?? undefined}
+          onClose={() => setPanel(null)}
+          onPromote={() => setPanel(p => p ? { ...p, mode: 'detail' } : p)}
+        />
+      )}
 
       {showToast && <CaptureToast />}
     </div>
