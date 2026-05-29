@@ -26,5 +26,13 @@ agent-tasks/
 .handbook/intermediate/
 .handbook/logs/
 .handbook/diagnose/cache.json
+.handbook/graph.db
+.handbook/graph/
 
 .claude/state/
+
+# Local generated artifacts (not source)
+.memory/
+.agent-run/
+*.tgz
+*.stackdump
