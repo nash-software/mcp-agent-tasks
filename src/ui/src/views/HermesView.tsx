@@ -238,6 +238,11 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
       )
       return { prev }
     },
+    onSuccess: (data) => {
+      // Only count a real dispatch against the daily budget — the endpoint returns 200 with
+      // {error:'ACR offline'} (no jobId) when ACR is unreachable, which must NOT consume budget.
+      if (data && typeof data.jobId === 'string') incrementJobsToday()
+    },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(['tasks'], ctx.prev)
     },
@@ -266,20 +271,23 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     switch (action) {
       case 'run': {
         if (tri.skill?.engine === 'acr') {
+          // ACR path: budget is incremented in dispatchAcrMut.onSuccess (only on a real jobId),
+          // so a failed/offline dispatch never consumes the daily budget.
           dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill.id })
         } else {
-          // Optimistic run via hermes/n8n: mark running.
+          // Non-ACR (hermes/n8n) run: optimistic local mark — the execution backend is wired in
+          // P2-06; for now the budget is consumed for the local dispatch intent.
           qc.setQueryData<Task[]>(['tasks'], (old = []) =>
             old.map((t) => t.id === task.id ? { ...t, agent_status: 'running' } : t),
           )
+          incrementJobsToday()
         }
-        incrementJobsToday() // one job consumed, regardless of engine
         break
       }
       case 'approve':
       case 'acr': {
+        // Budget incremented in dispatchAcrMut.onSuccess (real jobId only).
         dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill?.id })
-        incrementJobsToday()
         break
       }
       case 'research': {
