@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Task } from '../types'
+import type { Milestone } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone } from '../api'
@@ -11,24 +11,17 @@ interface Props {
   areaMap?: Record<string, Area>
 }
 
-/** Derive the first project prefix found among milestone-related tasks. */
-function deriveProject(related: Task[]): string | null {
-  for (const t of related) {
-    if (t.project) return t.project
-  }
-  return null
-}
-
 /**
- * Collect the distinct project prefixes for all tasks related to a milestone.
- * A milestone passes the filter if ANY of its related tasks' projects matches (OR semantics).
+ * A milestone's owning project is encoded in its ID. The real Milestone type has no `project`
+ * field, and milestones live in a per-project store keyed as `PREFIX-ms-<ts>`. Derive the project
+ * from the ID prefix (everything before `-ms-`, falling back to the first dash segment) so filtering
+ * uses the milestone's own project rather than the fragile related-task derivation.
  */
-function relatedProjects(related: Task[]): string[] {
-  const seen = new Set<string>()
-  for (const t of related) {
-    if (t.project) seen.add(t.project)
-  }
-  return Array.from(seen)
+function milestoneProject(ms: Milestone): string {
+  const msIdx = ms.id.indexOf('-ms-')
+  if (msIdx > 0) return ms.id.slice(0, msIdx)
+  const dash = ms.id.indexOf('-')
+  return dash > 0 ? ms.id.slice(0, dash) : ms.id
 }
 
 export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element {
@@ -91,16 +84,11 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
     )
   }
 
-  // Milestones carry no `area`. A milestone passes the filter if ANY of its related tasks'
-  // projects matches (OR across projects — a milestone spanning multiple projects must not be
-  // wrongly excluded by a single-project derivation). When a milestone has no related tasks,
-  // it passes only when no filter is active.
-  const visibleMilestones = milestones.filter(ms => {
-    const related  = tasks.filter(t => t.milestone === ms.id)
-    const projects = relatedProjects(related)
-    if (projects.length === 0) return filter.projects.length === 0 && filter.areas.length === 0
-    return projects.some(p => matchFilter(filter, p, undefined, areaMap))
-  })
+  // Milestones carry no `area`; filter by the milestone's own project (derived from its ID),
+  // with area resolved from that project via the shared areaMap.
+  const visibleMilestones = milestones.filter(ms =>
+    matchFilter(filter, milestoneProject(ms), undefined, areaMap),
+  )
 
   return (
     <div className="p-6 space-y-4">
@@ -171,13 +159,13 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
         const related   = tasks.filter(t => t.milestone === ms.id)
         const done      = related.filter(t => t.status === 'done').length
         const pct       = related.length > 0 ? Math.round((done / related.length) * 100) : 0
-        const project   = deriveProject(related)
+        const project   = milestoneProject(ms)
 
         return (
           <div key={ms.id} className="bg-surface-1 border border-surface-3 rounded-card p-4 space-y-3">
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-0.5 min-w-0">
-                {/* Project badge — derived from related tasks */}
+                {/* Project badge — from the milestone's own project (ID prefix) */}
                 {project && (
                   <span className="inline-block px-1.5 py-0.5 rounded-badge bg-surface-2 text-ink-2 text-xs font-mono mb-1">
                     {project}
