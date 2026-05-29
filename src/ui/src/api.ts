@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrJob, AcrStatusResponse, BrainSearchResponse } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -208,4 +208,79 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
   const res = await fetch('/api/projects')
   if (!res.ok) return []
   return res.json() as Promise<ProjectEntry[]>
+}
+
+// ── Phase 2 / Hermes endpoints ─────────────────────────────────────────────
+
+export async function fetchSkills(): Promise<Skill[]> {
+  try {
+    const res = await fetch('/api/skills')
+    if (!res.ok) return []
+    return res.json() as Promise<Skill[]>
+  } catch {
+    return []
+  }
+}
+
+export async function signoffTask(id: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/signoff`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Signoff failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
+
+export async function clearSignoffTask(id: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/signoff`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Clear signoff failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
+
+export async function fetchAgentLog(): Promise<AgentLog[]> {
+  try {
+    const res = await fetch('/api/agent/log')
+    if (!res.ok) return []
+    return res.json() as Promise<AgentLog[]>
+  } catch {
+    return []
+  }
+}
+
+export async function dispatchToAcr(taskId: string, opts: { source: 'hermes'; skillId?: string }): Promise<{ jobId?: string; error?: string }> {
+  const res = await fetch('/api/acr/dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId, ...opts }),
+  })
+  // The endpoint returns 200 with {jobId} or {error:'ACR offline'}; a non-2xx is a real failure
+  // that must reject so the mutation's onError rollback fires (don't treat 4xx/5xx as success).
+  if (!res.ok) throw new Error(`dispatchToAcr failed: HTTP ${res.status}`)
+  return res.json() as Promise<{ jobId?: string; error?: string }>
+}
+
+export async function postAgentResearch(taskId: string): Promise<{ proposalId?: string; error?: string }> {
+  const res = await fetch('/api/agent/research', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId }),
+  })
+  if (!res.ok) throw new Error(`postAgentResearch failed: HTTP ${res.status}`)
+  return res.json() as Promise<{ proposalId?: string; error?: string }>
+}
+
+export async function postAgentSchedule(taskId: string): Promise<{ error?: string }> {
+  const res = await fetch('/api/agent/schedule', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId }),
+  })
+  if (!res.ok) throw new Error(`postAgentSchedule failed: HTTP ${res.status}`)
+  return res.json() as Promise<{ error?: string }>
 }
