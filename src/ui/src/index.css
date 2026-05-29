@@ -22,7 +22,7 @@
   }
 
   body {
-    font-family: var(--font-sans);
+    @apply font-sans;
     font-feature-settings: "ss03", "calt", "kern", "liga";
   }
 
