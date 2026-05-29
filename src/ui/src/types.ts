@@ -1,6 +1,7 @@
 export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved'
 export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan'
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
+export type TaskArea = 'client' | 'personal' | 'outsource' | 'internal'
 export type MilestoneStatus = 'open' | 'closed'
 
 export interface GitPr {
@@ -40,6 +41,20 @@ export interface Task {
   transitions?: Transition[]
   complexity?: number
   auto_captured?: boolean
+  area?: TaskArea
+  scheduled_for?: string | null
+  estimate_hours?: number | null
+}
+
+export interface TodayCapacity {
+  committedMinutes: number
+  targetMinutes: number
+}
+
+export interface TodayResponse {
+  committed: Task[]
+  candidates: Task[]
+  capacity: TodayCapacity
 }
 
 export interface Milestone {

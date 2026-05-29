@@ -536,6 +536,30 @@ export class SqliteIndex {
     };
   }
 
+  getTasksByScheduledDate(date: string): Task[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM tasks
+      WHERE scheduled_for = ?
+      ORDER BY
+        CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+        title ASC
+    `).all(date) as TaskRow[];
+    return rows.map(r => this.rowToTask(r));
+  }
+
+  getCandidates(limit: number): Task[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM tasks
+      WHERE (status = 'todo' OR status = 'in_progress')
+        AND scheduled_for IS NULL
+      ORDER BY
+        CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
+        title ASC
+      LIMIT ?
+    `).all(limit) as TaskRow[];
+    return rows.map(r => this.rowToTask(r));
+  }
+
   getRecentActivity(limit: number = 50): Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }> {
     return this.db.prepare(`
       SELECT tr.task_id, t.title, tr.from_status, tr.to_status, tr.at, tr.reason
