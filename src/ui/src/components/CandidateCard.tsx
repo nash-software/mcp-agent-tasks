@@ -124,8 +124,10 @@ export function CandidateCard({
           <>
             <button
               onClick={() => onDispatch(current)}
+              disabled={acrOffline}
+              title={acrOffline ? 'ACR is offline' : undefined}
               className="px-3 py-1 text-xs rounded border border-slate-600 text-slate-300
-                hover:bg-slate-700 transition-colors"
+                hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               type="button"
             >
               Send to ACR

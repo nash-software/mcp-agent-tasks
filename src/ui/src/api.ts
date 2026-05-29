@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrJob, AcrStatusResponse } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -132,6 +132,10 @@ export async function acrDispatch(title: string, detail: string): Promise<{ jobI
     body: JSON.stringify({ title, detail }),
   })
   return res.json() as Promise<{ jobId?: string; error?: string }>
+}
+
+export function getAcrStatus(): Promise<AcrStatusResponse> {
+  return get<AcrStatusResponse>('/api/acr/status')
 }
 
 export async function createMilestone(data: {

@@ -99,3 +99,14 @@ export interface ArtifactEntry {
   task_id: string | null
   staleDays: number
 }
+
+export interface AcrJob {
+  id: string
+  title: string
+  status: string
+}
+
+export interface AcrStatusResponse {
+  offline: boolean
+  jobs: AcrJob[]
+}
