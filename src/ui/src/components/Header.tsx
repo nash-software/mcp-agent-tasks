@@ -2,14 +2,13 @@ import React from 'react'
 import { useStats } from '../hooks/useStats'
 import type { TaskStatus } from '../types'
 
-export type TabId = 'today' | 'board' | 'roadmap' | 'activity' | 'inbox' | 'braindump' | 'artifacts'
+export type TabId = 'today' | 'board' | 'roadmap' | 'activity' | 'braindump' | 'artifacts'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'today',     label: 'Today' },
   { id: 'board',     label: 'Board' },
   { id: 'roadmap',   label: 'Roadmap' },
   { id: 'activity',  label: 'Activity' },
-  { id: 'inbox',     label: 'Inbox' },
   { id: 'braindump', label: 'Brain Dump' },
   { id: 'artifacts', label: 'Artifacts' },
 ]
