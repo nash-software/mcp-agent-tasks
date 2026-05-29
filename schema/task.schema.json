@@ -66,6 +66,8 @@
     "transitions": { "type": "array" },
     "files": { "type": "array", "items": { "type": "string" } },
     "area": { "type": "string", "enum": ["client", "personal", "outsource", "internal"] },
-    "scheduled_for": { "type": ["string", "null"] }
+    "scheduled_for": { "type": ["string", "null"] },
+    "agent_status": { "type": ["string", "null"], "enum": ["scheduled", "running", "done", null] },
+    "block_reason": { "type": ["string", "null"] }
   }
 }

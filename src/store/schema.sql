@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   plan_file TEXT,
   auto_captured INTEGER DEFAULT 0,
   area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL),
-  scheduled_for TEXT
+  scheduled_for TEXT,
+  agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL),
+  block_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS subtasks (
