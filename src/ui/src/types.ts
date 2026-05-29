@@ -122,3 +122,6 @@ export interface BrainSearchResponse {
   query: string
   offline?: boolean
 }
+
+export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity'
+export interface PanelState { mode: 'peek' | 'detail'; taskId: string }
