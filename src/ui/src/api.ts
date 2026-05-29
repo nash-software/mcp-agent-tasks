@@ -165,3 +165,36 @@ export async function markArtifactOpened(filePath: string): Promise<void> {
 export function searchBrain(query: string): Promise<BrainSearchResponse> {
   return get<BrainSearchResponse>(`/api/brain/search?q=${encodeURIComponent(query)}`)
 }
+
+export async function transitionTask(
+  id: string,
+  to: string,
+  reason?: string,
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/transition`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ to, reason }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Transition failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
+
+export async function updateTaskPriority(
+  id: string,
+  priority: string,
+): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priority }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Update failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
