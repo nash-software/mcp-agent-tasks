@@ -62,9 +62,9 @@ export function ProposalCard({
       {/* Summary */}
       <div className="text-xs text-ink-2 leading-relaxed">{proposal.summary}</div>
 
-      {/* Steps (exactly 3) */}
+      {/* Steps — render at most 3 per the proposal contract */}
       <div className="flex flex-col gap-2">
-        {proposal.steps.map((step, i) => (
+        {proposal.steps.slice(0, 3).map((step, i) => (
           <div key={i} className="flex items-start gap-2 text-xs text-ink-2">
             <span className="font-mono text-ink-muted shrink-0 w-4 text-right select-none">{i + 1}</span>
             <span>{step}</span>

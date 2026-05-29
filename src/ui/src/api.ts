@@ -304,10 +304,13 @@ export interface PromoteSkillPayload {
 
 /** Promote a proposal → a committed Skill. POST /api/skills. Source:'hermes'. */
 export async function promoteSkill(payload: PromoteSkillPayload): Promise<{ id: string }> {
+  // savedPerRun is client-only (drives the optimistic promote log); never send it to the skills
+  // endpoint, whose contract is the skill-creation payload only.
+  const { savedPerRun: _savedPerRun, ...body } = payload
   const res = await fetch('/api/skills', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`promoteSkill failed: HTTP ${res.status}`)
   return res.json() as Promise<{ id: string }>

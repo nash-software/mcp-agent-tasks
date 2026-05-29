@@ -378,37 +378,41 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
 
   // ── P2-06: runSkillDirect — called by Dispatch button for automatable skills ──
   const runSkillDirect = useCallback((skill: Skill): void => {
-    if (skill.engine === 'acr') {
-      // ACR skills run on the real ACR machine. Dispatch only (source:'hermes', skillId); the
-      // mutation's onSuccess consumes budget (real jobId only) and invalidates ['skills']/['agent','log']
-      // so the runs/minutesSaved bump + run log come from backend truth — no unrollbackable
-      // optimistic counters, no double budget count.
-      const matchingTask = scheduled.find(t => triage(t, [skill]).bucket === 'automatable')
-      if (matchingTask) {
-        dispatchAcrMut.mutate({ taskId: matchingTask.id, skillId: skill.id })
-      }
-      return
-    }
-    // n8n / hermes skills run locally (no backend execution yet, P2-06 UI) — these always "succeed",
-    // so optimistic bump + run log + budget are safe and never need rollback.
     const savedThisRun = skill.runs > 0
       ? Math.round(skill.minutesSaved / Math.max(skill.runs, 1))
       : skill.minutesSaved
-    qc.setQueryData<Skill[]>(['skills'], (old = []) =>
-      old.map(s => s.id === skill.id
-        ? { ...s, runs: s.runs + 1, minutesSaved: s.minutesSaved + savedThisRun, lastRun: 'just now' }
-        : s),
-    )
-    const logEntry: AgentLog = {
-      id: `opt-run-${Date.now()}`,
-      kind: 'run',
-      title: `Ran: ${skill.name}`,
-      project: skill.project,
-      savedMin: savedThisRun,
-      at: 'just now',
+    // Optimistic bump (runs +1, minutesSaved += savedThisRun) + run log + budget — the local,
+    // always-succeeds part of a run.
+    const recordOptimisticRun = (): void => {
+      qc.setQueryData<Skill[]>(['skills'], (old = []) =>
+        old.map(s => s.id === skill.id
+          ? { ...s, runs: s.runs + 1, minutesSaved: s.minutesSaved + savedThisRun, lastRun: 'just now' }
+          : s),
+      )
+      const logEntry: AgentLog = {
+        id: `opt-run-${Date.now()}`, kind: 'run', title: `Ran: ${skill.name}`,
+        project: skill.project, savedMin: savedThisRun, at: 'just now',
+      }
+      qc.setQueryData<AgentLog[]>(['agent', 'log'], (old = []) => [logEntry, ...old])
+      incrementJobsToday()
     }
-    qc.setQueryData<AgentLog[]>(['agent', 'log'], (old = []) => [logEntry, ...old])
-    incrementJobsToday()
+
+    if (skill.engine === 'acr') {
+      const matchingTask = scheduled.find(t => triage(t, [skill]).bucket === 'automatable')
+      if (matchingTask) {
+        // Dispatch a real ACR job (source:'hermes', skillId). The mutation's onSuccess consumes
+        // budget (real jobId only) + invalidates ['skills']/['agent','log'] so the bump/log come
+        // from backend truth — no unrollbackable optimistic counters, no double budget count.
+        dispatchAcrMut.mutate({ taskId: matchingTask.id, skillId: skill.id })
+      } else {
+        // No signed-off task this skill automates → nothing to dispatch; record a local run so
+        // clicking Run is never a silent no-op.
+        recordOptimisticRun()
+      }
+      return
+    }
+    // n8n / hermes skills run locally (no backend execution yet, P2-06 UI) — always succeed.
+    recordOptimisticRun()
   }, [scheduled, dispatchAcrMut, incrementJobsToday, qc])
 
   // ── Action dispatcher ────────────────────────────────────────────────────
