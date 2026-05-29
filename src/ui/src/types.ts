@@ -49,6 +49,7 @@ export interface Task {
   plan_file?: string     // epic §4 linked doc
   block_reason?: string  // epic §4 — shown when status==='blocked'
   tags?: string[]        // epic §4 alias for labels
+  agent_status?: 'scheduled' | 'running' | 'done'  // P2-05: Hermes sign-off gate
 }
 
 export interface TodayCapacity {
@@ -127,3 +128,46 @@ export interface BrainSearchResponse {
 
 export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity'
 export interface PanelState { mode: 'peek' | 'detail'; taskId: string }
+
+// ── Phase 2 types ──────────────────────────────────────────────────────────
+
+export type Engine = 'hermes' | 'n8n' | 'acr'
+
+/** Skill — a reusable automation Hermes can run. */
+export interface Skill {
+  id: string
+  name: string
+  project: string
+  engine: Engine
+  desc: string
+  match: string[]       // substrings used for title+tags matching
+  runs: number
+  minutesSaved: number
+  lastRun: string
+  origin: string
+}
+
+/** Agent log entry — what Hermes has done. */
+export interface AgentLog {
+  id: string
+  kind: 'run' | 'research' | 'promote'
+  title: string
+  project: string
+  savedMin: number
+  at: string
+  skill?: string
+}
+
+/** Automation proposal — a research result suggesting a new skill (P2-06). */
+export interface Proposal {
+  id: string
+  taskId: string
+  project: string
+  skillName: string
+  taskTitle: string
+  summary: string
+  steps: string[]
+  savedPerRun: number
+  frequency: string
+  engine: Engine
+}

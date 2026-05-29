@@ -11,6 +11,7 @@ import { CaptureOverlay } from './components/CaptureOverlay'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
+import { HermesView } from './views/HermesView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
@@ -59,9 +60,6 @@ function readStoredFilter(): Filter {
   }
 }
 
-function HermesPlaceholder(): React.JSX.Element {
-  return <div className="p-8 text-ink-muted text-sm">Hermes — coming in Phase 2</div>
-}
 
 export function App(): React.JSX.Element {
   const [view, setView]             = useState<ViewId>(readStoredView)
@@ -101,6 +99,14 @@ export function App(): React.JSX.Element {
     }
   }, [favorites])
 
+  const capture = useCaptureOverlay()
+  const { tasks: allTasks } = useTasks()
+  const { artifacts } = useArtifacts()
+  const { data: projectEntries = [] } = useQuery<ProjectEntry[]>({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+  })
+
   // Prune favourites whose project is no longer in the known set (once projects loads).
   useEffect(() => {
     if (projectEntries.length === 0) return
@@ -110,14 +116,6 @@ export function App(): React.JSX.Element {
       return pruned.length === fs.length ? fs : pruned
     })
   }, [projectEntries])
-
-  const capture = useCaptureOverlay()
-  const { tasks: allTasks } = useTasks()
-  const { artifacts } = useArtifacts()
-  const { data: projectEntries = [] } = useQuery<ProjectEntry[]>({
-    queryKey: ['projects'],
-    queryFn: fetchProjects,
-  })
 
   // ─── Filter: area map + project list + counts (derived from tasks ∪ /api/projects) ──────
   const areaMap = useMemo((): Record<string, TaskArea> => {
@@ -132,7 +130,7 @@ export function App(): React.JSX.Element {
     const counts: Record<string, number> = {}
     for (const t of allTasks) {
       if (!t.project) continue
-      if (t.status === 'done' || t.status === 'archived' || t.status === 'cancelled') continue
+      if (t.status === 'done' || t.status === 'archived') continue
       counts[t.project] = (counts[t.project] ?? 0) + 1
     }
     return counts
@@ -441,7 +439,7 @@ export function App(): React.JSX.Element {
             />
           )}
           {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
-          {view === 'hermes'    && <HermesPlaceholder />}
+          {view === 'hermes'    && <HermesView onOpenPanel={(task) => setPanel({ mode: 'detail', taskId: task.id })} />}
           {view === 'braindump' && <BrainDumpView projects={[]} />}
           {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
