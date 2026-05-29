@@ -33,6 +33,54 @@ export interface ArtifactEntry {
   staleDays: number;
 }
 
+// ── ACR status cache ──────────────────────────────────────────────────────────
+export interface AcrJob {
+  id: string;
+  title: string;
+  status: string;
+}
+
+export interface AcrStatusResponse {
+  offline: boolean;
+  jobs: AcrJob[];
+}
+
+let acrCache: { data: AcrStatusResponse; expiresAt: number } | null = null;
+
+/** Reset the ACR cache — for testing only. */
+export function resetAcrCache(): void {
+  acrCache = null;
+}
+
+async function fetchAcrStatus(): Promise<AcrStatusResponse> {
+  try {
+    const res = await fetch('http://localhost:3001/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'acr_status', arguments: {} },
+        id: 1,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = await res.json() as { result?: { jobs?: unknown[] } };
+    const rawJobs = Array.isArray(data.result?.jobs) ? data.result.jobs : [];
+    const jobs: AcrJob[] = rawJobs.map((j) => {
+      const job = j as Record<string, unknown>;
+      return {
+        id: typeof job['id'] === 'string' ? job['id'] : String(job['id'] ?? ''),
+        title: typeof job['title'] === 'string' ? job['title'] : String(job['title'] ?? ''),
+        status: typeof job['status'] === 'string' ? job['status'] : String(job['status'] ?? ''),
+      };
+    });
+    return { offline: false, jobs };
+  } catch {
+    return { offline: true, jobs: [] };
+  }
+}
+
 // ── artifacts opened store ────────────────────────────────────────────────────
 // In-memory cache of artifacts-opened.json, loaded lazily on first request.
 const MCP_TASKS_DIR = join(homedir(), '.mcp-tasks');
@@ -896,6 +944,33 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: ACR status (cached, 10s TTL)
+      if (pathname === '/api/acr/status' && req.method === 'GET') {
+        const now = Date.now();
+        if (acrCache && acrCache.expiresAt > now) {
+          sendJson(res, 200, acrCache.data);
+        } else if (acrCache) {
+          // Serve stale cache immediately while triggering background refresh
+          const stale = acrCache.data;
+          // Background refresh — fire and forget
+          fetchAcrStatus().then(fresh => {
+            acrCache = { data: fresh, expiresAt: Date.now() + 10_000 };
+          }).catch(() => { /* non-fatal */ });
+          sendJson(res, 200, stale);
+        } else {
+          // No cache yet — fetch for first request
+          void fetchAcrStatus().then(fresh => {
+            acrCache = { data: fresh, expiresAt: Date.now() + 10_000 };
+            sendJson(res, 200, fresh);
+          }).catch(() => {
+            const fallback: AcrStatusResponse = { offline: true, jobs: [] };
+            sendJson(res, 200, fallback);
+          });
+          return;
+        }
         return;
       }
 

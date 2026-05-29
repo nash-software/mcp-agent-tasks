@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react'
 import { useBrainDump } from '../hooks/useBrainDump'
 import { CandidateCard } from '../components/CandidateCard'
+import { useAcrStatus } from '../hooks/useAcrStatus'
 import type { BrainDumpCandidate } from '../hooks/useBrainDump'
 
 // Inline voice capture for brain dump — appends transcript instead of creating a task
@@ -113,6 +114,8 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { parseMutation, commitMutation, dispatchMutation } = useBrainDump()
+  const { data: acrStatus } = useAcrStatus()
+  const acrOffline = acrStatus?.offline ?? false
 
   const handleTranscript = useCallback((text: string) => {
     setDump(prev => prev ? prev + ' ' + text : text)
@@ -284,7 +287,7 @@ export function BrainDumpView({ projects }: Props): React.JSX.Element {
               onRemove={() => handleRemove(i)}
               committed={c.committed}
               dispatched={c.dispatched}
-              acrOffline={c.acrOffline}
+              acrOffline={c.dispatched ? c.acrOffline : acrOffline}
             />
           ))}
         </div>

@@ -1,5 +1,6 @@
 import React from 'react'
 import { useToday } from '../hooks/useToday'
+import { LiveFeedSection } from '../components/LiveFeedSection'
 import type { Task, TaskArea } from '../types'
 
 const AREA_COLORS: Record<TaskArea, string> = {
@@ -208,6 +209,9 @@ export function TodayView({ targetMinutes }: Props): React.JSX.Element {
           </div>
         )}
       </section>
+
+      {/* Live Feed — ACR job status */}
+      <LiveFeedSection />
     </div>
   )
 }
