@@ -7,7 +7,7 @@ import { ActivityView } from './views/ActivityView'
 import { BrainDumpView } from './views/BrainDumpView'
 import { ArtifactsView } from './views/ArtifactsView'
 import { TaskPanel } from './components/TaskPanel'
-import { CaptureOverlay, CaptureToast } from './components/CaptureOverlay'
+import { CaptureOverlay } from './components/CaptureOverlay'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
@@ -35,7 +35,6 @@ export function App(): React.JSX.Element {
   const [panel, setPanel]           = useState<PanelState | null>(null)
   const [cmdkOpen, setCmdkOpen]     = useState(false)
   const [focusMode, setFocusMode]   = useState(false)
-  const [showToast, setShowToast]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
 
   useEffect(() => { localStorage.setItem('lifeos-view', view) }, [view])
@@ -43,7 +42,6 @@ export function App(): React.JSX.Element {
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
 
-  // Today mutations — for keyboard handler wiring
   const [targetMinutes] = useState<number>(() => {
     const raw = localStorage.getItem('lifeos-target')
     if (!raw) return 6 * 60
@@ -55,7 +53,6 @@ export function App(): React.JSX.Element {
 
   const panelTask = panel ? (allTasks.find(t => t.id === panel.taskId) ?? null) : null
 
-  // Helper to find a task by id across allTasks + today data
   const getTaskById = useCallback((id: string): Task | undefined => {
     return allTasks.find(t => t.id === id) ??
       todayHook.data?.committed.find(t => t.id === id) ??
@@ -66,11 +63,6 @@ export function App(): React.JSX.Element {
     setView(v)
     setPanel(null)
   }, [])
-
-  function handleCaptured(): void {
-    setShowToast(true)
-    setTimeout(() => setShowToast(false), 2200)
-  }
 
   const handlers = useMemo(() => ({
     setView: handleViewChange,
@@ -119,22 +111,23 @@ export function App(): React.JSX.Element {
     focusMode,
     cmdkOpen,
     visibleIds,
-    focusCapture: capture.open,
+    focusCapture: capture.focus,
     handlers,
   })
 
+  // P2-03 affordance: Shift+Enter / expand in capture bar switches to braindump view
+  const handleCaptureExpand = useCallback((_text: string): void => {
+    // _text will be used by P2-03 to prefill the BrainDump editor
+    handleViewChange('braindump')
+  }, [handleViewChange])
+
   return (
     <div className="app-shell" data-focus={focusMode ? 'true' : undefined}>
-      {/* capture row — P1-06 will replace stub with real capture bar */}
-      <div className="capture bg-surface-1 border-b border-surface-3 flex items-center px-4 gap-3">
-        <button
-          onClick={capture.open}
-          className="text-ink-muted text-sm hover:text-ink transition-colors"
-        >
-          Quick capture
-          <kbd className="ml-2 text-xs text-ink-faint">Ctrl+Space</kbd>
-        </button>
-      </div>
+      {/* Global capture bar — always visible, spans all columns (P1-06) */}
+      <CaptureOverlay
+        onExpand={handleCaptureExpand}
+        registerFocus={capture.registerFocus}
+      />
 
       {/* left nav */}
       <Nav view={view} onViewChange={handleViewChange} onPaletteOpen={() => setCmdkOpen(true)} />
@@ -159,15 +152,10 @@ export function App(): React.JSX.Element {
         </div>
       </main>
 
-      {/* ambient right rail — P1-05 will replace with real LiveFeed rail */}
+      {/* ambient right rail — P1-05 persistent ACR / Knowledge / Activity */}
       <aside className="ambient bg-surface-1 border-l border-surface-3 overflow-y-auto">
         <LiveFeedSection />
       </aside>
-
-      {/* capture overlay (modal) */}
-      {capture.isOpen && (
-        <CaptureOverlay onClose={capture.close} onCaptured={handleCaptured} />
-      )}
 
       {/* panel — P1-04 peek / detail slide-in (absolute inside .main) */}
       {panel && (
@@ -178,8 +166,6 @@ export function App(): React.JSX.Element {
           onPromote={() => setPanel(p => p ? { ...p, mode: 'detail' } : p)}
         />
       )}
-
-      {showToast && <CaptureToast />}
     </div>
   )
 }
