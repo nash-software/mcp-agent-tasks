@@ -9,10 +9,13 @@ import { ArtifactsView } from './views/ArtifactsView'
 import { TaskPanel } from './components/TaskPanel'
 import { CaptureOverlay } from './components/CaptureOverlay'
 import { LiveFeedSection } from './components/LiveFeedSection'
+import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
+import { useArtifacts } from './hooks/useArtifacts'
 import { useCaptureOverlay } from './hooks/useCaptureOverlay'
 import { useGlobalKeyboard } from './hooks/useGlobalKeyboard'
+import { NAV } from './lib/nav'
 import type { ViewId, PanelState, FilterState, Task, TaskPriority } from './types'
 import { localToday } from './lib/format'
 
@@ -41,6 +44,7 @@ export function App(): React.JSX.Element {
 
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
+  const { artifacts } = useArtifacts()
 
   const [targetMinutes] = useState<number>(() => {
     const raw = localStorage.getItem('lifeos-target')
@@ -115,6 +119,141 @@ export function App(): React.JSX.Element {
     handlers,
   })
 
+  // ─── Command palette buildCommands ────────────────────────────────────────
+  const commands = useMemo((): PaletteCommand[] => {
+    const cmds: PaletteCommand[] = []
+    const selectedTask: Task | undefined = selectedTaskId
+      ? allTasks.find(t => t.id === selectedTaskId) ??
+        todayHook.data?.committed.find(t => t.id === selectedTaskId) ??
+        todayHook.data?.candidates.find(t => t.id === selectedTaskId)
+      : undefined
+
+    // 1. Selected task group (only when a task is focused and resolved)
+    if (selectedTask) {
+      const isScheduledToday = selectedTask.scheduled_for === today.current
+      cmds.push({
+        id: 'sel-mark-done',
+        cat: 'Selected task',
+        label: 'Mark done',
+        sub: selectedTask.id,
+        run: () => { void todayHook.markDone(selectedTask.id) },
+      })
+      cmds.push({
+        id: 'sel-commit-toggle',
+        cat: 'Selected task',
+        label: isScheduledToday ? 'Remove from today' : 'Commit to today',
+        sub: selectedTask.id,
+        run: () => {
+          if (isScheduledToday) {
+            void todayHook.removeFromToday(selectedTask.id)
+          } else {
+            void todayHook.scheduleForToday(selectedTask.id)
+          }
+        },
+      })
+      cmds.push({
+        id: 'sel-sign-off',
+        cat: 'Selected task',
+        label: 'Sign off to Hermes',
+        sub: selectedTask.id,
+        disabled: true,
+        disabledHint: 'Coming in Phase 2',
+        run: () => { /* Phase 2 stub */ },
+      })
+      cmds.push({
+        id: 'sel-dispatch-acr',
+        cat: 'Selected task',
+        label: 'Dispatch to ACR',
+        sub: selectedTask.id,
+        disabled: true,
+        disabledHint: 'Coming in Phase 2',
+        run: () => { /* Phase 2 stub */ },
+      })
+      cmds.push({
+        id: 'sel-open-detail',
+        cat: 'Selected task',
+        label: 'Open detail',
+        sub: selectedTask.id,
+        run: () => { setPanel({ mode: 'detail', taskId: selectedTask.id }) },
+      })
+    }
+
+    // 2. Create group
+    cmds.push({
+      id: 'create-quick-capture',
+      cat: 'Create',
+      label: 'Quick capture',
+      sub: 'Focus capture bar',
+      kbd: 'Ctrl+Space',
+      run: () => { capture.focus() },
+    })
+    cmds.push({
+      id: 'create-brain-dump',
+      cat: 'Create',
+      label: 'Open Brain Dump',
+      run: () => { handleViewChange('braindump') },
+    })
+
+    // 3. Navigate group
+    for (const navItem of NAV) {
+      cmds.push({
+        id: `nav-${navItem.id}`,
+        cat: 'Navigate',
+        label: `Go to ${navItem.label}`,
+        kbd: String(navItem.kbd),
+        run: () => { handleViewChange(navItem.id) },
+      })
+    }
+    cmds.push({
+      id: 'nav-focus-mode',
+      cat: 'Navigate',
+      label: focusMode ? 'Exit focus mode' : 'Enter focus mode',
+      kbd: '.',
+      run: () => { setFocusMode(!focusMode) },
+    })
+
+    // 4. Filter group (Phase 1 stub)
+    cmds.push({
+      id: 'filter-stub',
+      cat: 'Filter',
+      label: 'Filter by… (coming soon)',
+      disabled: true,
+      disabledHint: 'Filter actions land in Phase 2 (P2-01)',
+      run: () => { /* Phase 2 stub */ },
+    })
+
+    // 5. Tasks group — fuzzy over all tasks
+    for (const task of allTasks) {
+      cmds.push({
+        id: `task-${task.id}`,
+        cat: 'Tasks',
+        label: task.title,
+        sub: task.id,
+        run: () => {
+          setSel(task.id)
+          setPanel({ mode: 'detail', taskId: task.id })
+        },
+      })
+    }
+
+    // 6. Artifacts group — fuzzy over artifact filenames
+    for (const artifact of artifacts) {
+      const filename = artifact.path.split(/[/\\]/).pop() ?? artifact.path
+      cmds.push({
+        id: `artifact-${artifact.path}`,
+        cat: 'Artifacts',
+        label: filename,
+        sub: artifact.project,
+        run: () => { handleViewChange('artifacts') },
+      })
+    }
+
+    return cmds
+  }, [
+    selectedTaskId, allTasks, todayHook, today,
+    artifacts, focusMode, handleViewChange, setPanel, setSel, capture,
+  ])
+
   // P2-03 affordance: Shift+Enter / expand in capture bar switches to braindump view
   const handleCaptureExpand = useCallback((_text: string): void => {
     // _text will be used by P2-03 to prefill the BrainDump editor
@@ -166,6 +305,13 @@ export function App(): React.JSX.Element {
           onPromote={() => setPanel(p => p ? { ...p, mode: 'detail' } : p)}
         />
       )}
+
+      {/* P1-10 — command palette (Cmd+K) */}
+      <CommandPalette
+        open={cmdkOpen}
+        onClose={() => setCmdkOpen(false)}
+        commands={commands}
+      />
     </div>
   )
 }
