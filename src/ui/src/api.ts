@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrJob, AcrStatusResponse } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrJob, AcrStatusResponse, BrainSearchResponse } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -160,4 +160,8 @@ export async function markArtifactOpened(filePath: string): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: filePath }),
   })
+}
+
+export function searchBrain(query: string): Promise<BrainSearchResponse> {
+  return get<BrainSearchResponse>(`/api/brain/search?q=${encodeURIComponent(query)}`)
 }

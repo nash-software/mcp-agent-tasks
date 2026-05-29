@@ -47,6 +47,61 @@ export interface AcrStatusResponse {
 
 let acrCache: { data: AcrStatusResponse; expiresAt: number } | null = null;
 
+// ── Brain search ──────────────────────────────────────────────────────────────
+const BRAIN_MCP_URL = process.env['BRAIN_MCP_URL'] ?? 'http://localhost:8093';
+
+export interface BrainResult {
+  title: string;
+  snippet: string;
+  source?: string;
+}
+
+export interface BrainSearchResponse {
+  results: BrainResult[];
+  query: string;
+  offline?: boolean;
+}
+
+async function fetchBrainSearch(q: string): Promise<BrainSearchResponse> {
+  try {
+    const res = await fetch(`${BRAIN_MCP_URL}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { name: 'brain_search', arguments: { query: q } },
+        id: 1,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const data = await res.json() as { result?: { content?: Array<{ text?: string }> } };
+    // MCP tool result format: result.content[0].text is a JSON string of the results array
+    const contentText = data.result?.content?.[0]?.text;
+    if (typeof contentText !== 'string') {
+      return { results: [], query: q };
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contentText);
+    } catch {
+      return { results: [], query: q };
+    }
+    const rawResults = Array.isArray(parsed) ? parsed : [];
+    const results: BrainResult[] = rawResults.map((r) => {
+      const item = r as Record<string, unknown>;
+      return {
+        title: typeof item['title'] === 'string' ? item['title'] : String(item['title'] ?? ''),
+        snippet: typeof item['snippet'] === 'string' ? item['snippet'] : String(item['snippet'] ?? ''),
+        ...(typeof item['source'] === 'string' ? { source: item['source'] } : {}),
+      };
+    });
+    return { results, query: q };
+  } catch {
+    return { results: [], query: q, offline: true };
+  }
+}
+
 /** Reset the ACR cache — for testing only. */
 export function resetAcrCache(): void {
   acrCache = null;
@@ -1016,6 +1071,26 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
+        });
+        return;
+      }
+
+      // API: brain search — proxies brain MCP bridge (BRAIN_MCP_URL, default localhost:8093)
+      // POST to {BRAIN_MCP_URL}/mcp using JSON-RPC 2.0 tools/call for brain_search tool
+      if (pathname === '/api/brain/search' && req.method === 'GET') {
+        const q = url.searchParams.get('q') ?? '';
+        if (!q || q.trim().length === 0) {
+          sendError(res, 400, 'q parameter is required and must not be empty');
+          return;
+        }
+        if (q.length > 500) {
+          sendError(res, 400, 'q parameter must be 500 characters or fewer');
+          return;
+        }
+        void fetchBrainSearch(q.trim()).then(result => {
+          sendJson(res, 200, result);
+        }).catch(() => {
+          sendJson(res, 200, { results: [], query: q, offline: true });
         });
         return;
       }

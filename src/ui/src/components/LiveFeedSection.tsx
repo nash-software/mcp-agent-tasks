@@ -1,5 +1,6 @@
 import React from 'react'
 import { useAcrStatus } from '../hooks/useAcrStatus'
+import { BrainSearch } from './BrainSearch'
 import type { AcrJob } from '../types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -56,6 +57,13 @@ export function LiveFeedSection(): React.JSX.Element {
           )}
         </>
       )}
+
+      <div className="mt-4 pt-4 border-t border-slate-700 space-y-2">
+        <h4 className="text-slate-300 text-xs font-semibold uppercase tracking-wide">
+          Knowledge Search
+        </h4>
+        <BrainSearch />
+      </div>
     </section>
   )
 }
