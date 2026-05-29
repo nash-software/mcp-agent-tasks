@@ -318,13 +318,17 @@ function writeSkills(skills: Skill[]): void {
   renameSync(tmp, file); // atomic swap on NTFS + POSIX
 }
 
-function appendSkill(skill: Skill): void {
-  const all = readSkills();
-  all.push(skill);
-  writeSkills(all);
+// In-process serialization for skill writes. Concurrent POST /api/skills calls all
+// chain onto this promise so read-modify-write is never interleaved (F2).
+let _skillsWriteQueue: Promise<void> = Promise.resolve();
+
+function withSkillsLock(fn: () => void): Promise<void> {
+  _skillsWriteQueue = _skillsWriteQueue.then(() => { fn(); });
+  return _skillsWriteQueue;
 }
 
 function createSkillFromProposal(b: ProposalBody): Skill {
+  // Must be called inside withSkillsLock so the ID-uniqueness check sees the latest file.
   const existing = new Set(readSkills().map(s => s.id));
   const base = `sk-${slug(b.name)}`;
   let id = base;
@@ -924,10 +928,21 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           return;
         }
         const now = new Date().toISOString();
+        const currentAgentStatus = task.agent_status as string | undefined;
         if (req.method === 'POST') {
+          // F4: only allow scheduling when agent_status is absent or already 'scheduled'
+          if (currentAgentStatus === 'running' || currentAgentStatus === 'done') {
+            sendJson(res, 409, { error: 'INVALID_TRANSITION', message: 'task is already running or done' });
+            return;
+          }
           task.agent_status = 'scheduled';
         } else {
-          delete task.agent_status; // DELETE clears the sign-off marker (idempotent)
+          // F1: only allow clearing when agent_status is absent or 'scheduled'; running/done is locked
+          if (currentAgentStatus === 'running' || currentAgentStatus === 'done') {
+            sendJson(res, 409, { error: 'INVALID_TRANSITION', message: 'cannot unsignoff a task that is running or done' });
+            return;
+          }
+          delete task.agent_status; // DELETE clears the sign-off marker (idempotent when already absent)
         }
         task.updated = now;
         task.last_activity = now;
@@ -1308,9 +1323,20 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'name and engine are required' });
               return;
             }
-            const skill = createSkillFromProposal(b);
-            appendSkill(skill);
-            sendJson(res, 201, skill);
+            // Build and append the skill inside the serialization lock so concurrent
+            // POSTs never interleave their read-modify-write (F2).
+            let skill!: Skill;
+            withSkillsLock(() => {
+              skill = createSkillFromProposal(b);
+              const all = readSkills();
+              all.push(skill);
+              writeSkills(all);
+            }).then(() => {
+              sendJson(res, 201, skill);
+            }).catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'WRITE_ERROR', message: msg });
+            });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });

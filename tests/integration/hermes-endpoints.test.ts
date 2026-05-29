@@ -176,7 +176,7 @@ describe('Hermes backend endpoints (P2-04)', () => {
 
   it('two concurrent POST /api/skills both land and the file stays valid JSON (AC-7)', async () => {
     const before = (await (await fetch(`${baseUrl}/api/skills`)).json() as unknown[]).length;
-    await Promise.all([
+    const [resA, resB] = await Promise.all([
       fetch(`${baseUrl}/api/skills`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Concurrent Alpha', engine: 'n8n' }),
@@ -186,11 +186,18 @@ describe('Hermes backend endpoints (P2-04)', () => {
         body: JSON.stringify({ name: 'Concurrent Beta', engine: 'acr' }),
       }),
     ]);
-    // File is parseable (never truncated/corrupted) and grew.
+    // Both POSTs must succeed.
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+    // File is parseable (never truncated/corrupted) and grew by exactly 2.
     const raw = fs.readFileSync(path.join(storeDir, 'skills.json'), 'utf-8');
-    const parsed = JSON.parse(raw) as unknown[];
+    const parsed = JSON.parse(raw) as { name: string }[];
     expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed.length).toBeGreaterThan(before);
+    expect(parsed.length).toBe(before + 2);
+    // Both skill names must be present — neither write was lost.
+    const names = parsed.map(s => s.name);
+    expect(names).toContain('Concurrent Alpha');
+    expect(names).toContain('Concurrent Beta');
   });
 
   // ── agent log ───────────────────────────────────────────────────────────────
