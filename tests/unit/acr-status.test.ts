@@ -12,9 +12,9 @@ import { startUiServer, resetAcrCache, type UiServerHandle } from '../../src/ser
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-const ACR_URL = 'http://localhost:3001/mcp';
+const ACR_URL = 'https://acr.nashsoftware.dev/mcp';
 
-/** Wrap globalThis.fetch so ACR calls (localhost:3001) get the mock response
+/** Wrap globalThis.fetch so ACR calls (acr.nashsoftware.dev) get the mock response
  *  while all other calls (to the test server) use the real fetch. */
 function stubAcrFetch(
   realFetch: typeof fetch,

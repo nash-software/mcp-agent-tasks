@@ -47,8 +47,9 @@ export interface AcrStatusResponse {
 
 let acrCache: { data: AcrStatusResponse; expiresAt: number } | null = null;
 
-// ── Brain search ──────────────────────────────────────────────────────────────
-const BRAIN_MCP_URL = process.env['BRAIN_MCP_URL'] ?? 'http://localhost:8093';
+// Read at call time so ACR_MCP_URL / BRAIN_MCP_URL env vars can be set after import (e.g. in tests)
+function getAcrMcpUrl(): string  { return process.env['ACR_MCP_URL']   ?? 'https://acr.nashsoftware.dev'; }
+function getBrainMcpUrl(): string { return process.env['BRAIN_MCP_URL'] ?? 'https://nash-vps.tail5c5009.ts.net:8093'; }
 
 export interface BrainResult {
   title: string;
@@ -64,7 +65,7 @@ export interface BrainSearchResponse {
 
 async function fetchBrainSearch(q: string): Promise<BrainSearchResponse> {
   try {
-    const res = await fetch(`${BRAIN_MCP_URL}/mcp`, {
+    const res = await fetch(`${getBrainMcpUrl()}/mcp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -109,7 +110,7 @@ export function resetAcrCache(): void {
 
 async function fetchAcrStatus(): Promise<AcrStatusResponse> {
   try {
-    const res = await fetch('http://localhost:3001/mcp', {
+    const res = await fetch(`${getAcrMcpUrl()}/mcp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1054,7 +1055,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             });
 
             try {
-              const acrRes = await fetch('http://localhost:3001/mcp', {
+              const acrRes = await fetch(`${getAcrMcpUrl()}/mcp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: rpcBody,

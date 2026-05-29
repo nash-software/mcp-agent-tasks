@@ -326,20 +326,26 @@ describe('POST /api/acr/dispatch', () => {
     expect(hasJobId || hasError).toBe(true);
   }, 15_000);
 
-  it('returns HTTP 200 with error "ACR offline" when port 3001 has no listener', async () => {
-    // Ensure port 3001 is NOT listening before calling
-    // The AbortSignal timeout is 5s so we need a higher test timeout
-    const res = await fetch(`${baseUrl}/api/acr/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Design new login screen', detail: 'Needs dark mode' }),
-    });
-    expect(res.status).toBe(200);
-    const data = await res.json() as { error?: string; jobId?: string };
-    // ACR is offline in test environment — must return error field, not throw
-    expect(data.error).toBe('ACR offline');
-    expect(data.jobId).toBeUndefined();
-  }, 15_000); // 15s timeout — AbortSignal takes 5s to fire
+  it('returns HTTP 200 with error "ACR offline" when ACR is unreachable', async () => {
+    // Point ACR_MCP_URL at an unreachable port so we reliably test the offline path.
+    // The server reads this env var at call time (not module-load time) so it takes effect immediately.
+    const saved = process.env['ACR_MCP_URL'];
+    process.env['ACR_MCP_URL'] = 'http://localhost:59999'; // nothing listening here
+    try {
+      const res = await fetch(`${baseUrl}/api/acr/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Design new login screen', detail: 'Needs dark mode' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { error?: string; jobId?: string };
+      expect(data.error).toBe('ACR offline');
+      expect(data.jobId).toBeUndefined();
+    } finally {
+      if (saved === undefined) delete process.env['ACR_MCP_URL'];
+      else process.env['ACR_MCP_URL'] = saved;
+    }
+  }, 15_000);
 
   it('returns 400 when title is missing', async () => {
     const res = await fetch(`${baseUrl}/api/acr/dispatch`, {
