@@ -147,6 +147,9 @@
 
 /* -- Global filter bar (P2-01) -------------------------------------------- */
 .filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
