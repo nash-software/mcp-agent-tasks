@@ -51,7 +51,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   milestone TEXT,
   estimate_hours REAL,
   plan_file TEXT,
-  auto_captured INTEGER DEFAULT 0
+  auto_captured INTEGER DEFAULT 0,
+  area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL),
+  scheduled_for TEXT
 );
 
 CREATE TABLE IF NOT EXISTS subtasks (

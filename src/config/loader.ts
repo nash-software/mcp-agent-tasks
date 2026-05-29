@@ -50,6 +50,7 @@ function validateConfig(raw: unknown): McpTasksConfig {
   if (!('tasksDirName' in obj) || typeof obj['tasksDirName'] !== 'string') {
     obj['tasksDirName'] = DEFAULT_TASKS_DIR_NAME;
   }
+  // areas is optional — no backfill needed; absence means no project→area mappings
 
   return obj as unknown as McpTasksConfig;
 }

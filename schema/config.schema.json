@@ -23,6 +23,11 @@
           "storage": { "type": "string", "enum": ["global", "local"] }
         }
       }
+    },
+    "areas": {
+      "type": "object",
+      "description": "Maps project prefixes to their PARA area. Used for area-resolution fallback when a task has no explicit area.",
+      "additionalProperties": { "type": "string", "enum": ["client", "personal", "outsource", "internal"] }
     }
   }
 }

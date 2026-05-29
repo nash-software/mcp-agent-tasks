@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import { stringify as yamlStringify } from 'yaml';
-import type { Task, TaskFrontmatter, TaskReference } from '../types/task.js';
+import type { Task, TaskFrontmatter, TaskReference, Area } from '../types/task.js';
 import { McpTasksError } from '../types/errors.js';
 
 const SCHEMA_VERSION = 1;
@@ -22,6 +22,22 @@ function toIsoString(val: unknown): string {
 function toIsoStringOrNull(val: unknown): string | null {
   if (val instanceof Date) return val.toISOString();
   if (typeof val === 'string') return val;
+  return null;
+}
+
+/**
+ * Convert a YAML-parsed date value back to YYYY-MM-DD.
+ * js-yaml parses bare date strings (2026-06-01) as midnight UTC Date objects.
+ * We reconstruct the date portion using UTC components to avoid timezone shifts.
+ */
+function toDateStringOrNull(val: unknown): string | null {
+  if (typeof val === 'string') return val;
+  if (val instanceof Date) {
+    const y = val.getUTCFullYear();
+    const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(val.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
   return null;
 }
 
@@ -66,6 +82,8 @@ export class MarkdownStore {
       plan_file?: string;
       auto_captured?: boolean;
       references?: unknown;
+      area?: Area;
+      scheduled_for?: string | Date | null;
     };
 
     if (fm.schema_version !== SCHEMA_VERSION) {
@@ -131,6 +149,8 @@ export class MarkdownStore {
       ...(fm.milestone !== undefined ? { milestone: fm.milestone } : {}),
       ...(fm.estimate_hours !== undefined ? { estimate_hours: fm.estimate_hours } : {}),
       ...(fm.auto_captured !== undefined ? { auto_captured: fm.auto_captured } : {}),
+      ...(fm.area !== undefined ? { area: fm.area } : {}),
+      ...(fm.scheduled_for !== undefined ? { scheduled_for: toDateStringOrNull(fm.scheduled_for) } : {}),
     };
 
     // Parse and validate references
@@ -172,6 +192,8 @@ export class MarkdownStore {
     if (task.plan_file === undefined) delete frontmatterToWrite['plan_file'];
     if (task.auto_captured === undefined) delete frontmatterToWrite['auto_captured'];
     if (task.references === undefined) delete frontmatterToWrite['references'];
+    if (task.area === undefined) delete frontmatterToWrite['area'];
+    if (task.scheduled_for === undefined || task.scheduled_for === null) delete frontmatterToWrite['scheduled_for'];
 
     // Remove labels/tags if both are empty to keep output clean
     if (!task.tags?.length) {

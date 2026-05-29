@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Task, TaskStatus, Priority, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
+import type { Task, TaskStatus, Priority, Area, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
 
@@ -42,6 +42,8 @@ interface TaskRow {
   estimate_hours: number | null;
   plan_file: string | null;
   auto_captured: number;
+  area: string | null;
+  scheduled_for: string | null;
 }
 
 interface SubtaskRow {
@@ -126,6 +128,8 @@ export class SqliteIndex {
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
+    addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL)");
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
 
     // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
     this.db.exec(`
@@ -238,6 +242,8 @@ export class SqliteIndex {
       ...(row.estimate_hours !== null ? { estimate_hours: row.estimate_hours } : {}),
       ...(row.plan_file !== null ? { plan_file: row.plan_file } : {}),
       ...(row.auto_captured === 1 ? { auto_captured: true } : {}),
+      ...(row.area !== null ? { area: row.area as Area } : {}),
+      ...(row.scheduled_for !== null ? { scheduled_for: row.scheduled_for } : {}),
     };
 
     // Attach references if any exist
@@ -263,7 +269,8 @@ export class SqliteIndex {
         claimed_by, claimed_at, claim_ttl_hours,
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
         file_path, body, schema_version, spec_file,
-        milestone, estimate_hours, plan_file, auto_captured
+        milestone, estimate_hours, plan_file, auto_captured,
+        area, scheduled_for
       ) VALUES (
         @id, @title, @type, @status, @priority, @project,
         @complexity, @complexity_manual, @why, @parent,
@@ -271,7 +278,8 @@ export class SqliteIndex {
         @claimed_by, @claimed_at, @claim_ttl_hours,
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
         @file_path, @body, @schema_version, @spec_file,
-        @milestone, @estimate_hours, @plan_file, @auto_captured
+        @milestone, @estimate_hours, @plan_file, @auto_captured,
+        @area, @scheduled_for
       )
     `);
 
@@ -308,6 +316,8 @@ export class SqliteIndex {
         estimate_hours: t.estimate_hours ?? null,
         plan_file: t.plan_file ?? null,
         auto_captured: t.auto_captured ? 1 : 0,
+        area: t.area ?? null,
+        scheduled_for: t.scheduled_for ?? null,
       });
 
       // Delete and re-insert related rows
