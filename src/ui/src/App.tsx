@@ -153,7 +153,7 @@ export function App(): React.JSX.Element {
           {view === 'board'     && <BoardView filters={EMPTY_FILTERS} onTaskClick={(t) => setSel(t.id)} />}
           {view === 'hermes'    && <HermesPlaceholder />}
           {view === 'braindump' && <BrainDumpView projects={[]} />}
-          {view === 'artifacts' && <ArtifactsView />}
+          {view === 'artifacts' && <ArtifactsView onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filters={EMPTY_FILTERS} />}
           {view === 'activity'  && <ActivityView />}
         </div>
