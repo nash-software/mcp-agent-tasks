@@ -966,15 +966,15 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         }
         task.updated = now;
         task.last_activity = now;
-        pIdx!.index.upsertTask(task);
-        // Durability: agent_status is a new field with no other markdown writer, so unlike
-        // status/scheduled_for it would be lost on rebuild-index (which rebuilds SQLite FROM
-        // markdown). Write it through to the task's markdown frontmatter via read-modify-write
-        // (preserves body + all other fields). Best-effort: if the markdown file is missing,
-        // the SQLite update above still stands.
-        try {
-          const mdPath = join(pIdx!.tasksDir, task.file_path);
-          if (existsSync(mdPath)) {
+        // Durability + atomicity: markdown is the source of truth (rebuild-index rebuilds SQLite
+        // FROM markdown), and agent_status has no other markdown writer. Write markdown FIRST and
+        // fail closed — if the markdown write throws we return 500 WITHOUT touching SQLite, so we
+        // never acknowledge a sign-off that wouldn't survive a rebuild (no split-brain state).
+        // When the task has no markdown file on disk (SQLite-only task), there is nothing to lose
+        // to a rebuild, so SQLite alone is correct.
+        const mdPath = join(pIdx!.tasksDir, task.file_path);
+        if (existsSync(mdPath)) {
+          try {
             const mdStore = new MarkdownStore();
             const mdTask = mdStore.read(mdPath);
             mdTask.file_path = mdPath; // MarkdownStore.write targets task.file_path directly
@@ -982,11 +982,15 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             else delete mdTask.agent_status;
             mdTask.updated = now;
             mdTask.last_activity = now;
-            mdStore.write(mdTask);
+            mdStore.write(mdTask); // throws → caught below; SQLite is left untouched
+          } catch (mdErr) {
+            const msg = mdErr instanceof Error ? mdErr.message : String(mdErr);
+            console.error(`[signoff] markdown write failed for ${taskId}, aborting (SQLite untouched):`, msg);
+            sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist sign-off' });
+            return;
           }
-        } catch (mdErr) {
-          console.error(`[signoff] markdown write-through failed for ${taskId}:`, mdErr instanceof Error ? mdErr.message : mdErr);
         }
+        pIdx!.index.upsertTask(task); // index update only after markdown is durable
         sendJson(res, 200, task);
         return;
       }
