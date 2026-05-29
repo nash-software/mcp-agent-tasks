@@ -26,6 +26,13 @@ import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
 
+/** Transient handoff state from the capture bar to Brain Dump (P2-03). */
+interface BrainDumpSeed {
+  text: string
+  /** Monotonically-increasing token so two handoffs of the same text still re-trigger the consumer effect. */
+  nonce: number
+}
+
 /** Views the global filter bar applies to (epic §4 — five filterable surfaces). */
 const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
   'today', 'board', 'roadmap', 'artifacts', 'activity',
@@ -69,6 +76,8 @@ export function App(): React.JSX.Element {
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
+  // P2-03 — transient seed: capture bar hands text to Brain Dump through this state
+  const [brainDumpSeed, setBrainDumpSeed] = useState<BrainDumpSeed | null>(null)
 
   // ─── Favourites (P2-02) — persisted to localStorage('lifeos-favs') ──────────
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -385,9 +394,13 @@ export function App(): React.JSX.Element {
     filterProjects, filter, toggleProject, clearFilter,
   ])
 
-  // P2-03 affordance: Shift+Enter / expand in capture bar switches to braindump view
-  const handleCaptureExpand = useCallback((_text: string): void => {
-    // _text will be used by P2-03 to prefill the BrainDump editor
+  // P2-03 — capture bar → Brain Dump handoff.
+  // Empty / whitespace-only text is a no-op (spec Failure Modes).
+  // The nonce (Date.now()) ensures identical text triggers the consumer effect again (AC 5).
+  const handleCaptureExpand = useCallback((text: string): void => {
+    const trimmed = text.trim()
+    if (trimmed === '') return
+    setBrainDumpSeed({ text, nonce: Date.now() })
     handleViewChange('braindump')
   }, [handleViewChange])
 
@@ -440,7 +453,14 @@ export function App(): React.JSX.Element {
           )}
           {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesView onOpenPanel={(task) => setPanel({ mode: 'detail', taskId: task.id })} />}
-          {view === 'braindump' && <BrainDumpView projects={[]} />}
+          {view === 'braindump' && (
+            <BrainDumpView
+              projects={[]}
+              initialText={brainDumpSeed?.text}
+              seedNonce={brainDumpSeed?.nonce}
+              onSeedConsumed={() => { setBrainDumpSeed(null) }}
+            />
+          )}
           {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}

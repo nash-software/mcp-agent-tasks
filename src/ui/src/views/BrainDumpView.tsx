@@ -110,11 +110,23 @@ interface CardState {
 
 interface Props {
   projects: string[]
-  /** Optional prefill text (P2-03 entry point). When supplied, prefills the textarea and focuses it. */
+  /** Optional prefill text (P2-03 entry point). Prefills the textarea and focuses it on each new handoff. */
   initialText?: string
+  /**
+   * Nonce for the current handoff (P2-03). Keying the prefill effect on the nonce (rather than on
+   * the text value) means two consecutive handoffs of identical text still re-trigger correctly (AC 5).
+   * Must be provided together with initialText; ignored when initialText is undefined/empty.
+   */
+  seedNonce?: number
+  /**
+   * Called by BrainDumpView immediately after it has consumed the seed (P2-03 AC 4 — consume-once
+   * contract). App clears its brainDumpSeed state in response so revisiting the view does not
+   * re-apply stale text.
+   */
+  onSeedConsumed?: () => void
 }
 
-export function BrainDumpView({ projects, initialText }: Props): React.JSX.Element {
+export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed }: Props): React.JSX.Element {
   const [dump, setDump] = useState(initialText ?? '')
   const [cards, setCards] = useState<CardState[]>([])
   const [parseError, setParseError] = useState<string | null>(null)
@@ -126,18 +138,25 @@ export function BrainDumpView({ projects, initialText }: Props): React.JSX.Eleme
   const { data: acrStatus } = useAcrStatus()
   const acrOffline = acrStatus?.offline ?? false
 
-  // P2-03 entry point: when initialText changes to a new non-empty value, prefill and focus
+  // P2-03 entry point: key on seedNonce so identical text handed off twice still re-triggers (AC 5).
+  // Calls onSeedConsumed() immediately after applying — consume-once contract (AC 4).
   useEffect(() => {
-    if (initialText !== undefined && initialText !== '') {
-      setDump(initialText)
-      setCards([])
-      setParseError(null)
-      setCreatedCount(null)
-      setTimeout(() => {
-        textareaRef.current?.focus()
-      }, 0)
-    }
-  }, [initialText])
+    if (seedNonce == null || initialText == null || initialText === '') return
+    setDump(initialText)
+    setCards([])
+    setParseError(null)
+    setCreatedCount(null)
+    // Move caret to end after React flushes the value
+    setTimeout(() => {
+      const el = textareaRef.current
+      if (el) {
+        el.focus()
+        el.setSelectionRange(el.value.length, el.value.length)
+      }
+    }, 0)
+    onSeedConsumed?.()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional nonce key; re-triggers on new nonce only
+  }, [seedNonce])
 
   const handleTranscript = useCallback((text: string) => {
     setDump(prev => prev ? prev + ' ' + text : text)
