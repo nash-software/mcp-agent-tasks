@@ -150,12 +150,12 @@ export function App(): React.JSX.Element {
               onVisibleIdsChange={setVisibleIds}
             />
           )}
-          {view === 'board'     && <BoardView filters={EMPTY_FILTERS} onTaskClick={(t) => setSel(t.id)} />}
+          {view === 'board'     && <BoardView filters={EMPTY_FILTERS} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesPlaceholder />}
           {view === 'braindump' && <BrainDumpView projects={[]} />}
           {view === 'artifacts' && <ArtifactsView onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filters={EMPTY_FILTERS} />}
-          {view === 'activity'  && <ActivityView />}
+          {view === 'activity'  && <ActivityView onOpenPanel={setPanel} />}
         </div>
       </main>
 

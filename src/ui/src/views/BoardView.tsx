@@ -1,21 +1,21 @@
 import React from 'react'
-import type { Task, TaskStatus, FilterState } from '../types'
+import type { Task, TaskStatus, FilterState, PanelState } from '../types'
 import { useTasks } from '../hooks/useTasks'
 import { TaskCard } from '../components/TaskCard'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'todo',        label: 'Todo' },
-  { status: 'in_progress', label: 'In Progress' },
+  { status: 'todo',        label: 'Queued' },
+  { status: 'in_progress', label: 'In progress' },
   { status: 'blocked',     label: 'Blocked' },
   { status: 'done',        label: 'Done' },
 ]
 
 interface Props {
   filters: FilterState
-  onTaskClick?: (task: Task) => void
+  onOpenPanel: (panel: PanelState) => void
 }
 
-export function BoardView({ filters, onTaskClick }: Props): React.JSX.Element {
+export function BoardView({ filters, onOpenPanel }: Props): React.JSX.Element {
   const { tasks, isLoading, error } = useTasks({
     project:   filters.project || undefined,
     milestone: filters.milestone || undefined,
@@ -24,12 +24,15 @@ export function BoardView({ filters, onTaskClick }: Props): React.JSX.Element {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
+      <div
+        className="grid gap-4 p-6"
+        style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+      >
         {COLUMNS.map(col => (
           <div key={col.status} className="space-y-3">
-            <div className="h-5 bg-slate-800 rounded w-24 animate-pulse" />
+            <div className="h-4 bg-surface-2 rounded w-24 animate-pulse" />
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-20 bg-slate-800 rounded animate-pulse" />
+              <div key={i} className="h-10 bg-surface-2 rounded animate-pulse" />
             ))}
           </div>
         ))}
@@ -39,26 +42,45 @@ export function BoardView({ filters, onTaskClick }: Props): React.JSX.Element {
 
   if (error) {
     return (
-      <div className="p-6 text-red-400 text-sm">
+      <div className="p-6 text-status-red text-sm">
         Failed to load tasks: {error.message}
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
+    <div
+      className="grid gap-4 p-6"
+      style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+    >
       {COLUMNS.map(col => {
-        const colTasks = tasks.filter(t => t.status === col.status)
+        const colTasks = tasks.filter((t: Task) => t.status === col.status)
         return (
-          <div key={col.status} className="space-y-3">
-            <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">
-              {col.label} <span className="text-slate-600">({colTasks.length})</span>
+          <div key={col.status} className="space-y-2">
+            {/* Column header — 11px/600/muted/uppercase */}
+            <h2
+              className="font-semibold text-ink-muted uppercase tracking-wider"
+              style={{ fontSize: 11 }}
+            >
+              {col.label}{' '}
+              <span className="text-ink-faint font-mono tabular-nums">
+                ({colTasks.length})
+              </span>
             </h2>
-            {colTasks.map(task => (
-              <TaskCard key={task.id} task={task} onClick={() => onTaskClick?.(task)} />
+
+            {/* Cards */}
+            {colTasks.map((task: Task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                mode="committed"
+                onClick={() => onOpenPanel({ mode: 'detail', taskId: task.id })}
+              />
             ))}
+
+            {/* Empty placeholder */}
             {colTasks.length === 0 && (
-              <p className="text-xs text-slate-600 italic">No tasks</p>
+              <p className="text-xs text-ink-muted italic px-3 py-2">No tasks</p>
             )}
           </div>
         )
