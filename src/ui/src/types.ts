@@ -171,3 +171,11 @@ export interface Proposal {
   frequency: string
   engine: Engine
 }
+
+/**
+ * Proposal augmented with _match terms (derived at research time).
+ * Used by HermesView to seed Skill.match[] on promote without an extra round-trip.
+ */
+export interface ProposalWithMatch extends Proposal {
+  _match: string[]
+}

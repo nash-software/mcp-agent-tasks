@@ -115,8 +115,12 @@ export function triage(task: Task, skills: Skill[]): Triage {
   }
 }
 
-/** Format minutes saved as "Nm" or "Xh". */
+/** Format minutes saved as "Nm" or "Xh".
+ *  Correct formula: Math.round(min / 60 * 10) / 10  (algebraically: minutes → hours, 1 decimal).
+ *  The prototype used Math.round(min/6)/10 which is algebraically identical but misleading;
+ *  this makes the intent clear and avoids the off-by-10 confusion documented in the spec.
+ */
 export function fmtSaved(min: number): string {
   if (min < 60) return min + 'm'
-  return Math.round(min / 6) / 10 + 'h'
+  return Math.round(min / 60 * 10) / 10 + 'h'
 }

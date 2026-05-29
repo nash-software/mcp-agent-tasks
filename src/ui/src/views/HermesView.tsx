@@ -3,18 +3,26 @@
  * Sign-off gate: ONLY tasks with agent_status set (non-null, non-done) appear here.
  * P2-05 delivers: triage classifier, task queue, sign-off gate, daily budget,
  *   AgentTaskCard per bucket, agent log, and placeholder regions for P2-06.
+ * P2-06 delivers: ProposalCard list, real SkillCard grid, promote→re-triage loop,
+ *   research heuristic, runSkillDirect, proposalTaskIds queue gating.
  * Port from design_handoff_life_os/reference/agent.jsx (AgentView + AgentControl).
  */
 import React, { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bot, Server, Zap, Minus, Plus } from 'lucide-react'
 import { fetchTasks } from '../api'
-import { fetchSkills, fetchAgentLog, clearSignoffTask, dispatchToAcr, postAgentResearch, postAgentSchedule } from '../api'
+import {
+  fetchSkills, fetchAgentLog, clearSignoffTask, dispatchToAcr,
+  postAgentResearch, postAgentSchedule, promoteSkill, buildProposalHeuristic,
+} from '../api'
+import type { PromoteSkillPayload } from '../api'
 import { useAcrStatus } from '../hooks/useAcrStatus'
 import { triage, BUCKET_ORDER, BUCKETS, fmtSaved } from '../lib/triage'
 import type { Bucket, Triage } from '../lib/triage'
 import { AgentTaskCard, RunningCard } from '../components/AgentTaskCard'
-import type { Task, Skill, AgentLog, Proposal } from '../types'
+import { ProposalCard } from '../components/ProposalCard'
+import { SkillCard } from '../components/SkillCard'
+import type { Task, Skill, AgentLog, Proposal, ProposalWithMatch } from '../types'
 
 // ── Daily budget persistence ──────────────────────────────────────────────
 const BUDGET_KEY = 'lifeos-budget'
@@ -78,24 +86,6 @@ function AgentLogRow({ entry }: AgentLogRowProps): React.JSX.Element {
   )
 }
 
-// ── Skill stub row (P2-06 will replace with SkillCard grid) ───────────────
-interface SkillStubProps {
-  skill: Skill
-}
-
-function SkillStub({ skill }: SkillStubProps): React.JSX.Element {
-  const engLabel = skill.engine === 'acr' ? 'ACR' : skill.engine === 'n8n' ? 'n8n' : 'Hermes'
-  const engColor = skill.engine === 'acr' ? 'text-status-red' : skill.engine === 'n8n' ? 'text-status-blue' : 'text-status-green'
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded-card bg-surface-1 border border-surface-3 text-xs">
-      <Zap size={13} className="text-ink-muted shrink-0" />
-      <span className="font-medium text-ink flex-1 truncate">{skill.name}</span>
-      <span className={`font-mono ${engColor}`}>{engLabel}</span>
-      <span className="font-mono text-ink-faint">{skill.runs} runs</span>
-    </div>
-  )
-}
-
 // ── Main view ──────────────────────────────────────────────────────────────
 interface HermesViewProps {
   onOpenPanel?: (task: Task) => void
@@ -133,7 +123,6 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
   const { data: skills = [] } = useQuery<Skill[]>({
     queryKey: ['skills'],
     queryFn: fetchSkills,
-    // treat error/empty gracefully
     retry: 1,
   })
   const { data: agentLogRaw = [] } = useQuery<AgentLog[]>({
@@ -163,7 +152,6 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
   }, [])
 
   // ── Sign-off gate (AC-1) ────────────────────────────────────────────────
-  // ONLY tasks with agent_status set (non-null, non-done) are visible to Hermes.
   const scheduled = useMemo(
     () => allTasks.filter(
       (t) => t.agent_status != null && t.agent_status !== 'done' && t.status !== 'done',
@@ -176,9 +164,16 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     [scheduled],
   )
 
-  // P2-06 proposals (empty for now — consumed to exclude proposal-origin tasks from triage)
-  const proposals: Proposal[] = []
-  const proposalTaskIds: string[] = []
+  // ── P2-06: Proposals state ───────────────────────────────────────────────
+  // Proposals are transient client state. proposalTaskIds filters those tasks from triage queue.
+  const [proposals, setProposals] = useState<ProposalWithMatch[]>([])
+  // Per-proposal promote error (calm inline, no toast)
+  const [promoteErrors, setPromoteErrors] = useState<Record<string, string>>({})
+
+  const proposalTaskIds = useMemo(
+    () => proposals.map(p => p.taskId),
+    [proposals],
+  )
 
   // ── Triage queue ────────────────────────────────────────────────────────
   const triaged = useMemo(
@@ -239,8 +234,6 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
       return { prev }
     },
     onSuccess: (data) => {
-      // Only count a real dispatch against the daily budget — the endpoint returns 200 with
-      // {error:'ACR offline'} (no jobId) when ACR is unreachable, which must NOT consume budget.
       if (data && typeof data.jobId === 'string') incrementJobsToday()
     },
     onError: (_err, _vars, ctx) => {
@@ -249,6 +242,55 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['tasks'] })
       void qc.invalidateQueries({ queryKey: ['agent', 'log'] })
+    },
+  })
+
+  // ── P2-06: Promote mutation ──────────────────────────────────────────────
+  const promoteMut = useMutation({
+    mutationFn: (payload: PromoteSkillPayload) => promoteSkill(payload),
+    onMutate: async (payload) => {
+      // Optimistic: push synthetic skill into ['skills'] cache
+      await qc.cancelQueries({ queryKey: ['skills'] })
+      const prevSkills = qc.getQueryData<Skill[]>(['skills'])
+
+      const syntheticSkill: Skill = {
+        id: `optimistic-${Date.now()}`,
+        name: payload.name,
+        project: payload.project,
+        engine: payload.engine as Skill['engine'],
+        desc: payload.desc,
+        match: payload.match,
+        runs: 0,
+        minutesSaved: 0,
+        lastRun: 'just now',
+        origin: payload.origin,
+      }
+      qc.setQueryData<Skill[]>(['skills'], (old = []) => [...old, syntheticSkill])
+
+      // Optimistic: append a promote agent-log entry
+      await qc.cancelQueries({ queryKey: ['agent', 'log'] })
+      const prevLog = qc.getQueryData<AgentLog[]>(['agent', 'log'])
+      const logEntry: AgentLog = {
+        id: `opt-log-${Date.now()}`,
+        kind: 'promote',
+        title: `Promoted: ${payload.name}`,
+        project: payload.project,
+        savedMin: payload.savedPerRun ?? 0,
+        at: 'just now',
+      }
+      qc.setQueryData<AgentLog[]>(['agent', 'log'], (old = []) => [logEntry, ...old])
+
+      return { prevSkills, prevLog, syntheticSkillId: syntheticSkill.id }
+    },
+    onSuccess: () => {
+      // Re-fetch skills so the real server-assigned id + the source task can re-triage properly
+      void qc.invalidateQueries({ queryKey: ['skills'] })
+      void qc.invalidateQueries({ queryKey: ['agent', 'log'] })
+    },
+    onError: (_err, _payload, ctx) => {
+      // Full rollback: restore skills + log
+      if (ctx?.prevSkills !== undefined) qc.setQueryData(['skills'], ctx.prevSkills)
+      if (ctx?.prevLog !== undefined) qc.setQueryData(['agent', 'log'], ctx.prevLog)
     },
   })
 
@@ -261,22 +303,129 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     mutationFn: (taskId: string) => postAgentSchedule(taskId),
   })
 
+  // ── P2-06: Propose handler ───────────────────────────────────────────────
+  // Research action: try server endpoint; on failure, fall back to client heuristic.
+  const handleResearch = useCallback(async (task: Task): Promise<void> => {
+    // Guard: don't create a duplicate proposal for the same task
+    if (proposalTaskIds.includes(task.id)) return
+
+    try {
+      // Attempt server-side research (P2-04 endpoint)
+      await researchMut.mutateAsync(task.id)
+      // If the server returns a full Proposal, it would come through a refetch.
+      // For P2-06, the endpoint may not return a full Proposal shape yet — fall through to heuristic.
+    } catch {
+      // Research offline or unavailable — fall through to heuristic silently
+    }
+
+    // Client heuristic always produces a Proposal (AC #4 fallback per spec)
+    const proposal = buildProposalHeuristic(task) as ProposalWithMatch
+    setProposals(prev => [...prev, proposal])
+  }, [proposalTaskIds, researchMut])
+
+  // ── P2-06: Promote handler ───────────────────────────────────────────────
+  const handlePromote = useCallback((proposal: ProposalWithMatch): void => {
+    // Guard: if the task already matches an existing skill (stale proposal / race), clear and exit
+    const task = allTasks.find(t => t.id === proposal.taskId)
+    if (task) {
+      const existingMatch = skills.find(s =>
+        s.match.some(m => (task.title + ' ' + (task.tags ?? []).join(' ')).toLowerCase().includes(m)),
+      )
+      if (existingMatch) {
+        // Skill already exists — just clear the proposal, no duplicate
+        setProposals(prev => prev.filter(p => p.id !== proposal.id))
+        return
+      }
+    }
+
+    // Clear prior promote error for this proposal
+    setPromoteErrors(prev => {
+      const next = { ...prev }
+      delete next[proposal.id]
+      return next
+    })
+
+    // Build payload for POST /api/skills
+    const payload: PromoteSkillPayload = {
+      name: proposal.skillName,
+      desc: proposal.summary,
+      engine: proposal.engine,
+      match: proposal._match.length > 0 ? proposal._match : [proposal.skillName.toLowerCase()],
+      runs: 0,
+      minutesSaved: 0,
+      origin: proposal.taskId,
+      project: proposal.project,
+      savedPerRun: proposal.savedPerRun,
+    }
+
+    // Remove the proposal optimistically (task will re-triage once ['skills'] invalidated)
+    setProposals(prev => prev.filter(p => p.id !== proposal.id))
+
+    promoteMut.mutate(payload, {
+      onError: () => {
+        // Rollback: restore the proposal + show inline error
+        setProposals(prev => [...prev, proposal])
+        setPromoteErrors(prev => ({ ...prev, [proposal.id]: 'Could not save skill — please try again.' }))
+      },
+    })
+  }, [allTasks, skills, promoteMut])
+
+  // ── P2-06: Dismiss handler ───────────────────────────────────────────────
+  const handleDismiss = useCallback((proposal: Proposal): void => {
+    setProposals(prev => prev.filter(p => p.id !== proposal.id))
+    // Task returns to its triage bucket on next render (no mutation needed)
+  }, [])
+
+  // ── P2-06: runSkillDirect — called by Dispatch button for automatable skills ──
+  const runSkillDirect = useCallback((skill: Skill): void => {
+    const savedThisRun = skill.runs > 0
+      ? Math.round(skill.minutesSaved / Math.max(skill.runs, 1))
+      : skill.minutesSaved
+    // Optimistic bump (runs +1, minutesSaved += savedThisRun) + run log + budget — the local,
+    // always-succeeds part of a run.
+    const recordOptimisticRun = (): void => {
+      qc.setQueryData<Skill[]>(['skills'], (old = []) =>
+        old.map(s => s.id === skill.id
+          ? { ...s, runs: s.runs + 1, minutesSaved: s.minutesSaved + savedThisRun, lastRun: 'just now' }
+          : s),
+      )
+      const logEntry: AgentLog = {
+        id: `opt-run-${Date.now()}`, kind: 'run', title: `Ran: ${skill.name}`,
+        project: skill.project, savedMin: savedThisRun, at: 'just now',
+      }
+      qc.setQueryData<AgentLog[]>(['agent', 'log'], (old = []) => [logEntry, ...old])
+      incrementJobsToday()
+    }
+
+    if (skill.engine === 'acr') {
+      const matchingTask = scheduled.find(t => triage(t, [skill]).bucket === 'automatable')
+      if (matchingTask) {
+        // Dispatch a real ACR job (source:'hermes', skillId). The mutation's onSuccess consumes
+        // budget (real jobId only) + invalidates ['skills']/['agent','log'] so the bump/log come
+        // from backend truth — no unrollbackable optimistic counters, no double budget count.
+        dispatchAcrMut.mutate({ taskId: matchingTask.id, skillId: skill.id })
+      } else {
+        // No signed-off task this skill automates → nothing to dispatch; record a local run so
+        // clicking Run is never a silent no-op.
+        recordOptimisticRun()
+      }
+      return
+    }
+    // n8n / hermes skills run locally (no backend execution yet, P2-06 UI) — always succeed.
+    recordOptimisticRun()
+  }, [scheduled, dispatchAcrMut, incrementJobsToday, qc])
+
   // ── Action dispatcher ────────────────────────────────────────────────────
   const handleAction = useCallback((action: string, task: Task, tri: Triage): void => {
     const wantsAcr = action === 'approve' || action === 'acr' ||
       (action === 'run' && tri.skill?.engine === 'acr')
-    // Never dispatch to ACR while it's offline — surface nothing, just skip (button is also disabled).
     if (wantsAcr && acrOffline) return
 
     switch (action) {
       case 'run': {
         if (tri.skill?.engine === 'acr') {
-          // ACR path: budget is incremented in dispatchAcrMut.onSuccess (only on a real jobId),
-          // so a failed/offline dispatch never consumes the daily budget.
           dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill.id })
         } else {
-          // Non-ACR (hermes/n8n) run: optimistic local mark — the execution backend is wired in
-          // P2-06; for now the budget is consumed for the local dispatch intent.
           qc.setQueryData<Task[]>(['tasks'], (old = []) =>
             old.map((t) => t.id === task.id ? { ...t, agent_status: 'running' } : t),
           )
@@ -286,12 +435,11 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
       }
       case 'approve':
       case 'acr': {
-        // Budget incremented in dispatchAcrMut.onSuccess (real jobId only).
         dispatchAcrMut.mutate({ taskId: task.id, skillId: tri.skill?.id })
         break
       }
       case 'research': {
-        researchMut.mutate(task.id)
+        void handleResearch(task)
         break
       }
       case 'schedule': {
@@ -300,14 +448,12 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
       }
       case 'assist':
       default:
-        // No-op for P2-05; P2-06 wires up real draft/assist
         break
     }
-  }, [qc, acrOffline, dispatchAcrMut, researchMut, scheduleMut, incrementJobsToday])
+  }, [qc, acrOffline, dispatchAcrMut, handleResearch, scheduleMut, incrementJobsToday])
 
   const handleDispatch = useCallback((): void => {
     if (!recommended || budgetLeft <= 0) return
-    // handleAction owns the budget increment + ACR-offline guard.
     handleAction('run', recommended.task, recommended.tri)
   }, [recommended, budgetLeft, handleAction])
 
@@ -346,7 +492,6 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center gap-2 text-sm font-medium text-ink">
               {stateLine}
-              {/* ACR access chip */}
               <span
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded-badge text-xs ${acrOffline ? 'bg-surface-2 text-ink-faint' : 'bg-surface-2 text-ink-muted'}`}
                 title={acrOffline ? 'ACR offline' : 'Hermes has access to the ACR machine'}
@@ -422,10 +567,28 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
             </Section>
           )}
 
-          {/* Automation proposals — P2-06 placeholder */}
-          {/* P2-06 will render ProposalCard components here */}
+          {/* P2-06: Automation proposals (real ProposalCard list) */}
+          {proposals.length > 0 && (
+            <Section
+              label="Automation proposals"
+              count={proposals.length}
+              hint="review → promote to a reusable skill"
+            >
+              <div className="flex flex-col gap-3">
+                {proposals.map((p) => (
+                  <ProposalCard
+                    key={p.id}
+                    proposal={p}
+                    onPromote={() => { handlePromote(p) }}
+                    onDismiss={handleDismiss}
+                    promoteError={promoteErrors[p.id]}
+                  />
+                ))}
+              </div>
+            </Section>
+          )}
 
-          {/* Bucket sections — non-empty only, fixed order per AC-3 */}
+          {/* Bucket sections — non-empty only, fixed order */}
           {BUCKET_ORDER.filter((bk) => (byBucket[bk]?.length ?? 0) > 0).map((bk) => (
             <Section key={bk} label={BUCKETS[bk].label} count={byBucket[bk]!.length}>
               <div className="flex flex-col gap-2">
@@ -444,15 +607,26 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
             </Section>
           ))}
 
-          {/* Skills & automations — P2-06 will replace stubs with SkillCard grid */}
-          <Section label="Skills & automations" count={skills.length} hint="your recurring work, absorbed — Don't Repeat Yourself">
+          {/* P2-06: Skills & automations — real SkillCard grid */}
+          <Section
+            label="Skills & automations"
+            count={skills.length}
+            hint="your recurring work, absorbed — Don't Repeat Yourself"
+          >
             {skills.length > 0 ? (
-              <div className="flex flex-col gap-1.5">
-                {skills.map((s) => <SkillStub key={s.id} skill={s} />)}
+              <div className="flex flex-col gap-2">
+                {skills.map((s) => (
+                  <SkillCard
+                    key={s.id}
+                    skill={s}
+                    onRun={runSkillDirect}
+                  />
+                ))}
               </div>
             ) : (
               <div className="text-sm text-ink-muted py-4 text-center">
-                No skills yet — they&apos;re created as Hermes learns your repeatable work (P2-06).
+                No skills yet — they&apos;re created as Hermes learns your repeatable work.
+                Research a task above to get started.
               </div>
             )}
           </Section>

@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -125,11 +125,15 @@ export async function commitCandidates(candidates: BrainDumpCandidate[]): Promis
   return res.json() as Promise<{ created: string[] }>
 }
 
-export async function acrDispatch(title: string, detail: string): Promise<{ jobId?: string; error?: string }> {
+/** Manual dispatch path — always sends source:'user'. */
+export async function acrDispatch(
+  title: string,
+  detail: string,
+): Promise<{ jobId?: string; error?: string }> {
   const res = await fetch('/api/acr/dispatch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, detail }),
+    body: JSON.stringify({ title, detail, source: 'user' }),
   })
   return res.json() as Promise<{ jobId?: string; error?: string }>
 }
@@ -283,4 +287,71 @@ export async function postAgentSchedule(taskId: string): Promise<{ error?: strin
   })
   if (!res.ok) throw new Error(`postAgentSchedule failed: HTTP ${res.status}`)
   return res.json() as Promise<{ error?: string }>
+}
+
+export interface PromoteSkillPayload {
+  name: string
+  desc: string
+  engine: Engine
+  match: string[]
+  runs: 0
+  minutesSaved: 0
+  origin: string
+  project: string
+  /** Proposal savings — client-only, used for the optimistic promote log entry (server ignores). */
+  savedPerRun?: number
+}
+
+/** Promote a proposal → a committed Skill. POST /api/skills. Source:'hermes'. */
+export async function promoteSkill(payload: PromoteSkillPayload): Promise<{ id: string }> {
+  // savedPerRun is client-only (drives the optimistic promote log); never send it to the skills
+  // endpoint, whose contract is the skill-creation payload only.
+  const { savedPerRun: _savedPerRun, ...body } = payload
+  const res = await fetch('/api/skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`promoteSkill failed: HTTP ${res.status}`)
+  return res.json() as Promise<{ id: string }>
+}
+
+/** Client heuristic research — generates a ProposalWithMatch from task metadata.
+ *  Falls back when POST /api/agent/research is unavailable.
+ *  _match carries the derived skill match[] terms so promote can seed Skill.match[] reliably.
+ */
+export function buildProposalHeuristic(task: Task): ProposalWithMatch {
+  const isSw = /\b(deploy|migrat|build|api|endpoint|bug|refactor|script|backup|database|db|crawl|scrape|test|ci|pipeline|audit|lighthouse|lint|typecheck|code|server|cron|postgres|webhook)\b/
+    .test((task.title + ' ' + (task.tags ?? []).join(' ') + ' ' + (task.why ?? '')).toLowerCase())
+
+  const engine: Engine = isSw ? 'acr' : 'n8n'
+
+  // Derive a skill name from the task title (title-case first 4 words)
+  const words = task.title.split(/\s+/).slice(0, 4)
+  const skillName = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+
+  // Derive match terms: distinctive words from title + tags, lowercase, ≥4 chars
+  const titleWords = task.title.toLowerCase().split(/\W+/).filter(w => w.length >= 4)
+  const tagWords = (task.tags ?? []).map(t => t.toLowerCase())
+  const match = [...new Set([...titleWords, ...tagWords])].slice(0, 5)
+
+  const steps = [
+    `Gather inputs: collect the data or context needed for "${task.title}"`,
+    `Execute: run the ${isSw ? 'script/command' : 'workflow'} to process the task automatically`,
+    `Deliver: return results and notify you of completion`,
+  ]
+
+  return {
+    id: `proposal-${task.id}-${Date.now()}`,
+    taskId: task.id,
+    project: task.project ?? 'GEN',
+    skillName,
+    taskTitle: task.title,
+    summary: `Automate "${task.title}" so it runs ${isSw ? 'on ACR without manual steps' : 'via an n8n flow on a schedule'}`,
+    steps,
+    savedPerRun: 30,
+    frequency: 'as needed',
+    engine,
+    _match: match,
+  }
 }
