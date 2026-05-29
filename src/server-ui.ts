@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
@@ -627,6 +627,210 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
             // Background routing: #prefix explicit, or LLM
             spawnBackgroundRouting(text, taskId, projectIndexes, genIdx);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: brain dump — LLM task inference via claude CLI
+      if (pathname === '/api/capture/braindump' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { text?: unknown };
+            if (!body.text || typeof body.text !== 'string' || body.text.trim().length === 0) {
+              sendJson(res, 200, { candidates: [], error: 'Could not parse — edit manually' });
+              return;
+            }
+            if (body.text.length > 10_000) {
+              sendJson(res, 200, { candidates: [], error: 'Text too long (max 10 000 chars)' });
+              return;
+            }
+            const text = body.text.trim();
+            const prefixes = projectIndexes.map(p => p.prefix).join(', ');
+            const prompt = `Extract tasks from this text. Return ONLY a valid JSON array, no other text. Each item: {"title":"string","project":"one of ${prefixes} or GEN","area":"client|personal|outsource|internal","why":"optional string"}. Text: ${text}`;
+
+            const result = spawnSync('claude', ['-p', prompt], {
+              timeout: 60_000,
+              encoding: 'utf-8',
+              stdio: ['ignore', 'pipe', 'ignore'],
+            });
+
+            if (result.error || result.status !== 0 || !result.stdout) {
+              sendJson(res, 200, { candidates: [], error: 'Could not parse — edit manually' });
+              return;
+            }
+
+            const raw = result.stdout.trim();
+            // Extract JSON array from output (claude may emit markdown fences)
+            const jsonMatch = raw.match(/\[[\s\S]*\]/);
+            if (!jsonMatch) {
+              sendJson(res, 200, { candidates: [], error: 'Could not parse — edit manually' });
+              return;
+            }
+
+            interface RawCandidate {
+              title?: unknown;
+              project?: unknown;
+              area?: unknown;
+              why?: unknown;
+            }
+
+            interface Candidate {
+              title: string;
+              project: string;
+              area: 'client' | 'personal' | 'outsource' | 'internal';
+              why?: string;
+            }
+
+            const VALID_AREAS = new Set(['client', 'personal', 'outsource', 'internal']);
+
+            let parsed: RawCandidate[];
+            try {
+              parsed = JSON.parse(jsonMatch[0]) as RawCandidate[];
+            } catch {
+              sendJson(res, 200, { candidates: [], error: 'Could not parse — edit manually' });
+              return;
+            }
+
+            if (!Array.isArray(parsed)) {
+              sendJson(res, 200, { candidates: [], error: 'Could not parse — edit manually' });
+              return;
+            }
+
+            const candidates: Candidate[] = parsed
+              .filter((c): c is RawCandidate => typeof c === 'object' && c !== null && typeof c.title === 'string')
+              .map(c => ({
+                title: String(c.title),
+                project: typeof c.project === 'string' ? c.project : 'GEN',
+                area: VALID_AREAS.has(String(c.area)) ? String(c.area) as Candidate['area'] : 'internal',
+                ...(c.why && typeof c.why === 'string' ? { why: c.why } : {}),
+              }));
+
+            sendJson(res, 200, { candidates });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 200, { candidates: [], error: msg });
+          }
+        });
+        return;
+      }
+
+      // API: commit brain dump candidates as tasks
+      if (pathname === '/api/capture/commit' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            interface CommitCandidate {
+              title: string;
+              project: string;
+              area?: string;
+              why?: string;
+            }
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { candidates?: CommitCandidate[] };
+            if (!body.candidates || !Array.isArray(body.candidates)) {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'candidates array is required' });
+              return;
+            }
+
+            const created: string[] = [];
+            const now = new Date().toISOString();
+
+            for (const c of body.candidates) {
+              if (!c.title || typeof c.title !== 'string') continue;
+              const projectPrefix = typeof c.project === 'string' ? c.project : 'GEN';
+              const pIdx = projectIndexes.find(p => p.prefix === projectPrefix)
+                ?? projectIndexes.find(p => p.prefix === 'GEN')
+                ?? projectIndexes[0];
+              if (!pIdx) continue;
+
+              const num = pIdx.index.nextId(pIdx.prefix);
+              const id = `${pIdx.prefix}-${String(num).padStart(3, '0')}`;
+              const task = {
+                schema_version: 1,
+                id,
+                title: c.title.slice(0, 120),
+                type: 'chore' as const,
+                status: 'todo' as const,
+                priority: 'medium' as const,
+                project: pIdx.prefix,
+                tags: [],
+                complexity: 1,
+                complexity_manual: false,
+                why: typeof c.why === 'string' ? c.why : '',
+                created: now,
+                updated: now,
+                last_activity: now,
+                claimed_by: null,
+                claimed_at: null,
+                claim_ttl_hours: 4,
+                parent: null,
+                children: [],
+                dependencies: [],
+                subtasks: [],
+                git: { commits: [] },
+                transitions: [],
+                files: [],
+                body: '',
+                file_path: `${id}.md`,
+                auto_captured: true,
+              };
+              pIdx.index.upsertTask(task);
+              created.push(id);
+            }
+
+            sendJson(res, 200, { created });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: dispatch to ACR via MCP tool call
+      if (pathname === '/api/acr/dispatch' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { title?: unknown; detail?: unknown };
+            if (!body.title || typeof body.title !== 'string') {
+              sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'title is required' });
+              return;
+            }
+            const title = String(body.title);
+            const detail = typeof body.detail === 'string' ? body.detail : '';
+
+            const rpcBody = JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'tools/call',
+              params: {
+                name: 'acr_create_job',
+                arguments: { title, detail },
+              },
+              id: 1,
+            });
+
+            try {
+              const acrRes = await fetch('http://localhost:3001/mcp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: rpcBody,
+                signal: AbortSignal.timeout(5000),
+              });
+              const data = await acrRes.json() as { result?: { jobId?: string }; id?: unknown };
+              const jobId = (data.result as Record<string, unknown> | undefined)?.jobId;
+              sendJson(res, 200, { jobId: jobId ?? 'dispatched' });
+            } catch (fetchErr) {
+              // ECONNREFUSED, timeout, or any network error — ACR is offline
+              sendJson(res, 200, { error: 'ACR offline' });
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
