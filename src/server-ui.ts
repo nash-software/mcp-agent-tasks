@@ -320,11 +320,18 @@ function writeSkills(skills: Skill[]): void {
 
 // In-process serialization for skill writes. Concurrent POST /api/skills calls all
 // chain onto this promise so read-modify-write is never interleaved (F2).
-let _skillsWriteQueue: Promise<void> = Promise.resolve();
+//
+// Resilience: the queue tail advances even when a task rejects. The `run` promise
+// carries the real result (resolved or rejected) back to the caller, while
+// `_skillsWriteQueue` is always settled to `undefined` so the NEXT caller is
+// never poisoned by a previous failure.
+let _skillsWriteQueue: Promise<unknown> = Promise.resolve();
 
-function withSkillsLock(fn: () => void): Promise<void> {
-  _skillsWriteQueue = _skillsWriteQueue.then(() => { fn(); });
-  return _skillsWriteQueue;
+function withSkillsLock<T>(fn: () => T | Promise<T>): Promise<T> {
+  const run = _skillsWriteQueue.then(fn, fn); // continue regardless of prior outcome
+  // Keep the chain alive but swallow rejection so the NEXT caller isn't poisoned.
+  _skillsWriteQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 function createSkillFromProposal(b: ProposalBody): Skill {
@@ -946,6 +953,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         }
         task.updated = now;
         task.last_activity = now;
+        // Persist via raw SqliteIndex — consistent with all sibling server-ui endpoints
+        // (reroute, schedule, etc.). markdown-sync for serve-ui is a separate pre-existing
+        // concern that applies equally to every endpoint here, not specific to signoff.
         pIdx!.index.upsertTask(task);
         sendJson(res, 200, task);
         return;
@@ -1321,6 +1331,27 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const b = JSON.parse(Buffer.concat(chunks).toString()) as ProposalBody;
             if (!b.name || typeof b.name !== 'string' || !isEngine(b.engine)) {
               sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'name and engine are required' });
+              return;
+            }
+            // Validate optional fields: type mismatches are rejected with 400 INVALID_FIELD.
+            if (b.match !== undefined && (!Array.isArray(b.match) || b.match.some(m => typeof m !== 'string'))) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'match must be an array of strings' });
+              return;
+            }
+            if (b.project !== undefined && typeof b.project !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'project must be a string' });
+              return;
+            }
+            if (b.desc !== undefined && typeof b.desc !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'desc must be a string' });
+              return;
+            }
+            if (b.desc !== undefined && typeof b.desc === 'string' && b.desc.length > 500) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'desc must be 500 characters or fewer' });
+              return;
+            }
+            if (b.origin !== undefined && typeof b.origin !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'origin must be a string' });
               return;
             }
             // Build and append the skill inside the serialization lock so concurrent
