@@ -2,7 +2,7 @@ import React from 'react'
 import { useStats } from '../hooks/useStats'
 import type { TaskStatus } from '../types'
 
-export type TabId = 'today' | 'board' | 'roadmap' | 'activity' | 'inbox' | 'braindump'
+export type TabId = 'today' | 'board' | 'roadmap' | 'activity' | 'inbox' | 'braindump' | 'artifacts'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'today',     label: 'Today' },
@@ -11,6 +11,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'activity',  label: 'Activity' },
   { id: 'inbox',     label: 'Inbox' },
   { id: 'braindump', label: 'Brain Dump' },
+  { id: 'artifacts', label: 'Artifacts' },
 ]
 
 const STATUS_LABELS: { key: TaskStatus; label: string; color: string }[] = [

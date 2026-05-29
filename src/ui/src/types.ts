@@ -90,3 +90,12 @@ export interface FilterState {
   milestone: string
   label: string
 }
+
+export interface ArtifactEntry {
+  path: string
+  project: string
+  created_at: string
+  last_opened_at: string | null
+  task_id: string | null
+  staleDays: number
+}

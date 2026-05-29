@@ -148,6 +148,8 @@ if (require.main === module) {
     }
   }
 
+  let createdTaskId = null;
+
   try {
     if ((fileType === 'plan' || fileType === 'spec' || fileType === 'spike') && !activeTask) {
       const prefix = resolvePrefix(mcpConfig);
@@ -177,6 +179,7 @@ if (require.main === module) {
       const createdId = stdout.match(/^([A-Z]+-\d+)/) ? stdout.match(/^([A-Z]+-\d+)/)[1] : null;
 
       if (createdId) {
+        createdTaskId = createdId;
         try {
           writeSessionState({ active_task: createdId, updated_at: new Date().toISOString() });
         } catch { /* non-fatal */ }
@@ -201,6 +204,28 @@ if (require.main === module) {
     }
   } catch (e) {
     process.stderr.write(`[passive-capture] ERROR: ${e && e.message ? e.message : String(e)}\n`);
+  }
+
+  // ── artifact log append ───────────────────────────────────────────────────
+  // Append a JSONL record to ~/.mcp-tasks/artifacts.jsonl after all task logic.
+  // Failure here is non-fatal — never break the hook.
+  try {
+    const mcpTasksDir = path.join(os.homedir(), '.mcp-tasks');
+    const artifactsPath = path.join(mcpTasksDir, 'artifacts.jsonl');
+    // Resolve project prefix from config; fall back to GEN
+    const resolvedPrefix = resolvePrefix(mcpConfig) || 'GEN';
+    const record = JSON.stringify({
+      path: filePath,
+      project: resolvedPrefix,
+      created_at: new Date().toISOString(),
+      task_id: createdTaskId || activeTask || null,
+    });
+    try {
+      fs.mkdirSync(mcpTasksDir, { recursive: true });
+    } catch { /* ignore if already exists */ }
+    fs.appendFileSync(artifactsPath, record + '\n');
+  } catch (e) {
+    process.stderr.write('[passive-capture] artifact log write failed: ' + (e && e.message ? e.message : String(e)) + '\n');
   }
 
   process.exit(0);

@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse } from './types'
+import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -144,4 +144,16 @@ export async function createMilestone(data: {
   })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json() as Promise<Milestone>
+}
+
+export function getArtifacts(): Promise<ArtifactEntry[]> {
+  return get<ArtifactEntry[]>('/api/artifacts')
+}
+
+export async function markArtifactOpened(filePath: string): Promise<void> {
+  await fetch('/api/artifacts/opened', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath }),
+  })
 }
