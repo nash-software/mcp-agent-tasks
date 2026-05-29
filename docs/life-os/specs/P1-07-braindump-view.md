@@ -197,12 +197,11 @@ canonical `'client'|'personal'|'outsource'|'internal'` union already in `api.ts`
 
 ## Open Questions
 
-- **InboxView absorbed here — DECIDED.** `InboxView` is deleted (P1-02 decision). Any `status:'draft'`
-  tasks created by the passive-capture hook must surface as candidates in the Brain Dump candidate
-  review list on load (via a `GET /api/tasks?status=draft` query merged with normal candidates, or the
-  existing `/api/capture/braindump` flow). The `POST /api/tasks/:id/promote` action maps to "Create
-  task" in the candidate card. Implement this draft-surfacing on entry to the Brain Dump view.
-  *(User confirmed 2026-05-29.)*
+- **InboxView / draft handling — NOT this view's responsibility.** `InboxView` is deleted (P1-02
+  decision), but passive-capture drafts are handled by the P2-04b auto-triage loop, not by Brain
+  Dump. Haiku promotes clear drafts to `todo` automatically; ambiguous ones surface in Today's
+  "Needs your call" candidate sub-section (P1-03 update). Brain Dump does not need to query or
+  render `status:'draft'` tasks.
 - **Done-state copy + redirect:** README §6.5 specifies `N tasks created` + `Dump again`; the
   prototype also adds the sub-line "They're in your inbox and ready to commit to today." — keep that
   sub-line, or drop it? (Default: keep — it tells the user where the tasks went.)

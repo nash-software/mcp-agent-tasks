@@ -285,13 +285,12 @@ useEffect(() => { localStorage.setItem('lifeos-view', view); }, [view]);
 
 ## Open Questions
 
-- **InboxView fate — DECIDED: fold into Brain Dump.** Delete `InboxView` and the `inbox` `TabId`.
-  The draft-promote queue it served is absorbed by Brain Dump / GEN-inbox candidate flow (P1-07),
-  which is the canonical "review captured items before they become tasks" surface. Any `status:'draft'`
-  tasks created by the passive-capture hook should surface as candidates in Brain Dump's post-process
-  candidate list; the `POST /api/tasks/:id/promote` action becomes "Create task" in that flow.
-  Concretely: remove `inbox` from the `TabId` union, stop rendering `InboxView` in `App`, delete the
-  component file. *(User confirmed 2026-05-29.)*
+- **InboxView fate — DECIDED: delete; drafts handled via auto-triage (P2-04b).** Remove `inbox` from
+  the `TabId` union, stop rendering `InboxView` in `App.tsx`, delete `views/InboxView.tsx`.
+  Passive-capture drafts no longer need a manual review tab: the P2-04b Haiku auto-triage loop
+  promotes clear ones to `todo` automatically; genuinely ambiguous ones surface as a "Needs your
+  call" sub-section in Today's candidate queue (P1-03). Brain Dump is unaffected. *(User confirmed
+  2026-05-29; triage model confirmed same date.)*
 - **Router vs view-string state — RESOLVED (decision).** **Keep simple `view`-string state +
   `localStorage('lifeos-view')`** — no router library. Rationale: the prototype is a single-window,
   single-user localhost dashboard with seven flat views and no deep-linking, route params, or back/

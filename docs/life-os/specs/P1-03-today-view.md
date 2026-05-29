@@ -149,6 +149,14 @@ const m = useMutation({
 - **Filtering note (forward-compat):** when the global filter lands (P2-01) it narrows the **committed
   list and candidate queue only** — never the hero or the capacity gauge. Structure the view so the
   filter is applied to the two lists, not to the hero/capacity inputs.
+- **"Needs your call" sub-section (P2-04b forward-compat):** the candidate queue gains a pinned
+  sub-section above the regular unscheduled group: `▸ Needs your call · N` — shows `status:'draft'`
+  tasks that the P2-04b auto-triage flagged as ambiguous (have a `triage_note`). Each row shows the
+  `triage_note` as a secondary line and the Haiku-suggested `project`/`priority` pre-filled; a
+  "Promote" action calls `POST /api/tasks/:id/promote` + `POST /api/tasks/:id/schedule` (if committing
+  to today). This sub-section is **hidden when empty** (most of the time it will be). Implement the
+  query (`GET /api/tasks?status=draft`) and the sub-section layout here in P1-03; the triage backend
+  is P2-04b. The sub-section can be stubbed with an empty array for Phase 1 and wired in P2-04b.
 
 ---
 

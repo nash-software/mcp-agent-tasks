@@ -252,6 +252,7 @@ interface Proposal  { id: string; taskId: string; project: string; skillName: st
 | MCPAT-034 | **P2-02** | Favourites (pinned projects) | P2-01 | S |
 | MCPAT-035 | **P2-03** | Capture → Brain Dump handoff | P1-06, P1-07 | S |
 | MCPAT-036 | **P2-04** | Hermes backend (`agent_status`, signoff, skills, agent/log endpoints) | — | L |
+| MCPAT-039 | **P2-04b** | Draft auto-triage (passive-capture → Haiku → auto-promote or needs-you) | P2-04 (field pattern) | M |
 | MCPAT-037 | **P2-05** | Hermes view & triage engine | P2-04 | L |
 | MCPAT-038 | **P2-06** | Automation flywheel & ACR live integration | P2-04, P2-05 | L |
 
@@ -300,8 +301,9 @@ P2-04 (backend) can start in parallel with Phase 1. P2-05/P2-06 need P2-04 + Pha
 - **Capacity target persistence:** prototype uses `localStorage('lifeos-target')`. Promote to a
   `GET/PUT /api/config` user-setting, or keep client-only? (Default: client-only for Phase 1; revisit
   if multi-device.) Resolve in P1-03.
-- **InboxView fate — DECIDED:** delete `InboxView`; fold draft-promote into Brain Dump. `status:'draft'`
-  tasks surface as candidates in Brain Dump on entry; "Create task" maps to `POST /api/tasks/:id/promote`.
-  See P1-02 (delete tab) and P1-07 (absorb drafts). *(User confirmed 2026-05-29.)*
+- **InboxView fate — DECIDED:** delete `InboxView` (tab + file). Passive-capture drafts are handled
+  by the P2-04b **Haiku auto-triage loop**: clear drafts auto-promote to `todo`; ambiguous ones
+  surface in Today's "Needs your call" candidate sub-section (P1-03). Brain Dump is not involved.
+  See P1-02 (delete tab), P1-03 (sub-section), P2-04b (triage backend). *(User confirmed 2026-05-29.)*
 - **Triage location:** keep `lib/triage.ts` client-side heuristic, or call `/api/agent/triage`?
   Default: client heuristic in P2-05, endpoint optional in P2-04. Resolve when starting P2-05.
