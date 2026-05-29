@@ -1,9 +1,10 @@
 {
   "version": 1,
-  "builtAt": "2026-05-28T21:19:13.648Z",
+  "builtAt": "2026-05-29T18:13:31.554Z",
   "termIndex": [
     "2a",
     "access",
+    "acr",
     "across",
     "action",
     "activity",
@@ -22,12 +23,15 @@
     "ancestor",
     "and",
     "api",
+    "app",
     "application",
     "architectural",
     "architecture",
     "archive",
+    "area",
     "array",
     "artifact",
+    "artifacts",
     "as",
     "assertion",
     "assertions",
@@ -56,6 +60,9 @@
     "blocks",
     "body",
     "bootstrap",
+    "bounds",
+    "brain",
+    "braindump",
     "branch",
     "brittle",
     "budgeting",
@@ -64,17 +71,21 @@
     "build",
     "builder",
     "buildinference",
+    "building",
     "buildprompt",
     "burndown",
     "but",
     "button",
     "by",
+    "calculation",
     "call",
     "callbacks",
     "calls",
     "cannot",
     "cap",
+    "capacity",
     "capture",
+    "captureoverlay",
     "carries",
     "case",
     "cases",
@@ -99,11 +110,14 @@
     "classifies",
     "cleanup",
     "cli",
+    "client",
     "coalescing",
     "code",
     "codebase",
     "codes",
     "collection",
+    "color",
+    "column",
     "columns",
     "command",
     "commands",
@@ -178,6 +192,7 @@
     "direct",
     "directories",
     "directory",
+    "dispatch",
     "documentation",
     "documented",
     "domain",
@@ -210,6 +225,7 @@
     "errors",
     "esm",
     "esmoduleinterop",
+    "estimate",
     "evolving",
     "exceeded",
     "excessive",
@@ -221,6 +237,7 @@
     "export",
     "extension",
     "extractintents",
+    "extraction",
     "extractor",
     "extractprnumber",
     "extracts",
@@ -262,12 +279,16 @@
     "frontmatter",
     "fts5",
     "function",
+    "functions",
+    "gauge",
     "gen",
     "get",
+    "getcandidates",
     "getchildtasks",
     "getnexttask",
     "getstats",
     "gettask",
+    "gettasksbyscheduleddate",
     "gh",
     "git",
     "github",
@@ -287,11 +308,13 @@
     "hardcoded",
     "header",
     "helper",
+    "helpers",
     "hierarchies",
     "hint",
     "hook",
     "hooks",
     "hot",
+    "hours",
     "html",
     "http",
     "hub",
@@ -325,6 +348,7 @@
     "init",
     "initialization",
     "initialize",
+    "input",
     "install",
     "instead",
     "integration",
@@ -341,6 +365,7 @@
     "isolation",
     "isvalidtransition",
     "json",
+    "jsonl",
     "key",
     "keywordmatch",
     "labels",
@@ -357,7 +382,6 @@
     "linking",
     "list",
     "listtasks",
-    "literal",
     "llm",
     "load",
     "loadconfig",
@@ -399,6 +423,7 @@
     "milestones",
     "mime",
     "minimum",
+    "minutes",
     "mismatch",
     "missing",
     "mode",
@@ -431,16 +456,20 @@
     "object",
     "observability",
     "of",
+    "offline",
     "on",
     "ongoing",
+    "online",
     "only",
     "open",
+    "opened",
     "operation",
     "operations",
     "operator",
     "optimization",
     "optional",
     "or",
+    "order",
     "ordering",
     "orphaned",
     "orphans",
@@ -449,6 +478,7 @@
     "ownership",
     "owning",
     "paragraph",
+    "parameter",
     "parameters",
     "parent",
     "parse",
@@ -457,6 +487,7 @@
     "passive",
     "path",
     "paths",
+    "pattern",
     "patterns",
     "per",
     "perf",
@@ -470,10 +501,12 @@
     "planning",
     "platform",
     "points",
+    "polling",
     "port",
     "post",
     "potentially",
     "pr",
+    "precedence",
     "prefix",
     "presence",
     "prevent",
@@ -483,12 +516,14 @@
     "priority",
     "process",
     "processes",
+    "processing",
     "product",
     "project",
     "projects",
     "promote",
     "promotes",
     "promotion",
+    "prompt",
     "prompts",
     "proper",
     "properties",
@@ -501,6 +536,7 @@
     "queries",
     "query",
     "questions",
+    "quick",
     "react",
     "read",
     "readconfig",
@@ -539,10 +575,13 @@
     "resilience",
     "resolution",
     "resolve",
+    "resolvearea",
     "resolveserverdbpath",
+    "response",
     "restoration",
     "result",
     "results",
+    "retrieval",
     "returning",
     "returns",
     "risk",
@@ -557,6 +596,8 @@
     "safe",
     "sanitize",
     "sanitizecontent",
+    "schedule",
+    "scheduled",
     "schema",
     "schemas",
     "scratchpad",
@@ -586,8 +627,10 @@
     "skips",
     "slug",
     "slugs",
+    "sorting",
     "source",
     "space",
+    "spawn",
     "spec",
     "specific",
     "specificity",
@@ -611,6 +654,7 @@
     "strict",
     "string",
     "strings",
+    "structure",
     "stubborn",
     "stuck",
     "style",
@@ -629,6 +673,7 @@
     "tab",
     "tags",
     "tailwind",
+    "target",
     "task",
     "taskfactory",
     "tasks",
@@ -648,6 +693,8 @@
     "title",
     "to",
     "toctou",
+    "today",
+    "todayview",
     "tool",
     "tools",
     "tracking",
@@ -660,6 +707,8 @@
     "transitiontask",
     "traversal",
     "triggers",
+    "ts",
+    "tsx",
     "ttl",
     "type",
     "types",
@@ -670,6 +719,7 @@
     "union",
     "uniqueness",
     "unknown",
+    "unscheduled",
     "unused",
     "update",
     "updated",
@@ -680,6 +730,7 @@
     "use",
     "user",
     "uses",
+    "usetoday",
     "using",
     "utilities",
     "v4",
@@ -714,2512 +765,2773 @@
   ],
   "vectors": {
     "pattern:product-workflow-coordination": {
-      "product": 5.10594547390058,
-      "workflow": 5.799092654460526,
-      "coordination": 5.799092654460526
+      "product": 5.195730777772936,
+      "workflow": 5.8888779583328805,
+      "coordination": 5.8888779583328805
     },
     "pattern:report-management": {
-      "report": 5.799092654460526,
-      "management": 4.700480365792417
+      "report": 5.8888779583328805,
+      "management": 4.790265669664771
     },
     "pattern:search-and-filtering": {
-      "search": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "filtering": 4.412798293340635
+      "search": 4.097118489104826,
+      "and": 1.7780040941595696,
+      "filtering": 4.279440045898781
     },
     "pattern:cross-module-bridges": {
-      "surprising": 5.799092654460526,
-      "cross": 5.799092654460526,
-      "module": 4.412798293340635,
-      "connections": 5.799092654460526
+      "surprising": 5.8888779583328805,
+      "cross": 5.8888779583328805,
+      "module": 4.502583597212991,
+      "connections": 5.8888779583328805
     },
     "pattern:git-post-merge-task-linking": {
-      "git": 3.3141860046725258,
-      "post": 4.700480365792417,
-      "merge": 5.10594547390058,
-      "pr": 4.189654742026425,
-      "task": 1.5224265354444706,
-      "linking": 5.799092654460526,
-      "detection": 4.189654742026425
+      "git": 3.4039713085448806,
+      "post": 3.809436416653045,
+      "merge": 5.195730777772936,
+      "pr": 4.279440045898781,
+      "task": 1.545072536479197,
+      "linking": 5.8888779583328805,
+      "detection": 4.279440045898781
     },
     "pattern:observability": {
-      "observability": 5.799092654460526,
-      "logging": 5.10594547390058
+      "observability": 5.8888779583328805,
+      "logging": 5.195730777772936
     },
     "pattern:performance": {
-      "performance": 5.10594547390058,
-      "optimization": 5.799092654460526
+      "performance": 5.195730777772936,
+      "optimization": 5.8888779583328805
     },
     "pattern:non-fatal-error-silent-fallback": {
-      "non": 5.10594547390058,
-      "fatal": 5.799092654460526,
-      "error": 3.6018680771243066,
-      "fallback": 2.663598438531376,
-      "with": 2.540996116439044,
-      "silent": 3.4965075614664802,
-      "exit": 5.10594547390058
+      "non": 5.195730777772936,
+      "fatal": 5.8888779583328805,
+      "error": 3.6916533809966614,
+      "fallback": 2.630781420311399,
+      "with": 2.521582128346407,
+      "silent": 3.586292865338835,
+      "exit": 5.195730777772936
     },
     "pattern:static-file-path-traversal-guard": {
-      "static": 5.799092654460526,
-      "file": 3.4011973816621555,
-      "path": 3.4965075614664802,
-      "traversal": 5.10594547390058,
-      "guard": 2.8546536752940854,
-      "using": 4.412798293340635,
-      "resolve": 5.10594547390058
+      "static": 5.8888779583328805,
+      "file": 3.4039713085448806,
+      "path": 3.249820628717622,
+      "traversal": 5.195730777772936,
+      "guard": 2.9444389791664403,
+      "using": 4.502583597212991,
+      "resolve": 5.195730777772936
     },
     "pattern:unversioned-binary-rename-risk": {
-      "missing": 4.189654742026425,
-      "grace": 5.799092654460526,
-      "period": 5.799092654460526,
-      "for": 2.663598438531376,
-      "mcp": 3.8531825054052127,
-      "agent": 4.189654742026425,
-      "tasks": 3.3141860046725258,
-      "binary": 4.189654742026425,
-      "rename": 4.412798293340635
+      "missing": 4.279440045898781,
+      "grace": 5.8888779583328805,
+      "period": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "mcp": 3.9429678092775675,
+      "agent": 4.279440045898781,
+      "tasks": 3.4039713085448806,
+      "binary": 4.279440045898781,
+      "rename": 4.502583597212991
     },
     "pattern:hardcoded-array-index-binary-resolution": {
-      "hardcoded": 3.091042453358316,
-      "magic": 4.007333185232471,
-      "index": 3.8531825054052127,
-      "in": 2.580216829592325,
-      "binary": 4.189654742026425,
-      "resolution": 4.189654742026425,
-      "without": 5.10594547390058,
-      "platform": 4.700480365792417,
-      "specific": 5.10594547390058,
-      "fallback": 2.663598438531376
+      "hardcoded": 3.249820628717622,
+      "magic": 4.097118489104826,
+      "index": 3.9429678092775675,
+      "in": 2.630781420311399,
+      "binary": 4.279440045898781,
+      "resolution": 4.097118489104826,
+      "without": 5.195730777772936,
+      "platform": 4.790265669664771,
+      "specific": 5.195730777772936,
+      "fallback": 2.630781420311399
     },
     "pattern:windows-path-resolution-fallback": {
-      "windows": 4.700480365792417,
-      "path": 3.4965075614664802,
-      "resolution": 4.189654742026425,
-      "fallback": 2.663598438531376,
-      "to": 3.4011973816621555,
-      "node": 4.700480365792417,
-      "modules": 5.10594547390058,
-      "bin": 5.799092654460526,
-      "with": 2.540996116439044,
-      "space": 5.799092654460526,
-      "handling": 4.007333185232471
+      "windows": 4.790265669664771,
+      "path": 3.249820628717622,
+      "resolution": 4.097118489104826,
+      "fallback": 2.630781420311399,
+      "to": 3.4909826855345103,
+      "node": 4.790265669664771,
+      "modules": 5.195730777772936,
+      "bin": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "space": 5.8888779583328805,
+      "handling": 3.9429678092775675
     },
     "pattern:sqliteindex-god-object": {
-      "sqliteindex": 3.1600353248452673,
-      "god": 5.799092654460526,
-      "object": 4.189654742026425,
-      "owning": 5.799092654460526,
-      "schema": 3.6018680771243066,
-      "init": 4.189654742026425,
-      "migration": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "crud": 5.10594547390058
+      "sqliteindex": 3.055664614276665,
+      "god": 5.8888779583328805,
+      "object": 4.279440045898781,
+      "owning": 5.8888779583328805,
+      "schema": 3.586292865338835,
+      "init": 4.279440045898781,
+      "migration": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "crud": 5.195730777772936
     },
     "pattern:esm-interop-fallback": {
-      "esm": 5.10594547390058,
-      "interop": 5.799092654460526,
-      "fallback": 2.663598438531376,
-      "if": 5.799092654460526,
-      "tdd": 4.700480365792417,
-      "guard": 2.8546536752940854,
-      "vitest": 4.412798293340635,
-      "ships": 5.799092654460526,
-      "cjs": 5.10594547390058,
-      "only": 5.10594547390058
+      "esm": 5.195730777772936,
+      "interop": 5.8888779583328805,
+      "fallback": 2.630781420311399,
+      "if": 5.8888779583328805,
+      "tdd": 4.790265669664771,
+      "guard": 2.9444389791664403,
+      "vitest": 4.502583597212991,
+      "ships": 5.8888779583328805,
+      "cjs": 5.195730777772936,
+      "only": 5.195730777772936
     },
     "pattern:default-tasks-dir-sentinel": {
-      "default": 3.71965111278069,
-      "tasks": 3.3141860046725258,
-      "dir": 5.10594547390058,
-      "name": 5.10594547390058,
-      "sentinel": 3.8531825054052127,
-      "constant": 5.10594547390058,
-      "for": 2.663598438531376,
-      "config": 3.1600353248452673,
-      "fallback": 2.663598438531376
+      "default": 3.809436416653045,
+      "tasks": 3.4039713085448806,
+      "dir": 5.195730777772936,
+      "name": 5.195730777772936,
+      "sentinel": 3.9429678092775675,
+      "constant": 5.195730777772936,
+      "for": 2.556673448157677,
+      "config": 3.249820628717622,
+      "fallback": 2.630781420311399
     },
     "pattern:nullish-coalescing-optional-fields": {
-      "nullish": 4.700480365792417,
-      "coalescing": 4.700480365792417,
-      "fallback": 2.663598438531376,
-      "for": 2.663598438531376,
-      "optional": 3.6018680771243066,
-      "database": 5.10594547390058,
-      "fields": 3.71965111278069
+      "nullish": 4.790265669664771,
+      "coalescing": 4.790265669664771,
+      "fallback": 2.630781420311399,
+      "for": 2.556673448157677,
+      "optional": 3.809436416653045,
+      "database": 5.195730777772936,
+      "fields": 3.9429678092775675
     },
     "pattern:hardcoded-project-paths-sentinel": {
-      "hardcoded": 3.091042453358316,
-      "project": 3.3141860046725258,
-      "path": 3.4965075614664802,
-      "mapping": 5.799092654460526,
-      "with": 2.540996116439044,
-      "windows": 4.700480365792417,
-      "paths": 4.189654742026425
+      "hardcoded": 3.249820628717622,
+      "project": 3.4039713085448806,
+      "path": 3.249820628717622,
+      "mapping": 5.195730777772936,
+      "with": 2.521582128346407,
+      "windows": 4.790265669664771,
+      "paths": 4.279440045898781
     },
     "pattern:config-and-path-resolution-fallback-chains": {
-      "config": 3.1600353248452673,
-      "and": 1.8672670217362002,
-      "path": 3.4965075614664802,
-      "resolution": 4.189654742026425,
-      "fallback": 2.663598438531376,
-      "chains": 5.799092654460526
+      "config": 3.249820628717622,
+      "and": 1.7780040941595696,
+      "path": 3.249820628717622,
+      "resolution": 4.097118489104826,
+      "fallback": 2.630781420311399,
+      "chains": 5.8888779583328805
     },
     "pattern:default-configuration-sentinels": {
-      "default": 3.71965111278069,
-      "tasks": 3.3141860046725258,
-      "dir": 5.10594547390058,
-      "name": 5.10594547390058,
-      "and": 1.8672670217362002,
-      "config": 3.1600353248452673,
-      "sentinel": 3.8531825054052127,
-      "constants": 4.700480365792417
+      "default": 3.809436416653045,
+      "tasks": 3.4039713085448806,
+      "dir": 5.195730777772936,
+      "name": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "config": 3.249820628717622,
+      "sentinel": 3.9429678092775675,
+      "constants": 4.790265669664771
     },
     "pattern:nullish-coalescing-field-backfilling": {
-      "optional": 3.6018680771243066,
-      "config": 3.1600353248452673,
-      "field": 4.189654742026425,
-      "backfilling": 5.799092654460526,
-      "with": 2.540996116439044,
-      "nullish": 4.700480365792417,
-      "coalescing": 4.700480365792417
+      "optional": 3.809436416653045,
+      "config": 3.249820628717622,
+      "field": 3.9429678092775675,
+      "backfilling": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "nullish": 4.790265669664771,
+      "coalescing": 4.790265669664771
     },
     "pattern:magic-number-string-limits": {
-      "magic": 4.007333185232471,
-      "numbers": 4.700480365792417,
-      "for": 2.663598438531376,
-      "line": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "string": 4.412798293340635,
-      "length": 4.007333185232471,
-      "limits": 4.700480365792417
+      "magic": 4.097118489104826,
+      "numbers": 4.790265669664771,
+      "for": 2.556673448157677,
+      "line": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "string": 4.790265669664771,
+      "length": 4.097118489104826,
+      "limits": 4.790265669664771
     },
     "pattern:hardcoded-timeout-constants": {
-      "hardcoded": 3.091042453358316,
-      "subprocess": 5.10594547390058,
-      "timeout": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "request": 5.799092654460526,
-      "limit": 4.700480365792417,
-      "magic": 4.007333185232471,
-      "numbers": 4.700480365792417
+      "hardcoded": 3.249820628717622,
+      "subprocess": 5.195730777772936,
+      "timeout": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "request": 5.8888779583328805,
+      "limit": 4.790265669664771,
+      "magic": 4.097118489104826,
+      "numbers": 4.790265669664771
     },
     "pattern:silent-fallback-on-command-failure": {
-      "silent": 3.4965075614664802,
-      "fallback": 2.663598438531376,
-      "returning": 5.799092654460526,
-      "empty": 4.412798293340635,
-      "result": 4.700480365792417,
-      "on": 3.234143296998989,
-      "gh": 5.799092654460526,
-      "git": 3.3141860046725258,
-      "command": 4.189654742026425,
-      "failure": 4.412798293340635
+      "silent": 3.586292865338835,
+      "fallback": 2.630781420311399,
+      "returning": 5.8888779583328805,
+      "empty": 4.502583597212991,
+      "result": 4.790265669664771,
+      "on": 3.3239286008713442,
+      "gh": 5.8888779583328805,
+      "git": 3.4039713085448806,
+      "command": 4.279440045898781,
+      "failure": 4.502583597212991
     },
     "pattern:default-branch-detection-fallback": {
-      "multi": 5.799092654460526,
-      "level": 5.10594547390058,
-      "default": 3.71965111278069,
-      "branch": 4.412798293340635,
-      "detection": 4.189654742026425,
-      "fallback": 2.663598438531376,
-      "chain": 5.10594547390058
+      "multi": 5.8888779583328805,
+      "level": 5.195730777772936,
+      "default": 3.809436416653045,
+      "branch": 4.502583597212991,
+      "detection": 4.279440045898781,
+      "fallback": 2.630781420311399,
+      "chain": 5.195730777772936
     },
     "pattern:magic-array-indices-git-parsing": {
-      "magic": 4.007333185232471,
-      "array": 3.6018680771243066,
-      "indices": 5.799092654460526,
-      "in": 2.580216829592325,
-      "git": 3.3141860046725258,
-      "output": 4.700480365792417,
-      "parsing": 4.700480365792417
+      "magic": 4.097118489104826,
+      "array": 3.6916533809966614,
+      "indices": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "git": 3.4039713085448806,
+      "output": 4.790265669664771,
+      "parsing": 4.790265669664771
     },
     "pattern:shell-detection-and-timeout-sentinels": {
-      "git": 3.3141860046725258,
-      "bash": 5.799092654460526,
-      "path": 3.4965075614664802,
-      "normalization": 5.10594547390058,
-      "and": 1.8672670217362002,
-      "subprocess": 5.10594547390058,
-      "timeout": 4.700480365792417,
-      "sentinels": 5.10594547390058
+      "git": 3.4039713085448806,
+      "bash": 5.8888779583328805,
+      "path": 3.249820628717622,
+      "normalization": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "subprocess": 5.195730777772936,
+      "timeout": 4.790265669664771,
+      "sentinels": 5.195730777772936
     },
     "pattern:environment-variable-fallback-chains": {
-      "environment": 4.007333185232471,
-      "variable": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "json": 4.189654742026425,
-      "parse": 5.10594547390058,
-      "error": 3.6018680771243066,
-      "fallbacks": 4.700480365792417
+      "environment": 4.097118489104826,
+      "variable": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "json": 3.9429678092775675,
+      "parse": 5.195730777772936,
+      "error": 3.6916533809966614,
+      "fallbacks": 4.790265669664771
     },
     "pattern:fallback-with-nullish-coalesce": {
-      "fallback": 2.663598438531376,
-      "using": 4.412798293340635,
-      "operator": 5.10594547390058,
-      "for": 2.663598438531376,
-      "optional": 3.6018680771243066,
-      "values": 4.189654742026425
+      "fallback": 2.630781420311399,
+      "using": 4.502583597212991,
+      "operator": 5.195730777772936,
+      "for": 2.556673448157677,
+      "optional": 3.809436416653045,
+      "values": 4.279440045898781
     },
     "pattern:hardcoded-sentinel-constants": {
-      "hardcoded": 3.091042453358316,
-      "sentinel": 3.8531825054052127,
-      "values": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "magic": 4.007333185232471,
-      "constants": 4.700480365792417,
-      "throughout": 5.799092654460526,
-      "the": 5.799092654460526,
-      "codebase": 5.799092654460526
+      "hardcoded": 3.249820628717622,
+      "sentinel": 3.9429678092775675,
+      "values": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "magic": 4.097118489104826,
+      "constants": 4.790265669664771,
+      "throughout": 5.8888779583328805,
+      "the": 5.8888779583328805,
+      "codebase": 5.8888779583328805
     },
     "pattern:implicit-tool-registration": {
-      "implicit": 5.799092654460526,
-      "tool": 4.412798293340635,
-      "array": 3.6018680771243066,
-      "registration": 5.799092654460526,
-      "with": 2.540996116439044,
-      "modules": 5.10594547390058,
-      "requires": 3.4965075614664802,
-      "manual": 4.700480365792417,
-      "synchronization": 5.799092654460526
+      "implicit": 5.8888779583328805,
+      "tool": 4.502583597212991,
+      "array": 3.6916533809966614,
+      "registration": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "modules": 5.195730777772936,
+      "requires": 3.586292865338835,
+      "manual": 4.790265669664771,
+      "synchronization": 5.8888779583328805
     },
     "pattern:optional-field-defaults": {
-      "optional": 3.6018680771243066,
-      "fields": 3.71965111278069,
-      "default": 3.71965111278069,
-      "to": 3.4011973816621555,
-      "null": 5.10594547390058,
-      "or": 4.700480365792417,
-      "empty": 4.412798293340635,
-      "string": 4.412798293340635,
-      "in": 2.580216829592325,
-      "data": 4.700480365792417,
-      "model": 5.799092654460526,
-      "transformations": 5.799092654460526
+      "optional": 3.809436416653045,
+      "fields": 3.9429678092775675,
+      "default": 3.809436416653045,
+      "to": 3.4909826855345103,
+      "null": 4.790265669664771,
+      "or": 4.790265669664771,
+      "empty": 4.502583597212991,
+      "string": 4.790265669664771,
+      "in": 2.630781420311399,
+      "data": 4.502583597212991,
+      "model": 5.8888779583328805,
+      "transformations": 5.8888779583328805
     },
     "pattern:default-status-fallback": {
-      "missing": 4.189654742026425,
-      "status": 4.007333185232471,
-      "values": 4.189654742026425,
-      "default": 3.71965111278069,
-      "to": 3.4011973816621555,
-      "open": 4.700480365792417,
-      "or": 4.700480365792417,
-      "draft": 5.10594547390058
+      "missing": 4.279440045898781,
+      "status": 3.809436416653045,
+      "values": 4.279440045898781,
+      "default": 3.809436416653045,
+      "to": 3.4909826855345103,
+      "open": 4.790265669664771,
+      "or": 4.790265669664771,
+      "draft": 5.195730777772936
     },
     "pattern:field-length-constraints": {
-      "magic": 4.007333185232471,
-      "number": 5.10594547390058,
-      "field": 4.189654742026425,
-      "length": 4.007333185232471,
-      "constraints": 4.189654742026425,
-      "without": 5.10594547390058,
-      "named": 5.799092654460526,
-      "constants": 4.700480365792417
+      "magic": 4.097118489104826,
+      "number": 5.195730777772936,
+      "field": 3.9429678092775675,
+      "length": 4.097118489104826,
+      "constraints": 4.279440045898781,
+      "without": 5.195730777772936,
+      "named": 5.8888779583328805,
+      "constants": 4.790265669664771
     },
     "pattern:configuration-environment-variables": {
-      "environment": 4.007333185232471,
-      "variables": 5.799092654460526,
-      "with": 2.540996116439044,
-      "filesystem": 5.799092654460526,
-      "path": 3.4965075614664802,
-      "fallbacks": 4.700480365792417,
-      "configure": 5.799092654460526,
-      "system": 5.10594547390058,
-      "behavior": 4.412798293340635
+      "environment": 4.097118489104826,
+      "variables": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "filesystem": 5.8888779583328805,
+      "path": 3.249820628717622,
+      "fallbacks": 4.790265669664771,
+      "configure": 5.8888779583328805,
+      "system": 5.195730777772936,
+      "behavior": 4.502583597212991
     },
     "pattern:hardcoded-task-limit-workaround": {
-      "hardcoded": 3.091042453358316,
-      "limit": 4.700480365792417,
-      "with": 2.540996116439044,
-      "in": 2.580216829592325,
-      "memory": 5.799092654460526,
-      "filtering": 4.412798293340635,
-      "as": 5.799092654460526,
-      "api": 3.8531825054052127,
-      "workaround": 5.799092654460526
+      "hardcoded": 3.249820628717622,
+      "limit": 4.790265669664771,
+      "with": 2.521582128346407,
+      "in": 2.630781420311399,
+      "memory": 5.8888779583328805,
+      "filtering": 4.279440045898781,
+      "as": 5.8888779583328805,
+      "api": 2.89314568477889,
+      "workaround": 5.8888779583328805
     },
     "pattern:undocumented-task-constraints": {
-      "architectural": 4.700480365792417,
-      "constraints": 4.189654742026425,
-      "documented": 5.799092654460526,
-      "but": 5.799092654460526,
-      "not": 5.799092654460526,
-      "enforced": 5.10594547390058
+      "architectural": 4.790265669664771,
+      "constraints": 4.279440045898781,
+      "documented": 5.8888779583328805,
+      "but": 5.8888779583328805,
+      "not": 5.8888779583328805,
+      "enforced": 5.195730777772936
     },
     "pattern:silent-error-swallowing-api": {
-      "silent": 3.4965075614664802,
-      "error": 3.6018680771243066,
-      "handling": 4.007333185232471,
-      "and": 1.8672670217362002,
-      "missing": 4.189654742026425,
-      "field": 4.189654742026425,
-      "masking": 4.412798293340635,
-      "in": 2.580216829592325,
-      "api": 3.8531825054052127,
-      "errors": 5.799092654460526
+      "silent": 3.586292865338835,
+      "error": 3.6916533809966614,
+      "handling": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "missing": 4.279440045898781,
+      "field": 3.9429678092775675,
+      "masking": 4.502583597212991,
+      "in": 2.630781420311399,
+      "api": 2.89314568477889,
+      "errors": 5.8888779583328805
     },
     "pattern:runtime-null-filtering": {
-      "runtime": 5.799092654460526,
-      "filtering": 4.412798293340635,
-      "of": 3.8531825054052127,
-      "potentially": 5.799092654460526,
-      "null": 5.10594547390058,
-      "values": 4.189654742026425,
-      "in": 2.580216829592325,
-      "react": 4.412798293340635,
-      "render": 5.799092654460526
+      "runtime": 5.8888779583328805,
+      "filtering": 4.279440045898781,
+      "of": 4.097118489104826,
+      "potentially": 5.8888779583328805,
+      "null": 4.790265669664771,
+      "values": 4.279440045898781,
+      "in": 2.630781420311399,
+      "react": 4.279440045898781,
+      "render": 5.8888779583328805
     },
     "pattern:sentinel-empty-filter-state": {
-      "sentinel": 3.8531825054052127,
-      "value": 4.700480365792417,
-      "maintains": 5.799092654460526,
-      "filter": 4.700480365792417,
-      "object": 4.189654742026425,
-      "key": 4.700480365792417,
-      "invariant": 5.10594547390058
+      "sentinel": 3.9429678092775675,
+      "value": 4.790265669664771,
+      "maintains": 5.8888779583328805,
+      "filter": 4.790265669664771,
+      "object": 4.279440045898781,
+      "key": 4.790265669664771,
+      "invariant": 5.195730777772936
     },
     "pattern:silent-fetch-failure-dependency": {
-      "silent": 3.4965075614664802,
-      "fetch": 5.799092654460526,
-      "failure": 4.412798293340635,
-      "dependencies": 4.412798293340635,
-      "in": 2.580216829592325,
-      "component": 4.700480365792417,
-      "initialization": 4.700480365792417
+      "silent": 3.586292865338835,
+      "fetch": 5.8888779583328805,
+      "failure": 4.502583597212991,
+      "dependencies": 4.502583597212991,
+      "in": 2.630781420311399,
+      "component": 4.279440045898781,
+      "initialization": 4.502583597212991
     },
     "pattern:audio-format-extension-mismatch": {
-      "filename": 5.799092654460526,
-      "extension": 5.799092654460526,
-      "mismatch": 5.799092654460526,
-      "with": 2.540996116439044,
-      "actual": 5.799092654460526,
-      "audio": 5.799092654460526,
-      "mime": 5.799092654460526,
-      "type": 3.71965111278069
+      "filename": 5.8888779583328805,
+      "extension": 5.8888779583328805,
+      "mismatch": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "actual": 5.8888779583328805,
+      "audio": 5.8888779583328805,
+      "mime": 5.8888779583328805,
+      "type": 3.809436416653045
     },
     "pattern:unknown-enum-fallback-masking": {
-      "silent": 3.4965075614664802,
-      "masking": 4.412798293340635,
-      "of": 3.8531825054052127,
-      "unknown": 5.10594547390058,
-      "enum": 5.10594547390058,
-      "variants": 5.799092654460526,
-      "in": 2.580216829592325,
-      "style": 5.799092654460526,
-      "fallbacks": 4.700480365792417
+      "silent": 3.586292865338835,
+      "masking": 4.502583597212991,
+      "of": 4.097118489104826,
+      "unknown": 5.195730777772936,
+      "enum": 5.195730777772936,
+      "variants": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "style": 5.8888779583328805,
+      "fallbacks": 4.790265669664771
     },
     "pattern:architectural-object-shape-invariants": {
-      "architectural": 4.700480365792417,
-      "invariants": 5.799092654460526,
-      "on": 3.234143296998989,
-      "object": 4.189654742026425,
-      "key": 4.700480365792417,
-      "presence": 4.700480365792417,
-      "enforced": 5.10594547390058,
-      "via": 4.700480365792417,
-      "guards": 3.8531825054052127
+      "architectural": 4.790265669664771,
+      "invariants": 5.8888779583328805,
+      "on": 3.3239286008713442,
+      "object": 4.279440045898781,
+      "key": 4.790265669664771,
+      "presence": 4.790265669664771,
+      "enforced": 5.195730777772936,
+      "via": 4.790265669664771,
+      "guards": 3.9429678092775675
     },
     "pattern:optional-chaining-with-empty-fallback": {
-      "optional": 3.6018680771243066,
-      "chaining": 4.700480365792417,
-      "with": 2.540996116439044,
-      "empty": 4.412798293340635,
-      "array": 3.6018680771243066,
-      "fallback": 2.663598438531376,
-      "for": 2.663598438531376,
-      "properties": 5.799092654460526
-    },
-    "pattern:conditional-rendering-optional-dates": {
-      "conditional": 4.412798293340635,
-      "rendering": 5.799092654460526,
-      "of": 3.8531825054052127,
-      "optional": 3.6018680771243066,
-      "date": 5.10594547390058,
-      "fields": 3.71965111278069
+      "optional": 3.809436416653045,
+      "chaining": 4.790265669664771,
+      "with": 2.521582128346407,
+      "empty": 4.502583597212991,
+      "array": 3.6916533809966614,
+      "fallback": 2.630781420311399,
+      "for": 2.556673448157677,
+      "properties": 5.8888779583328805
     },
     "pattern:unknown-error-type-masking": {
-      "unknown": 5.10594547390058,
-      "error": 3.6018680771243066,
-      "type": 3.71965111278069,
-      "masking": 4.412798293340635,
-      "in": 2.580216829592325,
-      "message": 4.412798293340635,
-      "fallback": 2.663598438531376
+      "unknown": 5.195730777772936,
+      "error": 3.6916533809966614,
+      "type": 3.809436416653045,
+      "masking": 4.502583597212991,
+      "in": 2.630781420311399,
+      "message": 4.502583597212991,
+      "fallback": 2.630781420311399
     },
     "pattern:undefined-masking-in-hooks": {
-      "silent": 3.4965075614664802,
-      "undefined": 4.412798293340635,
-      "masking": 4.412798293340635,
-      "in": 2.580216829592325,
-      "data": 4.700480365792417,
-      "query": 5.10594547390058,
-      "hooks": 4.007333185232471
-    },
-    "pattern:hardcoded-default-project-string": {
-      "hardcoded": 3.091042453358316,
-      "default": 3.71965111278069,
-      "project": 3.3141860046725258,
-      "string": 4.412798293340635,
-      "literal": 5.799092654460526
+      "silent": 3.586292865338835,
+      "undefined": 4.502583597212991,
+      "masking": 4.502583597212991,
+      "in": 2.630781420311399,
+      "data": 4.502583597212991,
+      "query": 5.195730777772936,
+      "hooks": 4.097118489104826
     },
     "pattern:platform-aware-env-deletion": {
-      "platform": 4.700480365792417,
-      "aware": 5.799092654460526,
-      "environment": 4.007333185232471,
-      "variable": 4.700480365792417,
-      "deletion": 5.799092654460526,
-      "in": 2.580216829592325,
-      "tests": 3.71965111278069
+      "platform": 4.790265669664771,
+      "aware": 5.8888779583328805,
+      "environment": 4.097118489104826,
+      "variable": 4.790265669664771,
+      "deletion": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "tests": 3.809436416653045
     },
     "pattern:test-environment-restoration-guards": {
-      "conditional": 4.412798293340635,
-      "test": 3.71965111278069,
-      "environment": 4.007333185232471,
-      "restoration": 5.10594547390058,
-      "with": 2.540996116439044,
-      "undefined": 4.412798293340635,
-      "checks": 5.10594547390058
+      "conditional": 4.502583597212991,
+      "test": 3.809436416653045,
+      "environment": 4.097118489104826,
+      "restoration": 5.195730777772936,
+      "with": 2.521582128346407,
+      "undefined": 4.502583597212991,
+      "checks": 5.195730777772936
     },
     "pattern:dependency-array-validation-guards": {
-      "dependencies": 4.412798293340635,
-      "array": 3.6018680771243066,
-      "validation": 2.908720896564361,
-      "in": 2.580216829592325,
-      "circular": 5.10594547390058,
-      "dependency": 5.10594547390058,
-      "tests": 3.71965111278069
+      "dependencies": 4.502583597212991,
+      "array": 3.6916533809966614,
+      "validation": 2.710824127984935,
+      "in": 2.630781420311399,
+      "circular": 5.195730777772936,
+      "dependency": 5.195730777772936,
+      "tests": 3.809436416653045
     },
     "pattern:claim-state-validation": {
-      "claim": 4.189654742026425,
-      "state": 3.4965075614664802,
-      "validation": 2.908720896564361,
-      "in": 2.580216829592325,
-      "concurrency": 5.10594547390058,
-      "tests": 3.71965111278069
+      "claim": 4.279440045898781,
+      "state": 3.586292865338835,
+      "validation": 2.710824127984935,
+      "in": 2.630781420311399,
+      "concurrency": 5.195730777772936,
+      "tests": 3.809436416653045
     },
     "pattern:task-status-transition-validation": {
-      "strict": 5.799092654460526,
-      "task": 1.5224265354444706,
-      "status": 4.007333185232471,
-      "transition": 4.189654742026425,
-      "validation": 2.908720896564361
+      "strict": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "status": 3.809436416653045,
+      "transition": 4.279440045898781,
+      "validation": 2.710824127984935
     },
     "pattern:milestone-result-validation": {
-      "milestone": 4.189654742026425,
-      "reconciliation": 4.189654742026425,
-      "result": 4.700480365792417,
-      "validation": 2.908720896564361
+      "milestone": 4.279440045898781,
+      "reconciliation": 4.279440045898781,
+      "result": 4.790265669664771,
+      "validation": 2.710824127984935
     },
     "pattern:orphaned-entity-validation": {
-      "post": 4.700480365792417,
-      "operation": 5.10594547390058,
-      "orphaned": 5.799092654460526,
-      "entity": 5.799092654460526,
-      "validation": 2.908720896564361
+      "post": 3.809436416653045,
+      "operation": 5.195730777772936,
+      "orphaned": 5.8888779583328805,
+      "entity": 5.8888779583328805,
+      "validation": 2.710824127984935
     },
     "pattern:graceful-corrupt-file-skipping": {
-      "graceful": 5.799092654460526,
-      "failure": 4.412798293340635,
-      "recovery": 5.10594547390058,
-      "on": 3.234143296998989,
-      "corrupt": 5.10594547390058,
-      "file": 3.4011973816621555,
-      "parsing": 4.700480365792417
+      "graceful": 5.8888779583328805,
+      "failure": 4.502583597212991,
+      "recovery": 5.195730777772936,
+      "on": 3.3239286008713442,
+      "corrupt": 5.195730777772936,
+      "file": 3.4039713085448806,
+      "parsing": 4.790265669664771
     },
     "pattern:reference-count-validation": {
-      "reference": 4.412798293340635,
-      "count": 4.700480365792417,
-      "validation": 2.908720896564361,
-      "before": 3.6018680771243066,
-      "assertion": 5.799092654460526
+      "reference": 4.502583597212991,
+      "count": 4.790265669664771,
+      "validation": 2.710824127984935,
+      "before": 3.6916533809966614,
+      "assertion": 5.8888779583328805
     },
     "pattern:hardcoded-test-port-sentinel": {
-      "hardcoded": 3.091042453358316,
-      "ephemeral": 5.799092654460526,
-      "port": 5.799092654460526,
-      "for": 2.663598438531376,
-      "cli": 4.189654742026425,
-      "server": 4.700480365792417,
-      "tests": 3.71965111278069
+      "hardcoded": 3.249820628717622,
+      "ephemeral": 5.8888779583328805,
+      "port": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "cli": 4.279440045898781,
+      "server": 4.790265669664771,
+      "tests": 3.809436416653045
     },
     "pattern:process-cleanup-timeout-fallback": {
-      "timeout": 4.700480365792417,
-      "with": 2.540996116439044,
-      "sigkill": 5.799092654460526,
-      "fallback": 2.663598438531376,
-      "for": 2.663598438531376,
-      "stubborn": 5.799092654460526,
-      "process": 5.799092654460526,
-      "cleanup": 5.10594547390058
+      "timeout": 4.790265669664771,
+      "with": 2.521582128346407,
+      "sigkill": 5.8888779583328805,
+      "fallback": 2.630781420311399,
+      "for": 2.556673448157677,
+      "stubborn": 5.8888779583328805,
+      "process": 5.8888779583328805,
+      "cleanup": 5.195730777772936
     },
     "pattern:conditional-test-skip-on-build-artifact": {
-      "conditional": 4.412798293340635,
-      "test": 3.71965111278069,
-      "skip": 4.700480365792417,
-      "based": 5.10594547390058,
-      "on": 3.234143296998989,
-      "build": 4.189654742026425,
-      "artifact": 5.799092654460526,
-      "presence": 4.700480365792417
+      "conditional": 4.502583597212991,
+      "test": 3.809436416653045,
+      "skip": 4.790265669664771,
+      "based": 5.195730777772936,
+      "on": 3.3239286008713442,
+      "build": 4.279440045898781,
+      "artifact": 5.195730777772936,
+      "presence": 4.790265669664771
     },
     "pattern:silent-test-skip-on-missing-asset": {
-      "silent": 3.4965075614664802,
-      "test": 3.71965111278069,
-      "skip": 4.700480365792417,
-      "on": 3.234143296998989,
-      "missing": 4.189654742026425,
-      "asset": 5.799092654460526,
-      "match": 5.10594547390058
+      "silent": 3.586292865338835,
+      "test": 3.809436416653045,
+      "skip": 4.790265669664771,
+      "on": 3.3239286008713442,
+      "missing": 4.279440045898781,
+      "asset": 5.8888779583328805,
+      "match": 5.195730777772936
     },
     "pattern:module-level-test-directory-globals": {
-      "module": 4.412798293340635,
-      "level": 5.10594547390058,
-      "temporary": 5.799092654460526,
-      "directory": 5.10594547390058,
-      "globals": 5.799092654460526,
-      "for": 2.663598438531376,
-      "test": 3.71965111278069,
-      "isolation": 5.799092654460526
+      "module": 4.502583597212991,
+      "level": 5.195730777772936,
+      "temporary": 5.8888779583328805,
+      "directory": 5.195730777772936,
+      "globals": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "test": 3.809436416653045,
+      "isolation": 5.8888779583328805
     },
     "pattern:sentinel-current-dir-path": {
-      "sentinel": 3.8531825054052127,
-      "value": 4.700480365792417,
-      "for": 2.663598438531376,
-      "direct": 5.799092654460526,
-      "path": 3.4965075614664802,
-      "writing": 5.799092654460526,
-      "in": 2.580216829592325,
-      "tests": 3.71965111278069
+      "sentinel": 3.9429678092775675,
+      "value": 4.790265669664771,
+      "for": 2.556673448157677,
+      "direct": 5.8888779583328805,
+      "path": 3.249820628717622,
+      "writing": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "tests": 3.809436416653045
     },
     "pattern:dynamic-tool-import-in-tests": {
-      "dynamic": 5.799092654460526,
-      "tool": 4.412798293340635,
-      "handler": 5.10594547390058,
-      "imports": 5.799092654460526,
-      "in": 2.580216829592325,
-      "async": 5.10594547390058,
-      "tests": 3.71965111278069,
-      "technical": 5.799092654460526,
-      "debt": 5.799092654460526
+      "dynamic": 5.8888779583328805,
+      "tool": 4.502583597212991,
+      "handler": 5.195730777772936,
+      "imports": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "async": 5.195730777772936,
+      "tests": 3.809436416653045,
+      "technical": 5.8888779583328805,
+      "debt": 5.8888779583328805
     },
     "pattern:subtask-count-validation": {
-      "updated": 5.799092654460526,
-      "parent": 4.700480365792417,
-      "subtask": 3.8531825054052127,
-      "count": 4.700480365792417,
-      "validation": 2.908720896564361,
-      "after": 5.799092654460526,
-      "operation": 5.10594547390058
+      "updated": 5.8888779583328805,
+      "parent": 4.790265669664771,
+      "subtask": 3.9429678092775675,
+      "count": 4.790265669664771,
+      "validation": 2.710824127984935,
+      "after": 5.8888779583328805,
+      "operation": 5.195730777772936
     },
     "pattern:hardcoded-error-code-sentinels": {
-      "hardcoded": 3.091042453358316,
-      "error": 3.6018680771243066,
-      "code": 5.10594547390058,
-      "sentinels": 5.10594547390058,
-      "in": 2.580216829592325,
-      "test": 3.71965111278069,
-      "assertions": 4.412798293340635
+      "hardcoded": 3.249820628717622,
+      "error": 3.6916533809966614,
+      "code": 5.195730777772936,
+      "sentinels": 5.195730777772936,
+      "in": 2.630781420311399,
+      "test": 3.809436416653045,
+      "assertions": 4.502583597212991
     },
     "pattern:hardcoded-project-prefix-sentinel": {
-      "hardcoded": 3.091042453358316,
-      "project": 3.3141860046725258,
-      "prefix": 4.412798293340635,
-      "in": 2.580216829592325,
-      "tests": 3.71965111278069
+      "hardcoded": 3.249820628717622,
+      "project": 3.4039713085448806,
+      "prefix": 4.279440045898781,
+      "in": 2.630781420311399,
+      "tests": 3.809436416653045
     },
     "pattern:hardcoded-performance-thresholds": {
-      "hardcoded": 3.091042453358316,
-      "performance": 5.10594547390058,
-      "thresholds": 5.799092654460526,
-      "in": 2.580216829592325,
-      "perf": 5.10594547390058,
-      "tests": 3.71965111278069
+      "hardcoded": 3.249820628717622,
+      "performance": 5.195730777772936,
+      "thresholds": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "perf": 5.195730777772936,
+      "tests": 3.809436416653045
     },
     "pattern:empty-transcript-validation": {
-      "empty": 4.412798293340635,
-      "transcript": 5.799092654460526,
-      "validation": 2.908720896564361,
-      "before": 3.6018680771243066,
-      "task": 1.5224265354444706,
-      "creation": 4.189654742026425
+      "empty": 4.502583597212991,
+      "transcript": 5.8888779583328805,
+      "validation": 2.710824127984935,
+      "before": 3.6916533809966614,
+      "task": 1.545072536479197,
+      "creation": 4.097118489104826
     },
     "pattern:async-loading-state-guard": {
-      "async": 5.10594547390058,
-      "loading": 5.10594547390058,
-      "state": 3.4965075614664802,
-      "guard": 2.8546536752940854,
-      "before": 3.6018680771243066,
-      "aggregation": 5.799092654460526
+      "async": 5.195730777772936,
+      "loading": 5.195730777772936,
+      "state": 3.586292865338835,
+      "guard": 2.9444389791664403,
+      "before": 3.6916533809966614,
+      "aggregation": 5.195730777772936
     },
     "pattern:activity-result-size-constraint": {
-      "activity": 5.799092654460526,
-      "endpoint": 5.799092654460526,
-      "result": 4.700480365792417,
-      "size": 5.799092654460526,
-      "constraint": 5.10594547390058
+      "activity": 5.8888779583328805,
+      "endpoint": 3.809436416653045,
+      "result": 4.790265669664771,
+      "size": 5.8888779583328805,
+      "constraint": 5.195730777772936
     },
     "pattern:console-log-benchmark-reporting": {
-      "console": 5.799092654460526,
-      "log": 5.799092654460526,
-      "for": 2.663598438531376,
-      "benchmark": 5.799092654460526,
-      "reporting": 5.799092654460526,
-      "instead": 4.700480365792417,
-      "of": 3.8531825054052127,
-      "proper": 5.799092654460526,
-      "logging": 5.10594547390058
+      "console": 5.8888779583328805,
+      "log": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "benchmark": 5.8888779583328805,
+      "reporting": 5.8888779583328805,
+      "instead": 4.790265669664771,
+      "of": 4.097118489104826,
+      "proper": 5.8888779583328805,
+      "logging": 5.195730777772936
     },
     "pattern:environment-restoration-fallback": {
-      "environment": 4.007333185232471,
-      "variable": 4.700480365792417,
-      "restoration": 5.10594547390058,
-      "using": 4.412798293340635,
-      "object": 4.189654742026425,
-      "entries": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "undefined": 4.412798293340635,
-      "checks": 5.10594547390058
+      "environment": 4.097118489104826,
+      "variable": 4.790265669664771,
+      "restoration": 5.195730777772936,
+      "using": 4.502583597212991,
+      "object": 4.279440045898781,
+      "entries": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "undefined": 4.502583597212991,
+      "checks": 5.195730777772936
     },
     "pattern:hardcoded-test-sentinels-config-loader": {
-      "hardcoded": 3.091042453358316,
-      "test": 3.71965111278069,
-      "paths": 4.189654742026425,
-      "for": 2.663598438531376,
-      "storage": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "project": 3.3141860046725258,
-      "directories": 5.799092654460526
+      "hardcoded": 3.249820628717622,
+      "test": 3.809436416653045,
+      "paths": 4.279440045898781,
+      "for": 2.556673448157677,
+      "storage": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "project": 3.4039713085448806,
+      "directories": 5.8888779583328805
     },
     "pattern:hardcoded-windows-paths-binary-resolver": {
-      "hardcoded": 3.091042453358316,
-      "windows": 4.700480365792417,
-      "paths": 4.189654742026425,
-      "for": 2.663598438531376,
-      "testing": 4.700480365792417,
-      "binary": 4.189654742026425,
-      "resolution": 4.189654742026425
+      "hardcoded": 3.249820628717622,
+      "windows": 4.790265669664771,
+      "paths": 4.279440045898781,
+      "for": 2.556673448157677,
+      "testing": 4.790265669664771,
+      "binary": 4.279440045898781,
+      "resolution": 4.097118489104826
     },
     "pattern:hardcoded-file-paths-passive-capture": {
-      "hardcoded": 3.091042453358316,
-      "file": 3.4011973816621555,
-      "paths": 4.189654742026425,
-      "for": 2.663598438531376,
-      "passive": 4.412798293340635,
-      "capture": 4.189654742026425,
-      "testing": 4.700480365792417
+      "hardcoded": 3.249820628717622,
+      "file": 3.4039713085448806,
+      "paths": 4.279440045898781,
+      "for": 2.556673448157677,
+      "passive": 4.502583597212991,
+      "capture": 3.586292865338835,
+      "testing": 4.790265669664771
     },
     "pattern:date-now-uniqueness-suffix": {
-      "date": 5.10594547390058,
-      "now": 5.799092654460526,
-      "suffix": 5.799092654460526,
-      "for": 2.663598438531376,
-      "ensuring": 5.799092654460526,
-      "test": 3.71965111278069,
-      "fixture": 5.799092654460526,
-      "uniqueness": 5.799092654460526
+      "date": 4.790265669664771,
+      "now": 5.8888779583328805,
+      "suffix": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "ensuring": 5.8888779583328805,
+      "test": 3.809436416653045,
+      "fixture": 5.8888779583328805,
+      "uniqueness": 5.8888779583328805
     },
     "pattern:brittle-string-matching-tests": {
-      "string": 4.412798293340635,
-      "matching": 4.412798293340635,
-      "on": 3.234143296998989,
-      "script": 4.700480365792417,
-      "source": 5.799092654460526,
-      "code": 5.10594547390058,
-      "is": 4.700480365792417,
-      "brittle": 5.799092654460526
+      "string": 4.790265669664771,
+      "matching": 4.502583597212991,
+      "on": 3.3239286008713442,
+      "script": 4.790265669664771,
+      "source": 5.8888779583328805,
+      "code": 5.195730777772936,
+      "is": 4.790265669664771,
+      "brittle": 5.8888779583328805
     },
     "pattern:manual-schema-validation": {
-      "manual": 4.700480365792417,
-      "schema": 3.6018680771243066,
-      "property": 4.700480365792417,
-      "checking": 4.700480365792417,
-      "instead": 4.700480365792417,
-      "of": 3.8531825054052127,
-      "using": 4.412798293340635,
-      "json": 4.189654742026425,
-      "validator": 5.799092654460526
+      "manual": 4.790265669664771,
+      "schema": 3.586292865338835,
+      "property": 4.790265669664771,
+      "checking": 4.790265669664771,
+      "instead": 4.790265669664771,
+      "of": 4.097118489104826,
+      "using": 4.502583597212991,
+      "json": 3.9429678092775675,
+      "validator": 5.8888779583328805
     },
     "pattern:hardcoded-complexity-minimum": {
-      "hardcoded": 3.091042453358316,
-      "complexity": 5.799092654460526,
-      "minimum": 5.799092654460526,
-      "value": 4.700480365792417,
-      "in": 2.580216829592325,
-      "schema": 3.6018680771243066,
-      "and": 1.8672670217362002,
-      "factory": 5.10594547390058
+      "hardcoded": 3.249820628717622,
+      "complexity": 5.8888779583328805,
+      "minimum": 5.8888779583328805,
+      "value": 4.790265669664771,
+      "in": 2.630781420311399,
+      "schema": 3.586292865338835,
+      "and": 1.7780040941595696,
+      "factory": 5.195730777772936
     },
     "pattern:spread-operator-fallback": {
-      "spread": 5.799092654460526,
-      "operator": 5.10594547390058,
-      "default": 3.71965111278069,
-      "fallback": 2.663598438531376,
-      "in": 2.580216829592325,
-      "factory": 5.10594547390058,
-      "helper": 5.799092654460526
+      "spread": 5.8888779583328805,
+      "operator": 5.195730777772936,
+      "default": 3.809436416653045,
+      "fallback": 2.630781420311399,
+      "in": 2.630781420311399,
+      "factory": 5.195730777772936,
+      "helper": 5.8888779583328805
     },
     "pattern:optional-chaining-undefined-fallback": {
-      "optional": 3.6018680771243066,
-      "chaining": 4.700480365792417,
-      "with": 2.540996116439044,
-      "undefined": 4.412798293340635,
-      "fallback": 2.663598438531376,
-      "in": 2.580216829592325,
-      "assertions": 4.412798293340635
+      "optional": 3.809436416653045,
+      "chaining": 4.790265669664771,
+      "with": 2.521582128346407,
+      "undefined": 4.502583597212991,
+      "fallback": 2.630781420311399,
+      "in": 2.630781420311399,
+      "assertions": 4.502583597212991
     },
     "pattern:sentinel-task-state-defaults": {
-      "sentinel": 3.8531825054052127,
-      "task": 1.5224265354444706,
-      "state": 3.4965075614664802,
-      "with": 2.540996116439044,
-      "default": 3.71965111278069,
-      "status": 4.007333185232471,
-      "and": 1.8672670217362002,
-      "priority": 5.10594547390058
+      "sentinel": 3.9429678092775675,
+      "task": 1.545072536479197,
+      "state": 3.586292865338835,
+      "with": 2.521582128346407,
+      "default": 3.809436416653045,
+      "status": 3.809436416653045,
+      "and": 1.7780040941595696,
+      "priority": 5.195730777772936
     },
     "pattern:valid-transitions-state-machine": {
-      "valid": 4.412798293340635,
-      "transitions": 4.189654742026425,
-      "object": 4.189654742026425,
-      "defining": 5.799092654460526,
-      "state": 3.4965075614664802,
-      "machine": 5.10594547390058,
-      "transition": 4.189654742026425,
-      "rules": 4.412798293340635
+      "valid": 4.502583597212991,
+      "transitions": 4.279440045898781,
+      "object": 4.279440045898781,
+      "defining": 5.8888779583328805,
+      "state": 3.586292865338835,
+      "machine": 5.195730777772936,
+      "transition": 4.279440045898781,
+      "rules": 4.502583597212991
     },
     "pattern:optional-chaining-array-fallback": {
-      "optional": 3.6018680771243066,
-      "chaining": 4.700480365792417,
-      "with": 2.540996116439044,
-      "nullish": 4.700480365792417,
-      "coalescing": 4.700480365792417,
-      "for": 2.663598438531376,
-      "array": 3.6018680771243066,
-      "fallback": 2.663598438531376
+      "optional": 3.809436416653045,
+      "chaining": 4.790265669664771,
+      "with": 2.521582128346407,
+      "nullish": 4.790265669664771,
+      "coalescing": 4.790265669664771,
+      "for": 2.556673448157677,
+      "array": 3.6916533809966614,
+      "fallback": 2.630781420311399
     },
     "decision:sqlite-counter-overflow-bug": {
-      "sqlite": 3.8531825054052127,
-      "counter": 5.10594547390058,
-      "overflow": 5.799092654460526,
-      "s0b": 5.799092654460526,
-      "bug": 5.799092654460526
+      "sqlite": 3.9429678092775675,
+      "counter": 5.195730777772936,
+      "overflow": 5.8888779583328805,
+      "s0b": 5.8888779583328805,
+      "bug": 5.8888779583328805
     },
     "decision:deferred-vitest-and-mcp-features": {
-      "deferred": 5.10594547390058,
-      "vitest": 4.412798293340635,
-      "upgrade": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "mcp": 3.8531825054052127,
-      "config": 3.1600353248452673,
-      "hot": 5.10594547390058,
-      "reload": 5.10594547390058
+      "deferred": 5.195730777772936,
+      "vitest": 4.502583597212991,
+      "upgrade": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "mcp": 3.9429678092775675,
+      "config": 3.249820628717622,
+      "hot": 5.195730777772936,
+      "reload": 5.195730777772936
     },
     "decision:command-center-open-questions": {
-      "four": 5.799092654460526,
-      "open": 4.700480365792417,
-      "architectural": 4.700480365792417,
-      "questions": 5.10594547390058,
-      "deferred": 5.10594547390058,
-      "in": 2.580216829592325,
-      "command": 4.189654742026425,
-      "center": 5.799092654460526
+      "four": 5.8888779583328805,
+      "open": 4.790265669664771,
+      "architectural": 4.790265669664771,
+      "questions": 5.195730777772936,
+      "deferred": 5.195730777772936,
+      "in": 2.630781420311399,
+      "command": 4.279440045898781,
+      "center": 5.8888779583328805
     },
     "decision:spec-task-type-design-questions": {
-      "five": 5.799092654460526,
-      "open": 4.700480365792417,
-      "questions": 5.10594547390058,
-      "on": 3.234143296998989,
-      "spec": 4.700480365792417,
-      "task": 1.5224265354444706,
-      "type": 3.71965111278069,
-      "design": 5.10594547390058
+      "five": 5.8888779583328805,
+      "open": 4.790265669664771,
+      "questions": 5.195730777772936,
+      "on": 3.3239286008713442,
+      "spec": 4.790265669664771,
+      "task": 1.545072536479197,
+      "type": 3.809436416653045,
+      "design": 5.195730777772936
     },
     "decision:incomplete-task-transition-implementation": {
-      "manual": 4.700480365792417,
-      "verification": 5.799092654460526,
-      "required": 4.412798293340635,
-      "for": 2.663598438531376,
-      "body": 5.799092654460526,
-      "match": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "transition": 4.189654742026425
+      "manual": 4.790265669664771,
+      "verification": 5.8888779583328805,
+      "required": 4.502583597212991,
+      "for": 2.556673448157677,
+      "body": 5.8888779583328805,
+      "match": 5.195730777772936,
+      "task": 1.545072536479197,
+      "transition": 4.279440045898781
     },
     "decision:incomplete-legacy-deprecation": {
-      "legacy": 4.412798293340635,
-      "mcp": 3.8531825054052127,
-      "tasks": 3.3141860046725258,
-      "json": 4.189654742026425,
-      "config": 3.1600353248452673,
-      "detection": 4.189654742026425,
-      "ongoing": 5.799092654460526
+      "legacy": 4.502583597212991,
+      "mcp": 3.9429678092775675,
+      "tasks": 3.4039713085448806,
+      "json": 3.9429678092775675,
+      "config": 3.249820628717622,
+      "detection": 4.279440045898781,
+      "ongoing": 5.8888779583328805
     },
     "decision:undefined-function-reference": {
-      "missing": 4.189654742026425,
-      "keywordmatch": 5.799092654460526,
-      "function": 4.412798293340635,
-      "definition": 5.799092654460526
+      "missing": 4.279440045898781,
+      "keywordmatch": 5.8888779583328805,
+      "function": 4.502583597212991,
+      "definition": 5.8888779583328805
     },
     "flow:passive-capture-detection": {
-      "passive": 4.412798293340635,
-      "capture": 4.189654742026425,
-      "detection": 4.189654742026425,
-      "flow": 5.799092654460526
+      "passive": 4.502583597212991,
+      "capture": 3.586292865338835,
+      "detection": 4.279440045898781,
+      "flow": 5.8888779583328805
     },
     "flow:build-config-ci": {
-      "build": 4.189654742026425,
-      "config": 3.1600353248452673,
-      "and": 1.8672670217362002,
-      "ci": 4.700480365792417,
-      "automation": 4.700480365792417
+      "build": 4.279440045898781,
+      "config": 3.249820628717622,
+      "and": 1.7780040941595696,
+      "ci": 4.790265669664771,
+      "automation": 4.790265669664771
     },
     "flow:git-hooks-automation": {
-      "git": 3.3141860046725258,
-      "hooks": 4.007333185232471,
-      "and": 1.8672670217362002,
-      "zero": 5.799092654460526,
-      "friction": 5.799092654460526,
-      "task": 1.5224265354444706,
-      "automation": 4.700480365792417
+      "git": 3.4039713085448806,
+      "hooks": 4.097118489104826,
+      "and": 1.7780040941595696,
+      "zero": 5.8888779583328805,
+      "friction": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "automation": 4.790265669664771
     },
     "flow:http-communication": {
-      "http": 5.10594547390058,
-      "communication": 4.700480365792417
+      "http": 5.195730777772936,
+      "communication": 4.790265669664771
     },
     "flow:cli-communication": {
-      "cli": 4.189654742026425,
-      "communication": 4.700480365792417
+      "cli": 4.279440045898781,
+      "communication": 4.790265669664771
     },
     "flow:file-ipc-communication": {
-      "file": 3.4011973816621555,
-      "ipc": 5.799092654460526,
-      "communication": 4.700480365792417
+      "file": 3.4039713085448806,
+      "ipc": 5.8888779583328805,
+      "communication": 4.790265669664771
     },
     "flow:mcp-server": {
-      "mcp": 3.8531825054052127,
-      "server": 4.700480365792417,
-      "lifecycle": 4.412798293340635
+      "mcp": 3.9429678092775675,
+      "server": 4.790265669664771,
+      "lifecycle": 4.502583597212991
     },
     "flow:sqlite-index": {
-      "sqlite": 3.8531825054052127,
-      "index": 3.8531825054052127,
-      "management": 4.700480365792417
+      "sqlite": 3.9429678092775675,
+      "index": 3.9429678092775675,
+      "management": 4.790265669664771
     },
     "flow:task-store": {
-      "task": 1.5224265354444706,
-      "store": 3.8531825054052127,
-      "operations": 4.412798293340635
+      "task": 1.545072536479197,
+      "store": 3.9429678092775675,
+      "operations": 4.502583597212991
     },
     "flow:task-audit": {
-      "task": 1.5224265354444706,
-      "audit": 5.799092654460526,
-      "validation": 2.908720896564361
+      "task": 1.545072536479197,
+      "audit": 5.8888779583328805,
+      "validation": 2.710824127984935
     },
     "flow:reconcile-stuck-tasks": {
-      "reconcile": 4.700480365792417,
-      "stuck": 5.10594547390058,
-      "tasks": 3.3141860046725258
+      "reconcile": 4.790265669664771,
+      "stuck": 5.195730777772936,
+      "tasks": 3.4039713085448806
     },
     "rule:error-handling": {
-      "error": 3.6018680771243066,
-      "handling": 4.007333185232471
+      "error": 3.6916533809966614,
+      "handling": 3.9429678092775675
     },
     "rule:security": {
-      "security": 5.10594547390058,
-      "validation": 2.908720896564361
+      "security": 5.195730777772936,
+      "validation": 2.710824127984935
     },
     "rule:resilience": {
-      "resilience": 5.799092654460526,
-      "recovery": 5.10594547390058
+      "resilience": 5.8888779583328805,
+      "recovery": 5.195730777772936
     },
     "rule:git-hook-execution-guards": {
-      "fast": 5.10594547390058,
-      "exit": 5.10594547390058,
-      "guards": 3.8531825054052127,
-      "in": 2.580216829592325,
-      "global": 4.412798293340635,
-      "git": 3.3141860046725258,
-      "hooks": 4.007333185232471
+      "fast": 5.195730777772936,
+      "exit": 5.195730777772936,
+      "guards": 3.9429678092775675,
+      "in": 2.630781420311399,
+      "global": 4.502583597212991,
+      "git": 3.4039713085448806,
+      "hooks": 4.097118489104826
     },
     "rule:module-format-compatibility": {
-      "cjs": 5.10594547390058,
-      "only": 5.10594547390058,
-      "tdd": 4.700480365792417,
-      "guard": 2.8546536752940854,
-      "vitest": 4.412798293340635,
-      "requires": 3.4965075614664802,
-      "esmoduleinterop": 5.799092654460526
+      "cjs": 5.195730777772936,
+      "only": 5.195730777772936,
+      "tdd": 4.790265669664771,
+      "guard": 2.9444389791664403,
+      "vitest": 4.502583597212991,
+      "requires": 3.586292865338835,
+      "esmoduleinterop": 5.8888779583328805
     },
     "rule:task-lifecycle-enforcement-gates": {
-      "task": 1.5224265354444706,
-      "lifecycle": 4.412798293340635,
-      "enforcement": 4.412798293340635,
-      "guards": 3.8531825054052127,
-      "checking": 4.700480365792417,
-      "collection": 4.700480365792417,
-      "emptiness": 4.700480365792417
+      "task": 1.545072536479197,
+      "lifecycle": 4.502583597212991,
+      "enforcement": 4.502583597212991,
+      "guards": 3.9429678092775675,
+      "checking": 4.790265669664771,
+      "collection": 4.790265669664771,
+      "emptiness": 4.790265669664771
     },
     "rule:sqlite-counter-initialization": {
-      "sqlite": 3.8531825054052127,
-      "counter": 5.10594547390058,
-      "initialization": 4.700480365792417,
-      "guard": 2.8546536752940854
+      "sqlite": 3.9429678092775675,
+      "counter": 5.195730777772936,
+      "initialization": 4.502583597212991,
+      "guard": 2.9444389791664403
     },
     "rule:domain-invariant-status-transitions": {
-      "domain": 4.700480365792417,
-      "invariant": 5.10594547390058,
-      "guards": 3.8531825054052127,
-      "on": 3.234143296998989,
-      "task": 1.5224265354444706,
-      "status": 4.007333185232471,
-      "transitions": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "spec": 4.700480365792417,
-      "file": 3.4011973816621555,
-      "ownership": 5.799092654460526
+      "domain": 4.790265669664771,
+      "invariant": 5.195730777772936,
+      "guards": 3.9429678092775675,
+      "on": 3.3239286008713442,
+      "task": 1.545072536479197,
+      "status": 3.809436416653045,
+      "transitions": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "spec": 4.790265669664771,
+      "file": 3.4039713085448806,
+      "ownership": 5.8888779583328805
     },
     "rule:hook-execution-ordering-guards": {
-      "hook": 4.189654742026425,
-      "execution": 5.10594547390058,
-      "ordering": 5.799092654460526,
-      "guards": 3.8531825054052127,
-      "for": 2.663598438531376,
-      "mcp": 3.8531825054052127,
-      "tasks": 3.3141860046725258,
-      "json": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "agent": 4.189654742026425,
-      "directory": 5.10594547390058
+      "hook": 3.9429678092775675,
+      "execution": 5.195730777772936,
+      "ordering": 5.8888779583328805,
+      "guards": 3.9429678092775675,
+      "for": 2.556673448157677,
+      "mcp": 3.9429678092775675,
+      "tasks": 3.4039713085448806,
+      "json": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "agent": 4.279440045898781,
+      "directory": 5.195730777772936
     },
     "rule:schema-drift-validation-guard": {
-      "schema": 3.6018680771243066,
-      "drift": 5.799092654460526,
-      "guard": 2.8546536752940854,
-      "requiring": 5.799092654460526,
-      "markdown": 4.189654742026425,
-      "store": 3.8531825054052127,
-      "frontmatter": 4.189654742026425,
-      "validation": 2.908720896564361
+      "schema": 3.586292865338835,
+      "drift": 5.8888779583328805,
+      "guard": 2.9444389791664403,
+      "requiring": 5.8888779583328805,
+      "markdown": 4.279440045898781,
+      "store": 3.9429678092775675,
+      "frontmatter": 4.097118489104826,
+      "validation": 2.710824127984935
     },
     "rule:concurrent-init-atomic-write-guard": {
-      "atomic": 5.10594547390058,
-      "temp": 5.10594547390058,
-      "file": 3.4011973816621555,
-      "rename": 4.412798293340635,
-      "guard": 2.8546536752940854,
-      "for": 2.663598438531376,
-      "concurrent": 5.799092654460526,
-      "init": 4.189654742026425,
-      "calls": 5.799092654460526
+      "atomic": 5.195730777772936,
+      "temp": 5.195730777772936,
+      "file": 3.4039713085448806,
+      "rename": 4.502583597212991,
+      "guard": 2.9444389791664403,
+      "for": 2.556673448157677,
+      "concurrent": 5.8888779583328805,
+      "init": 4.279440045898781,
+      "calls": 5.8888779583328805
     },
     "rule:config-projects-collection-guard": {
-      "config": 3.1600353248452673,
-      "projects": 5.10594547390058,
-      "collection": 4.700480365792417,
-      "emptiness": 4.700480365792417,
-      "guard": 2.8546536752940854
+      "config": 3.249820628717622,
+      "projects": 5.195730777772936,
+      "collection": 4.790265669664771,
+      "emptiness": 4.790265669664771,
+      "guard": 2.9444389791664403
     },
     "rule:cli-argument-parsing-guard": {
-      "cli": 4.189654742026425,
-      "flag": 5.10594547390058,
-      "presence": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "array": 3.6018680771243066,
-      "length": 4.007333185232471,
-      "validation": 2.908720896564361,
-      "guard": 2.8546536752940854
+      "cli": 4.279440045898781,
+      "flag": 5.195730777772936,
+      "presence": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "array": 3.6916533809966614,
+      "length": 4.097118489104826,
+      "validation": 2.710824127984935,
+      "guard": 2.9444389791664403
     },
     "rule:config-projects-array-access-guard": {
-      "config": 3.1600353248452673,
-      "projects": 5.10594547390058,
-      "array": 3.6018680771243066,
-      "length": 4.007333185232471,
-      "check": 4.700480365792417,
-      "before": 3.6018680771243066,
-      "element": 5.799092654460526,
-      "access": 5.10594547390058
+      "config": 3.249820628717622,
+      "projects": 5.195730777772936,
+      "array": 3.6916533809966614,
+      "length": 4.097118489104826,
+      "check": 4.790265669664771,
+      "before": 3.6916533809966614,
+      "element": 5.8888779583328805,
+      "access": 5.195730777772936
     },
     "rule:project-existence-check-guard": {
-      "project": 3.3141860046725258,
-      "existence": 5.10594547390058,
-      "check": 4.700480365792417,
-      "guard": 2.8546536752940854,
-      "before": 3.6018680771243066,
-      "storage": 4.412798293340635,
-      "property": 4.700480365792417,
-      "access": 5.10594547390058
+      "project": 3.4039713085448806,
+      "existence": 5.195730777772936,
+      "check": 4.790265669664771,
+      "guard": 2.9444389791664403,
+      "before": 3.6916533809966614,
+      "storage": 4.279440045898781,
+      "property": 4.790265669664771,
+      "access": 5.195730777772936
     },
     "rule:gh-cli-availability-guard": {
-      "github": 5.799092654460526,
-      "cli": 4.189654742026425,
-      "availability": 5.799092654460526,
-      "guard": 2.8546536752940854,
-      "before": 3.6018680771243066,
-      "command": 4.189654742026425,
-      "execution": 5.10594547390058
+      "github": 5.8888779583328805,
+      "cli": 4.279440045898781,
+      "availability": 5.8888779583328805,
+      "guard": 2.9444389791664403,
+      "before": 3.6916533809966614,
+      "command": 4.279440045898781,
+      "execution": 5.195730777772936
     },
     "rule:git-deduplication-and-error-handling-guards": {
-      "git": 3.3141860046725258,
-      "branch": 4.412798293340635,
-      "deduplication": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "command": 4.189654742026425,
-      "failure": 4.412798293340635,
-      "handling": 4.007333185232471,
-      "guards": 3.8531825054052127
+      "git": 3.4039713085448806,
+      "branch": 4.502583597212991,
+      "deduplication": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "command": 4.279440045898781,
+      "failure": 4.502583597212991,
+      "handling": 3.9429678092775675,
+      "guards": 3.9429678092775675
     },
     "rule:guard-against-invalid-state": {
-      "guard": 2.8546536752940854,
-      "conditions": 5.799092654460526,
-      "protect": 5.799092654460526,
-      "against": 5.10594547390058,
-      "invalid": 5.799092654460526,
-      "state": 3.4965075614664802,
-      "transitions": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "operations": 4.412798293340635
+      "guard": 2.9444389791664403,
+      "conditions": 5.8888779583328805,
+      "protect": 5.8888779583328805,
+      "against": 5.195730777772936,
+      "invalid": 5.8888779583328805,
+      "state": 3.586292865338835,
+      "transitions": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "operations": 4.502583597212991
     },
     "rule:idempotency-guards": {
-      "idempotency": 4.700480365792417,
-      "guards": 3.8531825054052127,
-      "prevent": 5.799092654460526,
-      "duplicate": 5.799092654460526,
-      "state": 3.4965075614664802,
-      "from": 3.4965075614664802,
-      "repeated": 5.799092654460526,
-      "operations": 4.412798293340635
+      "idempotency": 4.790265669664771,
+      "guards": 3.9429678092775675,
+      "prevent": 5.8888779583328805,
+      "duplicate": 5.8888779583328805,
+      "state": 3.586292865338835,
+      "from": 3.586292865338835,
+      "repeated": 5.8888779583328805,
+      "operations": 4.502583597212991
     },
     "rule:circular-dependency-detection": {
-      "circular": 5.10594547390058,
-      "dependency": 5.10594547390058,
-      "detection": 4.189654742026425,
-      "in": 2.580216829592325,
-      "task": 1.5224265354444706,
-      "dependencies": 4.412798293340635
+      "circular": 5.195730777772936,
+      "dependency": 5.195730777772936,
+      "detection": 4.279440045898781,
+      "in": 2.630781420311399,
+      "task": 1.545072536479197,
+      "dependencies": 4.502583597212991
     },
     "rule:subtask-nesting-depth-limit": {
-      "maximum": 5.799092654460526,
-      "nesting": 5.10594547390058,
-      "depth": 4.700480365792417,
-      "of": 3.8531825054052127,
-      "levels": 5.799092654460526,
-      "prevents": 5.799092654460526,
-      "excessive": 5.799092654460526,
-      "subtask": 3.8531825054052127,
-      "hierarchies": 5.799092654460526
+      "maximum": 5.8888779583328805,
+      "nesting": 5.195730777772936,
+      "depth": 4.790265669664771,
+      "of": 4.097118489104826,
+      "levels": 5.8888779583328805,
+      "prevents": 5.8888779583328805,
+      "excessive": 5.8888779583328805,
+      "subtask": 3.9429678092775675,
+      "hierarchies": 5.8888779583328805
     },
     "rule:type-validation-sentinels": {
-      "validation": 2.908720896564361,
-      "uses": 4.700480365792417,
-      "sentinel": 3.8531825054052127,
-      "sets": 5.799092654460526,
-      "valid": 4.412798293340635,
-      "types": 4.189654742026425,
-      "priorities": 5.799092654460526,
-      "for": 2.663598438531376,
-      "enum": 5.10594547390058,
-      "enforcement": 4.412798293340635
+      "validation": 2.710824127984935,
+      "uses": 4.790265669664771,
+      "sentinel": 3.9429678092775675,
+      "sets": 5.8888779583328805,
+      "valid": 4.502583597212991,
+      "types": 4.279440045898781,
+      "priorities": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "enum": 5.195730777772936,
+      "enforcement": 4.502583597212991
     },
     "rule:perf-tests-conditional-execution": {
-      "conditional": 4.412798293340635,
-      "test": 3.71965111278069,
-      "skip": 4.700480365792417,
-      "via": 4.700480365792417,
-      "perf": 5.10594547390058,
-      "enabled": 5.799092654460526,
-      "environment": 4.007333185232471,
-      "flag": 5.10594547390058
+      "conditional": 4.502583597212991,
+      "test": 3.809436416653045,
+      "skip": 4.790265669664771,
+      "via": 4.790265669664771,
+      "perf": 5.195730777772936,
+      "enabled": 5.8888779583328805,
+      "environment": 4.097118489104826,
+      "flag": 5.195730777772936
     },
     "rule:guard-collection-emptiness": {
-      "guard": 2.8546536752940854,
-      "on": 3.234143296998989,
-      "collection": 4.700480365792417,
-      "emptiness": 4.700480365792417,
-      "before": 3.6018680771243066,
-      "assertions": 4.412798293340635
+      "guard": 2.9444389791664403,
+      "on": 3.3239286008713442,
+      "collection": 4.790265669664771,
+      "emptiness": 4.790265669664771,
+      "before": 3.6916533809966614,
+      "assertions": 4.502583597212991
     },
     "rule:guard-existence-check": {
-      "guard": 2.8546536752940854,
-      "condition": 5.799092654460526,
-      "checking": 4.700480365792417,
-      "property": 4.700480365792417,
-      "existence": 5.10594547390058,
-      "before": 3.6018680771243066,
-      "method": 5.799092654460526,
-      "call": 5.799092654460526
+      "guard": 2.9444389791664403,
+      "condition": 5.8888779583328805,
+      "checking": 4.790265669664771,
+      "property": 4.790265669664771,
+      "existence": 5.195730777772936,
+      "before": 3.6916533809966614,
+      "method": 5.8888779583328805,
+      "call": 5.8888779583328805
     },
     "rule:max-depth-nesting-guard": {
-      "max": 5.799092654460526,
-      "depth": 4.700480365792417,
-      "exceeded": 5.799092654460526,
-      "guard": 2.8546536752940854,
-      "preventing": 5.799092654460526,
-      "infinite": 5.799092654460526,
-      "parent": 4.700480365792417,
-      "chain": 5.10594547390058,
-      "nesting": 5.10594547390058
+      "max": 5.8888779583328805,
+      "depth": 4.790265669664771,
+      "exceeded": 5.8888779583328805,
+      "guard": 2.9444389791664403,
+      "preventing": 5.8888779583328805,
+      "infinite": 5.8888779583328805,
+      "parent": 4.790265669664771,
+      "chain": 5.195730777772936,
+      "nesting": 5.195730777772936
     },
     "rule:array-length-guard-type-completeness": {
-      "guard": 2.8546536752940854,
-      "on": 3.234143296998989,
-      "array": 3.6018680771243066,
-      "length": 4.007333185232471,
-      "to": 3.4011973816621555,
-      "verify": 5.799092654460526,
-      "union": 4.700480365792417,
-      "type": 3.71965111278069,
-      "completeness": 5.799092654460526
+      "guard": 2.9444389791664403,
+      "on": 3.3239286008713442,
+      "array": 3.6916533809966614,
+      "length": 4.097118489104826,
+      "to": 3.4909826855345103,
+      "verify": 5.8888779583328805,
+      "union": 4.790265669664771,
+      "type": 3.809436416653045,
+      "completeness": 5.8888779583328805
     },
     "rule:array-length-guard-assertions": {
-      "guard": 2.8546536752940854,
-      "on": 3.234143296998989,
-      "array": 3.6018680771243066,
-      "length": 4.007333185232471,
-      "before": 3.6018680771243066,
-      "union": 4.700480365792417,
-      "membership": 5.799092654460526,
-      "assertions": 4.412798293340635
+      "guard": 2.9444389791664403,
+      "on": 3.3239286008713442,
+      "array": 3.6916533809966614,
+      "length": 4.097118489104826,
+      "before": 3.6916533809966614,
+      "union": 4.790265669664771,
+      "membership": 5.8888779583328805,
+      "assertions": 4.502583597212991
     },
     "rule:action-button-endpoints": {
-      "action": 5.799092654460526,
-      "button": 5.799092654460526,
-      "endpoints": 4.412798293340635
+      "action": 5.8888779583328805,
+      "button": 5.8888779583328805,
+      "endpoints": 4.502583597212991
     },
     "rule:build-task-summary-idempotency": {
-      "build": 4.189654742026425,
-      "task": 1.5224265354444706,
-      "summary": 5.799092654460526,
-      "script": 4.700480365792417,
-      "output": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "idempotency": 4.700480365792417
+      "build": 4.279440045898781,
+      "task": 1.545072536479197,
+      "summary": 5.8888779583328805,
+      "script": 4.790265669664771,
+      "output": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "idempotency": 4.790265669664771
     },
     "rule:concurrency-claim-conflicts": {
-      "concurrency": 5.10594547390058,
-      "claim": 4.189654742026425,
-      "conflicts": 5.799092654460526
+      "concurrency": 5.195730777772936,
+      "claim": 4.279440045898781,
+      "conflicts": 5.8888779583328805
     },
     "rule:install-command-idempotency": {
-      "install": 5.10594547390058,
-      "command": 4.189654742026425,
-      "idempotency": 4.700480365792417
+      "install": 5.195730777772936,
+      "command": 4.279440045898781,
+      "idempotency": 4.790265669664771
     },
     "rule:task-lifecycle-states": {
-      "task": 1.5224265354444706,
-      "lifecycle": 4.412798293340635,
-      "create": 4.412798293340635,
-      "claim": 4.189654742026425,
-      "link": 3.8531825054052127,
-      "commit": 4.700480365792417,
-      "pr": 4.189654742026425,
-      "merged": 5.799092654460526,
-      "done": 5.10594547390058,
-      "archive": 5.799092654460526
+      "task": 1.545072536479197,
+      "lifecycle": 4.502583597212991,
+      "create": 4.502583597212991,
+      "claim": 4.279440045898781,
+      "link": 3.9429678092775675,
+      "commit": 4.502583597212991,
+      "pr": 4.279440045898781,
+      "merged": 5.8888779583328805,
+      "done": 5.195730777772936,
+      "archive": 5.8888779583328805
     },
     "rule:milestones-yaml-reconciliation": {
-      "reconciler": 4.700480365792417,
-      "reads": 5.799092654460526,
-      "milestones": 5.799092654460526,
-      "yaml": 5.10594547390058
+      "reconciler": 4.790265669664771,
+      "reads": 5.8888779583328805,
+      "milestones": 5.8888779583328805,
+      "yaml": 5.195730777772936
     },
     "rule:rebuild-index-prune-orphans": {
-      "rebuild": 4.412798293340635,
-      "index": 3.8531825054052127,
-      "prune": 5.799092654460526,
-      "orphans": 5.799092654460526,
-      "behavior": 4.412798293340635
+      "rebuild": 4.502583597212991,
+      "index": 3.9429678092775675,
+      "prune": 5.8888779583328805,
+      "orphans": 5.8888779583328805,
+      "behavior": 4.502583597212991
     },
     "rule:rebuild-sqlite-index": {
-      "rebuild": 4.412798293340635,
-      "sqlite": 3.8531825054052127,
-      "index": 3.8531825054052127,
-      "from": 3.4965075614664802,
-      "markdown": 4.189654742026425,
-      "files": 4.700480365792417
+      "rebuild": 4.502583597212991,
+      "sqlite": 3.9429678092775675,
+      "index": 3.9429678092775675,
+      "from": 3.586292865338835,
+      "markdown": 4.279440045898781,
+      "files": 4.790265669664771
     },
     "rule:reference-sync-sqlite": {
-      "reference": 4.412798293340635,
-      "sync": 5.799092654460526,
-      "task": 1.5224265354444706,
-      "references": 5.799092654460526,
-      "sqlite": 3.8531825054052127
+      "reference": 4.502583597212991,
+      "sync": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "references": 5.8888779583328805,
+      "sqlite": 3.9429678092775675
     },
     "rule:serve-ui-html-dashboard": {
-      "serve": 4.700480365792417,
-      "ui": 4.007333185232471,
-      "html": 5.799092654460526,
-      "dashboard": 5.10594547390058,
-      "endpoints": 4.412798293340635
+      "serve": 4.790265669664771,
+      "ui": 4.097118489104826,
+      "html": 5.8888779583328805,
+      "dashboard": 5.195730777772936,
+      "endpoints": 4.502583597212991
     },
     "rule:serve-ui-http-api": {
-      "serve": 4.700480365792417,
-      "ui": 4.007333185232471,
-      "http": 5.10594547390058,
-      "api": 3.8531825054052127,
-      "endpoints": 4.412798293340635
+      "serve": 4.790265669664771,
+      "ui": 4.097118489104826,
+      "http": 5.195730777772936,
+      "api": 2.89314568477889,
+      "endpoints": 4.502583597212991
     },
     "rule:subtask-promotion": {
-      "subtask": 3.8531825054052127,
-      "promotion": 5.799092654460526
+      "subtask": 3.9429678092775675,
+      "promotion": 5.8888779583328805
     },
     "rule:transcribe-endpoint-validation": {
-      "post": 4.700480365792417,
-      "api": 3.8531825054052127,
-      "transcribe": 5.799092654460526
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "transcribe": 5.8888779583328805
     },
     "rule:voice-capture-endpoints": {
-      "voice": 5.799092654460526,
-      "capture": 4.189654742026425,
-      "task": 1.5224265354444706,
-      "creation": 4.189654742026425,
-      "endpoints": 4.412798293340635
+      "voice": 5.8888779583328805,
+      "capture": 3.586292865338835,
+      "task": 1.545072536479197,
+      "creation": 4.097118489104826,
+      "endpoints": 4.502583597212991
     },
     "rule:resolve-server-db-path": {
-      "resolveserverdbpath": 5.799092654460526,
-      "configuration": 5.10594547390058,
-      "lookup": 5.799092654460526
+      "resolveserverdbpath": 5.8888779583328805,
+      "configuration": 5.195730777772936,
+      "lookup": 5.8888779583328805
     },
     "rule:load-config-cwd-independence": {
-      "loadconfig": 5.799092654460526,
-      "cwd": 5.10594547390058,
-      "independence": 5.799092654460526
+      "loadconfig": 5.8888779583328805,
+      "cwd": 5.195730777772936,
+      "independence": 5.8888779583328805
     },
     "rule:pick-best-binary": {
-      "pickbestbinary": 5.799092654460526,
-      "platform": 4.700480365792417,
-      "specific": 5.10594547390058,
-      "binary": 4.189654742026425,
-      "selection": 5.10594547390058
+      "pickbestbinary": 5.8888779583328805,
+      "platform": 4.790265669664771,
+      "specific": 5.195730777772936,
+      "binary": 4.279440045898781,
+      "selection": 5.195730777772936
     },
     "rule:passive-capture-hook": {
-      "passive": 4.412798293340635,
-      "capture": 4.189654742026425,
-      "hook": 4.189654742026425
+      "passive": 4.502583597212991,
+      "capture": 3.586292865338835,
+      "hook": 3.9429678092775675
     },
     "rule:reconcile-stuck-tasks-script": {
-      "reconcile": 4.700480365792417,
-      "stuck": 5.10594547390058,
-      "tasks": 3.3141860046725258,
-      "script": 4.700480365792417
+      "reconcile": 4.790265669664771,
+      "stuck": 5.195730777772936,
+      "tasks": 3.4039713085448806,
+      "script": 4.790265669664771
     },
     "rule:task-schema-json": {
-      "task": 1.5224265354444706,
-      "schema": 3.6018680771243066,
-      "json": 4.189654742026425
+      "task": 1.545072536479197,
+      "schema": 3.586292865338835,
+      "json": 3.9429678092775675
     },
     "rule:config-file-hot-reload": {
-      "config": 3.1600353248452673,
-      "file": 3.4011973816621555,
-      "hot": 5.10594547390058,
-      "reload": 5.10594547390058
+      "config": 3.249820628717622,
+      "file": 3.4039713085448806,
+      "hot": 5.195730777772936,
+      "reload": 5.195730777772936
     },
     "rule:detect-cycle-function": {
-      "detectcycle": 5.799092654460526
+      "detectcycle": 5.8888779583328805
     },
     "rule:manifest-writer-roundtrip": {
-      "manifestwriter": 5.10594547390058,
-      "write": 4.189654742026425,
-      "read": 4.700480365792417,
-      "roundtrip": 4.700480365792417
+      "manifestwriter": 5.195730777772936,
+      "write": 4.279440045898781,
+      "read": 4.790265669664771,
+      "roundtrip": 4.790265669664771
     },
     "rule:manifest-writer-read-edge-cases": {
-      "manifestwriter": 5.10594547390058,
-      "read": 4.700480365792417,
-      "edge": 5.799092654460526,
-      "cases": 5.799092654460526
+      "manifestwriter": 5.195730777772936,
+      "read": 4.790265669664771,
+      "edge": 5.8888779583328805,
+      "cases": 5.8888779583328805
     },
     "rule:markdown-store-read": {
-      "markdownstore": 4.189654742026425,
-      "read": 4.700480365792417
+      "markdownstore": 4.097118489104826,
+      "read": 4.790265669664771
     },
     "rule:markdown-store-write-roundtrip": {
-      "markdownstore": 4.189654742026425,
-      "write": 4.189654742026425,
-      "roundtrip": 4.700480365792417
+      "markdownstore": 4.097118489104826,
+      "write": 4.279440045898781,
+      "roundtrip": 4.790265669664771
     },
     "rule:markdown-store-frontmatter-caps": {
-      "markdownstore": 4.189654742026425,
-      "frontmatter": 4.189654742026425,
-      "cap": 5.799092654460526,
-      "enforcement": 4.412798293340635
+      "markdownstore": 4.097118489104826,
+      "frontmatter": 4.097118489104826,
+      "cap": 5.8888779583328805,
+      "enforcement": 4.502583597212991
     },
     "rule:markdown-store-labels-tags-alias": {
-      "markdownstore": 4.189654742026425,
-      "labels": 5.799092654460526,
-      "tags": 5.799092654460526,
-      "alias": 5.799092654460526,
-      "new": 4.700480365792417,
-      "fields": 3.71965111278069
+      "markdownstore": 4.097118489104826,
+      "labels": 5.8888779583328805,
+      "tags": 5.8888779583328805,
+      "alias": 5.8888779583328805,
+      "new": 4.790265669664771,
+      "fields": 3.9429678092775675
     },
     "rule:milestone-repository": {
-      "milestonerepository": 5.799092654460526
+      "milestonerepository": 5.8888779583328805
     },
     "rule:reconciler-prune-orphans": {
-      "reconciler": 4.700480365792417,
-      "pruneorphans": 5.799092654460526
+      "reconciler": 4.790265669664771,
+      "pruneorphans": 5.8888779583328805
     },
     "rule:reference-repository": {
-      "referencerepository": 5.799092654460526
+      "referencerepository": 5.8888779583328805
     },
     "rule:sqlite-index-upsert-get": {
-      "sqliteindex": 3.1600353248452673,
-      "upserttask": 5.10594547390058,
-      "gettask": 5.10594547390058
+      "sqliteindex": 3.055664614276665,
+      "upserttask": 5.195730777772936,
+      "gettask": 5.195730777772936
     },
     "rule:sqlite-index-delete-task": {
-      "sqliteindex": 3.1600353248452673,
-      "deletetask": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "deletetask": 5.8888779583328805
     },
     "rule:sqlite-index-fts5-triggers": {
-      "sqliteindex": 3.1600353248452673,
-      "fts5": 5.799092654460526,
-      "triggers": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "fts5": 5.8888779583328805,
+      "triggers": 5.8888779583328805
     },
     "rule:sqlite-index-claim-task-toctou": {
-      "sqliteindex": 3.1600353248452673,
-      "claimtask": 5.10594547390058,
-      "toctou": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "claimtask": 5.195730777772936,
+      "toctou": 5.8888779583328805
     },
     "rule:sqlite-index-get-next-task": {
-      "sqliteindex": 3.1600353248452673,
-      "getnexttask": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "getnexttask": 5.8888779583328805
     },
     "rule:sqlite-index-list-tasks": {
-      "sqliteindex": 3.1600353248452673,
-      "listtasks": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "listtasks": 5.8888779583328805
     },
     "rule:sqlite-index-next-id": {
-      "sqliteindex": 3.1600353248452673,
-      "nextid": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "nextid": 5.8888779583328805
     },
     "rule:sqlite-index-release-task": {
-      "sqliteindex": 3.1600353248452673,
-      "releasetask": 5.10594547390058
+      "sqliteindex": 3.055664614276665,
+      "releasetask": 5.195730777772936
     },
     "rule:sqlite-index-get-child-tasks": {
-      "sqliteindex": 3.1600353248452673,
-      "getchildtasks": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "getchildtasks": 5.8888779583328805
     },
     "rule:sqlite-index-get-stats": {
-      "sqliteindex": 3.1600353248452673,
-      "getstats": 5.799092654460526
+      "sqliteindex": 3.055664614276665,
+      "getstats": 5.8888779583328805
     },
     "rule:sqlite-index-schema-migration-step-4": {
-      "sqliteindex": 3.1600353248452673,
-      "schema": 3.6018680771243066,
-      "migration": 4.412798293340635,
-      "new": 4.700480365792417,
-      "columns": 5.799092654460526,
-      "step": 5.10594547390058
+      "sqliteindex": 3.055664614276665,
+      "schema": 3.586292865338835,
+      "migration": 4.279440045898781,
+      "new": 4.790265669664771,
+      "columns": 5.8888779583328805,
+      "step": 5.195730777772936
     },
     "rule:sqlite-index-upsert-new-fields-step-5": {
-      "sqliteindex": 3.1600353248452673,
-      "upserttask": 5.10594547390058,
-      "new": 4.700480365792417,
-      "fields": 3.71965111278069,
-      "roundtrip": 4.700480365792417,
-      "step": 5.10594547390058
+      "sqliteindex": 3.055664614276665,
+      "upserttask": 5.195730777772936,
+      "new": 4.790265669664771,
+      "fields": 3.9429678092775675,
+      "roundtrip": 4.790265669664771,
+      "step": 5.195730777772936
     },
     "rule:store-registry": {
-      "storeregistry": 5.799092654460526
+      "storeregistry": 5.8888779583328805
     },
     "rule:task-factory-format-id": {
-      "taskfactory": 4.412798293340635,
-      "formatid": 5.799092654460526
+      "taskfactory": 4.279440045898781,
+      "formatid": 5.8888779583328805
     },
     "rule:task-factory-create": {
-      "taskfactory": 4.412798293340635,
-      "create": 4.412798293340635
+      "taskfactory": 4.279440045898781,
+      "create": 4.502583597212991
     },
     "rule:task-factory-humanize-slug": {
-      "taskfactory": 4.412798293340635,
-      "humanizeslug": 5.799092654460526
+      "taskfactory": 4.279440045898781,
+      "humanizeslug": 5.8888779583328805
     },
     "rule:task-factory-from-capture-event": {
-      "taskfactory": 4.412798293340635,
-      "fromcaptureevent": 5.799092654460526
+      "taskfactory": 4.279440045898781,
+      "fromcaptureevent": 5.8888779583328805
     },
     "rule:task-store-create-task": {
-      "taskstore": 4.007333185232471,
-      "createtask": 5.10594547390058
+      "taskstore": 4.097118489104826,
+      "createtask": 5.195730777772936
     },
     "rule:task-store-update-task": {
-      "taskstore": 4.007333185232471,
-      "updatetask": 5.10594547390058
+      "taskstore": 4.097118489104826,
+      "updatetask": 5.195730777772936
     },
     "rule:task-store-transition-task": {
-      "taskstore": 4.007333185232471,
-      "transitiontask": 5.799092654460526
+      "taskstore": 4.097118489104826,
+      "transitiontask": 5.8888779583328805
     },
     "rule:task-store-claim-task": {
-      "taskstore": 4.007333185232471,
-      "claimtask": 5.10594547390058
+      "taskstore": 4.097118489104826,
+      "claimtask": 5.195730777772936
     },
     "rule:task-store-release-task": {
-      "taskstore": 4.007333185232471,
-      "releasetask": 5.10594547390058
+      "taskstore": 4.097118489104826,
+      "releasetask": 5.195730777772936
     },
     "rule:task-init-validate": {
-      "task": 1.5224265354444706,
-      "init": 4.189654742026425,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "init": 4.279440045898781,
+      "validate": 2.844355520609458
     },
     "rule:task-init-execute-local-storage": {
-      "task": 1.5224265354444706,
-      "init": 4.189654742026425,
-      "execute": 2.70805020110221,
-      "with": 2.540996116439044,
-      "local": 5.799092654460526,
-      "storage": 4.412798293340635
+      "task": 1.545072536479197,
+      "init": 4.279440045898781,
+      "execute": 2.7978355049745653,
+      "with": 2.521582128346407,
+      "local": 5.8888779583328805,
+      "storage": 4.279440045898781
     },
     "rule:task-rebuild-index-execute": {
-      "task": 1.5224265354444706,
-      "rebuild": 4.412798293340635,
-      "index": 3.8531825054052127,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "rebuild": 4.502583597212991,
+      "index": 3.9429678092775675,
+      "execute": 2.7978355049745653
     },
     "rule:task-register-project-validate": {
-      "task": 1.5224265354444706,
-      "register": 5.10594547390058,
-      "project": 3.3141860046725258,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "register": 5.195730777772936,
+      "project": 3.4039713085448806,
+      "validate": 2.844355520609458
     },
     "rule:task-register-project-execute": {
-      "task": 1.5224265354444706,
-      "register": 5.10594547390058,
-      "project": 3.3141860046725258,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "register": 5.195730777772936,
+      "project": 3.4039713085448806,
+      "execute": 2.7978355049745653
     },
     "rule:task-create-validate": {
-      "task": 1.5224265354444706,
-      "create": 4.412798293340635,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "create": 4.502583597212991,
+      "validate": 2.844355520609458
     },
     "rule:task-create-execute": {
-      "task": 1.5224265354444706,
-      "create": 4.412798293340635,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "create": 4.502583597212991,
+      "execute": 2.7978355049745653
     },
     "rule:task-get-validate": {
-      "task": 1.5224265354444706,
-      "get": 5.10594547390058,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "get": 3.6916533809966614,
+      "validate": 2.844355520609458
     },
     "rule:task-get-execute": {
-      "task": 1.5224265354444706,
-      "get": 5.10594547390058,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "get": 3.6916533809966614,
+      "execute": 2.7978355049745653
     },
     "rule:task-list-validate": {
-      "task": 1.5224265354444706,
-      "list": 5.10594547390058,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "list": 5.195730777772936,
+      "validate": 2.844355520609458
     },
     "rule:task-list-execute": {
-      "task": 1.5224265354444706,
-      "list": 5.10594547390058,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "list": 5.195730777772936,
+      "execute": 2.7978355049745653
     },
     "rule:task-delete-validate": {
-      "task": 1.5224265354444706,
-      "delete": 5.10594547390058,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "delete": 5.195730777772936,
+      "validate": 2.844355520609458
     },
     "rule:task-delete-execute": {
-      "task": 1.5224265354444706,
-      "delete": 5.10594547390058,
-      "execute": 2.70805020110221
+      "task": 1.545072536479197,
+      "delete": 5.195730777772936,
+      "execute": 2.7978355049745653
     },
     "rule:task-search-validate": {
-      "task": 1.5224265354444706,
-      "search": 4.700480365792417,
-      "validate": 2.7545702167371027
+      "task": 1.545072536479197,
+      "search": 4.097118489104826,
+      "validate": 2.844355520609458
     },
     "rule:task-search-execute": {
-      "task": 1.5224265354444706,
-      "search": 4.700480365792417,
-      "execute": 2.70805020110221,
-      "returns": 4.189654742026425,
-      "filtered": 5.799092654460526,
-      "results": 5.799092654460526
+      "task": 1.545072536479197,
+      "search": 4.097118489104826,
+      "execute": 2.7978355049745653,
+      "returns": 4.279440045898781,
+      "filtered": 5.195730777772936,
+      "results": 5.8888779583328805
     },
     "rule:task-update-validate": {
-      "task": 1.5224265354444706,
-      "update": 4.412798293340635,
-      "validate": 2.7545702167371027,
-      "enforces": 4.412798293340635,
-      "field": 4.189654742026425,
-      "constraints": 4.189654742026425
+      "task": 1.545072536479197,
+      "update": 4.502583597212991,
+      "validate": 2.844355520609458,
+      "enforces": 4.502583597212991,
+      "field": 3.9429678092775675,
+      "constraints": 4.279440045898781
     },
     "rule:task-update-execute": {
-      "task": 1.5224265354444706,
-      "update": 4.412798293340635,
-      "execute": 2.70805020110221,
-      "delegates": 5.10594547390058,
-      "to": 3.4011973816621555,
-      "store": 3.8531825054052127
+      "task": 1.545072536479197,
+      "update": 4.502583597212991,
+      "execute": 2.7978355049745653,
+      "delegates": 5.195730777772936,
+      "to": 3.4909826855345103,
+      "store": 3.9429678092775675
     },
     "rule:task-next-validate": {
-      "task": 1.5224265354444706,
-      "next": 5.10594547390058,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "project": 3.3141860046725258,
-      "field": 4.189654742026425
+      "task": 1.545072536479197,
+      "next": 5.195730777772936,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "project": 3.4039713085448806,
+      "field": 3.9429678092775675
     },
     "rule:task-next-execute": {
-      "task": 1.5224265354444706,
-      "next": 5.10594547390058,
-      "execute": 2.70805020110221,
-      "returns": 4.189654742026425,
-      "available": 5.799092654460526
+      "task": 1.545072536479197,
+      "next": 5.195730777772936,
+      "execute": 2.7978355049745653,
+      "returns": 4.279440045898781,
+      "available": 5.8888779583328805
     },
     "rule:task-link-commit-validate": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "commit": 4.700480365792417,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471,
-      "sha": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "message": 4.412798293340635
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "commit": 4.502583597212991,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826,
+      "sha": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "message": 4.502583597212991
     },
     "rule:task-link-commit-execute": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "commit": 4.700480365792417,
-      "execute": 2.70805020110221,
-      "is": 4.700480365792417,
-      "idempotent": 5.10594547390058
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "commit": 4.502583597212991,
+      "execute": 2.7978355049745653,
+      "is": 4.790265669664771,
+      "idempotent": 5.195730777772936
     },
     "rule:task-link-pr-validate": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "pr": 4.189654742026425,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471,
-      "number": 5.10594547390058,
-      "and": 1.8672670217362002,
-      "state": 3.4965075614664802
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "pr": 4.279440045898781,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826,
+      "number": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "state": 3.586292865338835
     },
     "rule:task-link-pr-execute": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "pr": 4.189654742026425,
-      "execute": 2.70805020110221,
-      "auto": 5.10594547390058,
-      "transitions": 4.189654742026425,
-      "on": 3.234143296998989,
-      "merge": 5.10594547390058
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "pr": 4.279440045898781,
+      "execute": 2.7978355049745653,
+      "auto": 5.195730777772936,
+      "transitions": 4.279440045898781,
+      "on": 3.3239286008713442,
+      "merge": 5.195730777772936
     },
     "rule:task-link-branch-validate": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "branch": 4.412798293340635,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471,
-      "and": 1.8672670217362002
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "branch": 4.502583597212991,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826,
+      "and": 1.7780040941595696
     },
     "rule:task-link-branch-execute": {
-      "task": 1.5224265354444706,
-      "link": 3.8531825054052127,
-      "branch": 4.412798293340635,
-      "execute": 2.70805020110221,
-      "is": 4.700480365792417,
-      "idempotent": 5.10594547390058
+      "task": 1.545072536479197,
+      "link": 3.9429678092775675,
+      "branch": 4.502583597212991,
+      "execute": 2.7978355049745653,
+      "is": 4.790265669664771,
+      "idempotent": 5.195730777772936
     },
     "rule:task-milestone-tool": {
-      "task": 1.5224265354444706,
-      "milestone": 4.189654742026425,
-      "tool": 4.412798293340635,
-      "supports": 4.700480365792417,
-      "crud": 5.10594547390058,
-      "operations": 4.412798293340635
+      "task": 1.545072536479197,
+      "milestone": 4.279440045898781,
+      "tool": 4.502583597212991,
+      "supports": 4.790265669664771,
+      "crud": 5.195730777772936,
+      "operations": 4.502583597212991
     },
     "rule:task-blocked-by-validate": {
-      "task": 1.5224265354444706,
-      "blocked": 5.10594547390058,
-      "by": 5.10594547390058,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471
+      "task": 1.545072536479197,
+      "blocked": 5.195730777772936,
+      "by": 5.195730777772936,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826
     },
     "rule:task-blocked-by-execute": {
-      "task": 1.5224265354444706,
-      "blocked": 5.10594547390058,
-      "by": 5.10594547390058,
-      "execute": 2.70805020110221,
-      "returns": 4.189654742026425,
-      "non": 5.10594547390058,
-      "done": 5.10594547390058,
-      "dependencies": 4.412798293340635
+      "task": 1.545072536479197,
+      "blocked": 5.195730777772936,
+      "by": 5.195730777772936,
+      "execute": 2.7978355049745653,
+      "returns": 4.279440045898781,
+      "non": 5.195730777772936,
+      "done": 5.195730777772936,
+      "dependencies": 4.502583597212991
     },
     "rule:task-unblocks-validate": {
-      "task": 1.5224265354444706,
-      "unblocks": 5.10594547390058,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471
+      "task": 1.545072536479197,
+      "unblocks": 5.195730777772936,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826
     },
     "rule:task-unblocks-execute": {
-      "task": 1.5224265354444706,
-      "unblocks": 5.10594547390058,
-      "execute": 2.70805020110221,
-      "returns": 4.189654742026425,
-      "dependent": 5.799092654460526,
-      "tasks": 3.3141860046725258
+      "task": 1.545072536479197,
+      "unblocks": 5.195730777772936,
+      "execute": 2.7978355049745653,
+      "returns": 4.279440045898781,
+      "dependent": 5.8888779583328805,
+      "tasks": 3.4039713085448806
     },
     "rule:task-stale-execute": {
-      "task": 1.5224265354444706,
-      "stale": 5.799092654460526,
-      "execute": 2.70805020110221,
-      "queries": 5.799092654460526,
-      "tasks": 3.3141860046725258,
-      "with": 2.540996116439044,
-      "project": 3.3141860046725258,
-      "filter": 4.700480365792417
+      "task": 1.545072536479197,
+      "stale": 5.8888779583328805,
+      "execute": 2.7978355049745653,
+      "queries": 5.8888779583328805,
+      "tasks": 3.4039713085448806,
+      "with": 2.521582128346407,
+      "project": 3.4039713085448806,
+      "filter": 4.790265669664771
     },
     "rule:task-stats-execute": {
-      "task": 1.5224265354444706,
-      "stats": 4.700480365792417,
-      "execute": 2.70805020110221,
-      "returns": 4.189654742026425,
-      "with": 2.540996116439044,
-      "project": 3.3141860046725258,
-      "filter": 4.700480365792417
+      "task": 1.545072536479197,
+      "stats": 4.790265669664771,
+      "execute": 2.7978355049745653,
+      "returns": 4.279440045898781,
+      "with": 2.521582128346407,
+      "project": 3.4039713085448806,
+      "filter": 4.790265669664771
     },
     "rule:derive-slug": {
-      "deriveslug": 5.799092654460526,
-      "normalizes": 5.799092654460526,
-      "strings": 5.799092654460526,
-      "to": 3.4011973816621555,
-      "url": 5.799092654460526,
-      "safe": 5.799092654460526,
-      "identifiers": 5.799092654460526
+      "deriveslug": 5.8888779583328805,
+      "normalizes": 5.8888779583328805,
+      "strings": 5.8888779583328805,
+      "to": 3.4909826855345103,
+      "url": 5.8888779583328805,
+      "safe": 5.8888779583328805,
+      "identifiers": 5.8888779583328805
     },
     "rule:humanise-slug": {
-      "humaniseslug": 5.799092654460526,
-      "converts": 5.799092654460526,
-      "slugs": 5.799092654460526,
-      "to": 3.4011973816621555,
-      "title": 4.700480365792417,
-      "case": 5.799092654460526
+      "humaniseslug": 5.8888779583328805,
+      "converts": 5.8888779583328805,
+      "slugs": 5.8888779583328805,
+      "to": 3.4909826855345103,
+      "title": 4.790265669664771,
+      "case": 5.8888779583328805
     },
     "rule:extract-title": {
-      "extracttitle": 5.799092654460526,
-      "extracts": 5.10594547390058,
-      "h1": 5.799092654460526,
-      "from": 3.4965075614664802,
-      "markdown": 4.189654742026425
+      "extracttitle": 5.8888779583328805,
+      "extracts": 5.195730777772936,
+      "h1": 5.8888779583328805,
+      "from": 3.586292865338835,
+      "markdown": 4.279440045898781
     },
     "rule:extract-why": {
-      "extractwhy": 5.799092654460526,
-      "extracts": 5.10594547390058,
-      "purpose": 5.799092654460526,
-      "paragraph": 5.799092654460526,
-      "from": 3.4965075614664802,
-      "markdown": 4.189654742026425
+      "extractwhy": 5.8888779583328805,
+      "extracts": 5.195730777772936,
+      "purpose": 5.8888779583328805,
+      "paragraph": 5.8888779583328805,
+      "from": 3.586292865338835,
+      "markdown": 4.279440045898781
     },
     "rule:infer-type": {
-      "infertype": 5.799092654460526,
-      "classifies": 5.799092654460526,
-      "task": 1.5224265354444706,
-      "type": 3.71965111278069,
-      "from": 3.4965075614664802,
-      "slug": 5.10594547390058,
-      "and": 1.8672670217362002,
-      "title": 4.700480365792417
+      "infertype": 5.8888779583328805,
+      "classifies": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "type": 3.809436416653045,
+      "from": 3.586292865338835,
+      "slug": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "title": 4.790265669664771
     },
     "rule:infer-priority": {
-      "inferpriority": 5.799092654460526,
-      "determines": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "priority": 5.10594547390058,
-      "from": 3.4965075614664802,
-      "slug": 5.10594547390058
+      "inferpriority": 5.8888779583328805,
+      "determines": 5.195730777772936,
+      "task": 1.545072536479197,
+      "priority": 5.195730777772936,
+      "from": 3.586292865338835,
+      "slug": 5.195730777772936
     },
     "rule:infer-status": {
-      "inferstatus": 5.799092654460526,
-      "determines": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "status": 4.007333185232471,
-      "from": 3.4965075614664802,
-      "git": 3.3141860046725258,
-      "and": 1.8672670217362002,
-      "mtime": 5.799092654460526
+      "inferstatus": 5.8888779583328805,
+      "determines": 5.195730777772936,
+      "task": 1.545072536479197,
+      "status": 3.809436416653045,
+      "from": 3.586292865338835,
+      "git": 3.4039713085448806,
+      "and": 1.7780040941595696,
+      "mtime": 5.8888779583328805
     },
     "rule:find-matching-branch": {
-      "findmatchingbranch": 5.799092654460526,
-      "uses": 4.700480365792417,
-      "multiple": 5.799092654460526,
-      "matching": 4.412798293340635,
-      "strategies": 5.799092654460526
+      "findmatchingbranch": 5.8888779583328805,
+      "uses": 4.790265669664771,
+      "multiple": 5.8888779583328805,
+      "matching": 4.502583597212991,
+      "strategies": 5.8888779583328805
     },
     "rule:extract-pr-number": {
-      "extractprnumber": 5.799092654460526,
-      "parses": 5.799092654460526,
-      "pr": 4.189654742026425,
-      "numbers": 4.700480365792417,
-      "from": 3.4965075614664802,
-      "git": 3.3141860046725258,
-      "messages": 5.10594547390058
+      "extractprnumber": 5.8888779583328805,
+      "parses": 5.8888779583328805,
+      "pr": 4.279440045898781,
+      "numbers": 4.790265669664771,
+      "from": 3.586292865338835,
+      "git": 3.4039713085448806,
+      "messages": 5.195730777772936
     },
     "rule:build-inference": {
-      "buildinference": 5.799092654460526,
-      "creates": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "frontmatter": 4.189654742026425,
-      "with": 2.540996116439044,
-      "validation": 2.908720896564361
+      "buildinference": 5.8888779583328805,
+      "creates": 5.195730777772936,
+      "task": 1.545072536479197,
+      "frontmatter": 4.097118489104826,
+      "with": 2.521582128346407,
+      "validation": 2.710824127984935
     },
     "rule:reconcile-legacy-integration": {
-      "reconcilelegacy": 5.799092654460526,
-      "migration": 4.412798293340635,
-      "processes": 5.799092654460526,
-      "scratchpad": 5.799092654460526,
-      "files": 4.700480365792417
+      "reconcilelegacy": 5.8888779583328805,
+      "migration": 4.279440045898781,
+      "processes": 5.8888779583328805,
+      "scratchpad": 5.8888779583328805,
+      "files": 4.790265669664771
     },
     "rule:task-stats-milestone-burndown": {
-      "task": 1.5224265354444706,
-      "stats": 4.700480365792417,
-      "milestone": 4.189654742026425,
-      "burndown": 5.799092654460526,
-      "tracks": 5.799092654460526,
-      "completion": 5.799092654460526
+      "task": 1.545072536479197,
+      "stats": 4.790265669664771,
+      "milestone": 4.279440045898781,
+      "burndown": 5.8888779583328805,
+      "tracks": 5.8888779583328805,
+      "completion": 5.8888779583328805
     },
     "rule:task-claim-validate": {
-      "task": 1.5224265354444706,
-      "claim": 4.189654742026425,
-      "validate": 2.7545702167371027,
-      "enforces": 4.412798293340635,
-      "required": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "type": 3.71965111278069,
-      "constraints": 4.189654742026425
+      "task": 1.545072536479197,
+      "claim": 4.279440045898781,
+      "validate": 2.844355520609458,
+      "enforces": 4.502583597212991,
+      "required": 4.502583597212991,
+      "and": 1.7780040941595696,
+      "type": 3.809436416653045,
+      "constraints": 4.279440045898781
     },
     "rule:task-claim-execute": {
-      "task": 1.5224265354444706,
-      "claim": 4.189654742026425,
-      "execute": 2.70805020110221,
-      "manages": 5.799092654460526,
-      "claims": 5.10594547390058,
-      "with": 2.540996116439044,
-      "ttl": 5.799092654460526
+      "task": 1.545072536479197,
+      "claim": 4.279440045898781,
+      "execute": 2.7978355049745653,
+      "manages": 5.8888779583328805,
+      "claims": 5.195730777772936,
+      "with": 2.521582128346407,
+      "ttl": 5.8888779583328805
     },
     "rule:task-release-validate": {
-      "task": 1.5224265354444706,
-      "release": 5.10594547390058,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "id": 4.007333185232471
+      "task": 1.545072536479197,
+      "release": 5.195730777772936,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "id": 4.097118489104826
     },
     "rule:task-release-execute": {
-      "task": 1.5224265354444706,
-      "release": 5.10594547390058,
-      "execute": 2.70805020110221,
-      "releases": 5.799092654460526,
-      "session": 5.799092654460526,
-      "claims": 5.10594547390058
+      "task": 1.545072536479197,
+      "release": 5.195730777772936,
+      "execute": 2.7978355049745653,
+      "releases": 5.8888779583328805,
+      "session": 5.8888779583328805,
+      "claims": 5.195730777772936
     },
     "rule:task-transition-validate": {
-      "task": 1.5224265354444706,
-      "transition": 4.189654742026425,
-      "validate": 2.7545702167371027,
-      "enforces": 4.412798293340635,
-      "valid": 4.412798293340635,
-      "status": 4.007333185232471,
-      "values": 4.189654742026425
+      "task": 1.545072536479197,
+      "transition": 4.279440045898781,
+      "validate": 2.844355520609458,
+      "enforces": 4.502583597212991,
+      "valid": 4.502583597212991,
+      "status": 3.809436416653045,
+      "values": 4.279440045898781
     },
     "rule:task-transition-execute": {
-      "task": 1.5224265354444706,
-      "transition": 4.189654742026425,
-      "execute": 2.70805020110221,
-      "delegates": 5.10594547390058,
-      "to": 3.4011973816621555,
-      "store": 3.8531825054052127
+      "task": 1.545072536479197,
+      "transition": 4.279440045898781,
+      "execute": 2.7978355049745653,
+      "delegates": 5.195730777772936,
+      "to": 3.4909826855345103,
+      "store": 3.9429678092775675
     },
     "rule:task-add-subtask-validate": {
-      "task": 1.5224265354444706,
-      "add": 5.10594547390058,
-      "subtask": 3.8531825054052127,
-      "validate": 2.7545702167371027,
-      "enforces": 4.412798293340635,
-      "required": 4.412798293340635,
-      "fields": 3.71965111278069,
-      "and": 1.8672670217362002,
-      "limits": 4.700480365792417
+      "task": 1.545072536479197,
+      "add": 5.195730777772936,
+      "subtask": 3.9429678092775675,
+      "validate": 2.844355520609458,
+      "enforces": 4.502583597212991,
+      "required": 4.502583597212991,
+      "fields": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "limits": 4.790265669664771
     },
     "rule:task-add-subtask-execute": {
-      "task": 1.5224265354444706,
-      "add": 5.10594547390058,
-      "subtask": 3.8531825054052127,
-      "execute": 2.70805020110221,
-      "adds": 5.799092654460526,
-      "with": 2.540996116439044,
-      "limits": 4.700480365792417
+      "task": 1.545072536479197,
+      "add": 5.195730777772936,
+      "subtask": 3.9429678092775675,
+      "execute": 2.7978355049745653,
+      "adds": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "limits": 4.790265669664771
     },
     "rule:task-promote-subtask-validate": {
-      "task": 1.5224265354444706,
-      "promote": 5.10594547390058,
-      "subtask": 3.8531825054052127,
-      "validate": 2.7545702167371027,
-      "requires": 3.4965075614664802,
-      "parent": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "ids": 5.799092654460526
+      "task": 1.545072536479197,
+      "promote": 5.195730777772936,
+      "subtask": 3.9429678092775675,
+      "validate": 2.844355520609458,
+      "requires": 3.586292865338835,
+      "parent": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "ids": 5.8888779583328805
     },
     "rule:task-promote-subtask-execute": {
-      "task": 1.5224265354444706,
-      "promote": 5.10594547390058,
-      "subtask": 3.8531825054052127,
-      "execute": 2.70805020110221,
-      "promotes": 5.799092654460526,
-      "with": 2.540996116439044,
-      "depth": 4.700480365792417,
-      "limit": 4.700480365792417
+      "task": 1.545072536479197,
+      "promote": 5.195730777772936,
+      "subtask": 3.9429678092775675,
+      "execute": 2.7978355049745653,
+      "promotes": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "depth": 4.790265669664771,
+      "limit": 4.790265669664771
     },
     "rule:valid-transitions": {
-      "valid": 4.412798293340635,
-      "transitions": 4.189654742026425,
-      "define": 5.799092654460526,
-      "allowed": 5.799092654460526,
-      "state": 3.4965075614664802,
-      "machine": 5.10594547390058,
-      "paths": 4.189654742026425
+      "valid": 4.502583597212991,
+      "transitions": 4.279440045898781,
+      "define": 5.8888779583328805,
+      "allowed": 5.8888779583328805,
+      "state": 3.586292865338835,
+      "machine": 5.195730777772936,
+      "paths": 4.279440045898781
     },
     "rule:is-valid-transition": {
-      "isvalidtransition": 5.799092654460526,
-      "validates": 5.799092654460526,
-      "state": 3.4965075614664802,
-      "changes": 5.10594547390058
+      "isvalidtransition": 5.8888779583328805,
+      "validates": 5.8888779583328805,
+      "state": 3.586292865338835,
+      "changes": 5.195730777772936
     },
     "rule:mcp-tasks-error": {
-      "mcptaskserror": 5.10594547390058,
-      "carries": 5.799092654460526,
-      "error": 3.6018680771243066,
-      "codes": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "messages": 5.10594547390058
+      "mcptaskserror": 5.195730777772936,
+      "carries": 5.8888779583328805,
+      "error": 3.6916533809966614,
+      "codes": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "messages": 5.195730777772936
     },
     "rule:type-contracts-compile-time": {
-      "type": 3.71965111278069,
-      "contracts": 5.799092654460526,
-      "validate": 2.7545702167371027,
-      "union": 4.700480365792417,
-      "shapes": 5.799092654460526
+      "type": 3.809436416653045,
+      "contracts": 5.8888779583328805,
+      "validate": 2.844355520609458,
+      "union": 4.790265669664771,
+      "shapes": 5.8888779583328805
     },
     "rule:new-optional-fields-on-task": {
-      "task": 1.5224265354444706,
-      "schema": 3.6018680771243066,
-      "includes": 5.799092654460526,
-      "optional": 3.6018680771243066,
-      "tracking": 5.799092654460526,
-      "fields": 3.71965111278069
+      "task": 1.545072536479197,
+      "schema": 3.586292865338835,
+      "includes": 5.8888779583328805,
+      "optional": 3.809436416653045,
+      "tracking": 5.8888779583328805,
+      "fields": 3.9429678092775675
     },
     "rule:header-stats-wiring": {
-      "header": 5.799092654460526,
-      "component": 4.700480365792417,
-      "uses": 4.700480365792417,
-      "stats": 4.700480365792417,
-      "hook": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "inbox": 5.799092654460526,
-      "tab": 5.799092654460526
+      "header": 5.195730777772936,
+      "component": 4.279440045898781,
+      "uses": 4.790265669664771,
+      "stats": 4.790265669664771,
+      "hook": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "inbox": 5.8888779583328805,
+      "tab": 4.790265669664771
     },
     "rule:inbox-view-wired": {
-      "inboxview": 5.799092654460526,
-      "component": 4.700480365792417,
-      "supports": 4.700480365792417,
-      "draft": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "management": 4.700480365792417
+      "inboxview": 5.8888779583328805,
+      "component": 4.279440045898781,
+      "supports": 4.790265669664771,
+      "draft": 5.195730777772936,
+      "task": 1.545072536479197,
+      "management": 4.790265669664771
     },
     "rule:milestone-crud-ui": {
-      "roadmapview": 5.799092654460526,
-      "supports": 4.700480365792417,
-      "milestone": 4.189654742026425,
-      "creation": 4.189654742026425
+      "roadmapview": 5.8888779583328805,
+      "supports": 4.790265669664771,
+      "milestone": 4.279440045898781,
+      "creation": 4.097118489104826
     },
     "rule:ui-type-alignment-backend": {
-      "ui": 4.007333185232471,
-      "types": 4.189654742026425,
-      "remain": 5.799092654460526,
-      "synchronized": 5.799092654460526,
-      "with": 2.540996116439044,
-      "backend": 5.799092654460526,
-      "definitions": 5.799092654460526
+      "ui": 4.097118489104826,
+      "types": 4.279440045898781,
+      "remain": 5.8888779583328805,
+      "synchronized": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "backend": 5.8888779583328805,
+      "definitions": 5.195730777772936
     },
     "rule:tech-stack": {
-      "tech": 5.799092654460526,
-      "stack": 5.799092654460526
+      "tech": 5.8888779583328805,
+      "stack": 5.8888779583328805
     },
     "rule:commands": {
-      "commands": 5.799092654460526
+      "commands": 5.8888779583328805
     },
     "rule:architecture": {
-      "architecture": 5.799092654460526
+      "architecture": 5.8888779583328805
     },
     "rule:write-protocol": {
-      "write": 4.189654742026425,
-      "protocol": 5.799092654460526
+      "write": 4.279440045898781,
+      "protocol": 5.8888779583328805
     },
     "rule:mcp-tools-20": {
-      "mcp": 3.8531825054052127,
-      "tools": 5.10594547390058
+      "mcp": 3.9429678092775675,
+      "tools": 5.195730777772936
     },
     "rule:standards": {
-      "standards": 5.799092654460526
+      "standards": 5.8888779583328805
     },
     "rule:handbook-navigation": {
-      "handbook": 5.799092654460526,
-      "navigation": 5.799092654460526
+      "handbook": 5.8888779583328805,
+      "navigation": 5.195730777772936
     },
     "rule:sanitize-content": {
-      "sanitizecontent": 5.799092654460526,
-      "redaction": 5.799092654460526,
-      "rules": 4.412798293340635
+      "sanitizecontent": 5.8888779583328805,
+      "redaction": 5.8888779583328805,
+      "rules": 4.502583597212991
     },
     "rule:build-prompt": {
-      "buildprompt": 5.799092654460526,
-      "message": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "character": 5.10594547390058,
-      "budgeting": 5.799092654460526
+      "buildprompt": 5.8888779583328805,
+      "message": 4.502583597212991,
+      "and": 1.7780040941595696,
+      "character": 5.195730777772936,
+      "budgeting": 5.8888779583328805
     },
     "rule:extract-intents-noise-filters": {
-      "extractintents": 5.799092654460526,
-      "noise": 5.799092654460526,
-      "filtering": 4.412798293340635,
-      "rules": 4.412798293340635
+      "extractintents": 5.8888779583328805,
+      "noise": 5.8888779583328805,
+      "filtering": 4.279440045898781,
+      "rules": 4.502583597212991
     },
     "rule:project-router-normalize-path": {
-      "normalizepath": 5.799092654460526,
-      "path": 3.4965075614664802,
-      "normalization": 5.10594547390058,
-      "rules": 4.412798293340635
+      "normalizepath": 5.8888779583328805,
+      "path": 3.249820628717622,
+      "normalization": 5.195730777772936,
+      "rules": 4.502583597212991
     },
     "rule:project-router-read-config": {
-      "readconfig": 5.799092654460526,
-      "configuration": 5.10594547390058,
-      "file": 3.4011973816621555,
-      "loading": 5.10594547390058,
-      "with": 2.540996116439044,
-      "fallback": 2.663598438531376,
-      "defaults": 5.799092654460526
+      "readconfig": 5.8888779583328805,
+      "configuration": 5.195730777772936,
+      "file": 3.4039713085448806,
+      "loading": 5.195730777772936,
+      "with": 2.521582128346407,
+      "fallback": 2.630781420311399,
+      "defaults": 5.8888779583328805
     },
     "rule:project-router-route-cwd-matching": {
-      "routeproject": 4.700480365792417,
-      "cwd": 5.10594547390058,
-      "ancestor": 5.799092654460526,
-      "matching": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "specificity": 5.799092654460526,
-      "selection": 5.10594547390058
+      "routeproject": 4.790265669664771,
+      "cwd": 5.195730777772936,
+      "ancestor": 5.8888779583328805,
+      "matching": 4.502583597212991,
+      "and": 1.7780040941595696,
+      "specificity": 5.8888779583328805,
+      "selection": 5.195730777772936
     },
     "rule:project-router-route-prefix-hint": {
-      "routeproject": 4.700480365792417,
-      "prefix": 4.412798293340635,
-      "hint": 5.10594547390058,
-      "matching": 4.412798293340635,
-      "fallback": 2.663598438531376
+      "routeproject": 4.790265669664771,
+      "prefix": 4.279440045898781,
+      "hint": 5.195730777772936,
+      "matching": 4.502583597212991,
+      "fallback": 2.630781420311399
     },
     "rule:project-router-route-gen-fallback": {
-      "routeproject": 4.700480365792417,
-      "gen": 5.10594547390058,
-      "fallback": 2.663598438531376,
-      "and": 1.8672670217362002,
-      "lock": 5.799092654460526,
-      "contention": 5.799092654460526,
-      "handling": 4.007333185232471
+      "routeproject": 4.790265669664771,
+      "gen": 5.195730777772936,
+      "fallback": 2.630781420311399,
+      "and": 1.7780040941595696,
+      "lock": 5.8888779583328805,
+      "contention": 5.8888779583328805,
+      "handling": 3.9429678092775675
     },
     "rule:stop-intent-extractor-validation": {
-      "stop": 5.10594547390058,
-      "intent": 5.10594547390058,
-      "extractor": 5.10594547390058,
-      "hook": 4.189654742026425,
-      "validation": 2.908720896564361,
-      "and": 1.8672670217362002,
-      "silent": 3.4965075614664802,
-      "fallback": 2.663598438531376,
-      "behavior": 4.412798293340635
+      "stop": 5.195730777772936,
+      "intent": 5.195730777772936,
+      "extractor": 5.195730777772936,
+      "hook": 3.9429678092775675,
+      "validation": 2.710824127984935,
+      "and": 1.7780040941595696,
+      "silent": 3.586292865338835,
+      "fallback": 2.630781420311399,
+      "behavior": 4.502583597212991
     },
     "rule:binary-resolution-fallback-chain": {
-      "binary": 4.189654742026425,
-      "resolution": 4.189654742026425,
-      "with": 2.540996116439044,
-      "npm": 5.10594547390058,
-      "prefix": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "path": 3.4965075614664802,
-      "fallback": 2.663598438531376
+      "binary": 4.279440045898781,
+      "resolution": 4.097118489104826,
+      "with": 2.521582128346407,
+      "npm": 5.195730777772936,
+      "prefix": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "path": 3.249820628717622,
+      "fallback": 2.630781420311399
     },
     "rule:path-trusted-check": {
-      "path": 3.4965075614664802,
-      "validation": 2.908720896564361,
-      "security": 5.10594547390058,
-      "guard": 2.8546536752940854,
-      "against": 5.10594547390058,
-      "traversal": 5.10594547390058
+      "path": 3.249820628717622,
+      "validation": 2.710824127984935,
+      "security": 5.195730777772936,
+      "guard": 2.9444389791664403,
+      "against": 5.195730777772936,
+      "traversal": 5.195730777772936
     },
     "rule:prompt-message-constraints": {
-      "message": 4.412798293340635,
-      "character": 5.10594547390058,
-      "and": 1.8672670217362002,
-      "count": 4.700480365792417,
-      "budgets": 5.799092654460526,
-      "for": 2.663598438531376,
-      "llm": 5.799092654460526,
-      "prompts": 5.10594547390058
+      "message": 4.502583597212991,
+      "character": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "count": 4.790265669664771,
+      "budgets": 5.8888779583328805,
+      "for": 2.556673448157677,
+      "llm": 5.195730777772936,
+      "prompts": 5.195730777772936
     },
     "rule:content-redaction-sentinel-patterns": {
-      "regex": 5.799092654460526,
-      "patterns": 5.10594547390058,
-      "for": 2.663598438531376,
-      "redacting": 5.799092654460526,
-      "sensitive": 5.799092654460526,
-      "data": 4.700480365792417,
-      "from": 3.4965075614664802,
-      "prompts": 5.10594547390058
+      "regex": 5.8888779583328805,
+      "patterns": 5.195730777772936,
+      "for": 2.556673448157677,
+      "redacting": 5.8888779583328805,
+      "sensitive": 5.8888779583328805,
+      "data": 4.502583597212991,
+      "from": 3.586292865338835,
+      "prompts": 5.195730777772936
     },
     "rule:field-level-sanitization": {
-      "sanitize": 5.799092654460526,
-      "individual": 5.799092654460526,
-      "task": 1.5224265354444706,
-      "fields": 3.71965111278069,
-      "title": 4.700480365792417,
-      "why": 5.799092654460526,
-      "spec": 4.700480365792417,
-      "file": 3.4011973816621555
+      "sanitize": 5.8888779583328805,
+      "individual": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "fields": 3.9429678092775675,
+      "title": 4.790265669664771,
+      "why": 5.8888779583328805,
+      "spec": 4.790265669664771,
+      "file": 3.4039713085448806
     },
     "rule:index-yaml-loading": {
-      "load": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "parse": 5.10594547390058,
-      "index": 3.8531825054052127,
-      "yaml": 5.10594547390058,
-      "task": 1.5224265354444706,
-      "metadata": 5.799092654460526,
-      "file": 3.4011973816621555
+      "load": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "parse": 5.195730777772936,
+      "index": 3.9429678092775675,
+      "yaml": 5.195730777772936,
+      "task": 1.545072536479197,
+      "metadata": 5.8888779583328805,
+      "file": 3.4039713085448806
     },
     "rule:gen-project-auto-initialization": {
-      "auto": 5.10594547390058,
-      "initialize": 5.799092654460526,
-      "gen": 5.10594547390058,
-      "global": 4.412798293340635,
-      "project": 3.3141860046725258,
-      "on": 3.234143296998989,
-      "first": 5.799092654460526,
-      "use": 5.799092654460526
+      "auto": 5.195730777772936,
+      "initialize": 5.8888779583328805,
+      "gen": 5.195730777772936,
+      "global": 4.502583597212991,
+      "project": 3.4039713085448806,
+      "on": 3.3239286008713442,
+      "first": 5.8888779583328805,
+      "use": 5.8888779583328805
     },
     "rule:manual-config-write-strategy": {
-      "atomic": 5.10594547390058,
-      "config": 3.1600353248452673,
-      "file": 3.4011973816621555,
-      "write": 4.189654742026425,
-      "via": 4.700480365792417,
-      "temp": 5.10594547390058,
-      "rename": 4.412798293340635
+      "atomic": 5.195730777772936,
+      "config": 3.249820628717622,
+      "file": 3.4039713085448806,
+      "write": 4.279440045898781,
+      "via": 4.790265669664771,
+      "temp": 5.195730777772936,
+      "rename": 4.502583597212991
     },
     "rule:aggregated-hint-computation": {
-      "compute": 5.799092654460526,
-      "aggregated": 5.799092654460526,
-      "routing": 5.799092654460526,
-      "hint": 5.10594547390058,
-      "from": 3.4965075614664802,
-      "config": 3.1600353248452673,
-      "and": 1.8672670217362002,
-      "state": 3.4965075614664802
+      "compute": 5.8888779583328805,
+      "aggregated": 5.8888779583328805,
+      "routing": 4.790265669664771,
+      "hint": 5.195730777772936,
+      "from": 3.586292865338835,
+      "config": 3.249820628717622,
+      "and": 1.7780040941595696,
+      "state": 3.586292865338835
     },
     "rule:resolve-agent-tasks-binary": {
-      "resolve": 5.10594547390058,
-      "agent": 4.189654742026425,
-      "tasks": 3.3141860046725258,
-      "executable": 5.799092654460526,
-      "with": 2.540996116439044,
-      "npm": 5.10594547390058,
-      "prefix": 4.412798293340635,
-      "fallback": 2.663598438531376
+      "resolve": 5.195730777772936,
+      "agent": 4.279440045898781,
+      "tasks": 3.4039713085448806,
+      "executable": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "npm": 5.195730777772936,
+      "prefix": 4.279440045898781,
+      "fallback": 2.630781420311399
     },
     "intent:phase-0-types-schema": {
-      "phase": 3.8531825054052127,
-      "types": 4.189654742026425,
-      "interfaces": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "schema": 3.6018680771243066,
-      "foundation": 5.799092654460526
+      "phase": 3.9429678092775675,
+      "types": 4.279440045898781,
+      "interfaces": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "schema": 3.586292865338835,
+      "foundation": 5.8888779583328805
     },
     "intent:phase-2a-passive-capture-hooks": {
-      "phase": 3.8531825054052127,
-      "2a": 5.799092654460526,
-      "passive": 4.412798293340635,
-      "capture": 4.189654742026425,
-      "hooks": 4.007333185232471
+      "phase": 3.9429678092775675,
+      "2a": 5.8888779583328805,
+      "passive": 4.502583597212991,
+      "capture": 3.586292865338835,
+      "hooks": 4.097118489104826
     },
     "intent:task-lifecycle-enforcement": {
-      "task": 1.5224265354444706,
-      "lifecycle": 4.412798293340635,
-      "enforcement": 4.412798293340635,
-      "implementation": 5.799092654460526,
-      "plan": 5.799092654460526
+      "task": 1.545072536479197,
+      "lifecycle": 4.502583597212991,
+      "enforcement": 4.502583597212991,
+      "implementation": 5.195730777772936,
+      "plan": 5.8888779583328805
     },
     "intent:phase-1-product-rename": {
-      "phase": 3.8531825054052127,
-      "product": 5.10594547390058,
-      "rename": 4.412798293340635,
-      "mcp": 3.8531825054052127,
-      "agent": 4.189654742026425,
-      "tasks": 3.3141860046725258
+      "phase": 3.9429678092775675,
+      "product": 5.195730777772936,
+      "rename": 4.502583597212991,
+      "mcp": 3.9429678092775675,
+      "agent": 4.279440045898781,
+      "tasks": 3.4039713085448806
     },
     "intent:phase-2-vite-bootstrap": {
-      "phase": 3.8531825054052127,
-      "bootstrap": 5.799092654460526,
-      "vite": 5.10594547390058,
-      "react": 4.412798293340635,
-      "tailwind": 5.10594547390058,
-      "ui": 4.007333185232471,
-      "subproject": 5.799092654460526
+      "phase": 3.9429678092775675,
+      "bootstrap": 5.8888779583328805,
+      "vite": 5.195730777772936,
+      "react": 4.279440045898781,
+      "tailwind": 5.195730777772936,
+      "ui": 4.097118489104826,
+      "subproject": 5.8888779583328805
     },
     "intent:phase-3-react-dashboard-lift": {
-      "phase": 3.8531825054052127,
-      "lift": 5.799092654460526,
-      "legacy": 4.412798293340635,
-      "dashboard": 5.10594547390058,
-      "into": 5.799092654460526,
-      "react": 4.412798293340635,
-      "components": 5.799092654460526
+      "phase": 3.9429678092775675,
+      "lift": 5.8888779583328805,
+      "legacy": 4.502583597212991,
+      "dashboard": 5.195730777772936,
+      "into": 5.8888779583328805,
+      "react": 4.279440045898781,
+      "components": 5.8888779583328805
     },
     "intent:phase-4-vite-cutover": {
-      "phase": 3.8531825054052127,
-      "wire": 5.799092654460526,
-      "serve": 4.700480365792417,
-      "ui": 4.007333185232471,
-      "and": 1.8672670217362002,
-      "root": 5.799092654460526,
-      "build": 4.189654742026425,
-      "to": 3.4011973816621555,
-      "vite": 5.10594547390058,
-      "output": 4.700480365792417
+      "phase": 3.9429678092775675,
+      "wire": 5.8888779583328805,
+      "serve": 4.790265669664771,
+      "ui": 4.097118489104826,
+      "and": 1.7780040941595696,
+      "root": 5.8888779583328805,
+      "build": 4.279440045898781,
+      "to": 3.4909826855345103,
+      "vite": 5.195730777772936,
+      "output": 4.790265669664771
     },
     "intent:phase-5-ci-cleanup": {
-      "phase": 3.8531825054052127,
-      "ci": 4.700480365792417,
-      "gitignore": 5.799092654460526,
-      "and": 1.8672670217362002,
-      "cleanup": 5.10594547390058
+      "phase": 3.9429678092775675,
+      "ci": 4.790265669664771,
+      "gitignore": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "cleanup": 5.195730777772936
     },
     "intent:git-inference-module": {
-      "git": 3.3141860046725258,
-      "inference": 5.10594547390058,
-      "module": 4.412798293340635,
-      "creation": 4.189654742026425
+      "git": 3.4039713085448806,
+      "inference": 5.195730777772936,
+      "module": 4.502583597212991,
+      "creation": 4.097118489104826
     },
     "intent:frontmatter-builder-module": {
-      "frontmatter": 4.189654742026425,
-      "builder": 5.799092654460526,
-      "module": 4.412798293340635,
-      "creation": 4.189654742026425
+      "frontmatter": 4.097118489104826,
+      "builder": 5.8888779583328805,
+      "module": 4.502583597212991,
+      "creation": 4.097118489104826
     },
     "intent:task-reconcile-legacy-tool": {
-      "legacy": 4.412798293340635,
-      "task": 1.5224265354444706,
-      "reconciliation": 4.189654742026425,
-      "tool": 4.412798293340635
+      "legacy": 4.502583597212991,
+      "task": 1.545072536479197,
+      "reconciliation": 4.279440045898781,
+      "tool": 4.502583597212991
     },
     "intent:config-global-write-path": {
-      "update": 4.412798293340635,
-      "config": 3.1600353248452673,
-      "init": 4.189654742026425,
-      "to": 3.4011973816621555,
-      "write": 4.189654742026425,
-      "global": 4.412798293340635
+      "update": 4.502583597212991,
+      "config": 3.249820628717622,
+      "init": 4.279440045898781,
+      "to": 3.4909826855345103,
+      "write": 4.279440045898781,
+      "global": 4.502583597212991
     },
     "intent:tailwind-dto-tech-debt": {
-      "tailwind": 5.10594547390058,
-      "v4": 5.799092654460526,
-      "compatibility": 5.10594547390058,
-      "dto": 5.799092654460526,
-      "type": 3.71965111278069,
-      "duplication": 5.799092654460526
+      "tailwind": 5.195730777772936,
+      "v4": 5.8888779583328805,
+      "compatibility": 5.195730777772936,
+      "dto": 5.8888779583328805,
+      "type": 3.809436416653045,
+      "duplication": 5.8888779583328805
     },
     "intent:tdd-guard-vitest-esm": {
-      "tdd": 4.700480365792417,
-      "guard": 2.8546536752940854,
-      "vitest": 4.412798293340635,
-      "esm": 5.10594547390058,
-      "export": 5.799092654460526,
-      "risk": 5.799092654460526
+      "tdd": 4.790265669664771,
+      "guard": 2.9444389791664403,
+      "vitest": 4.502583597212991,
+      "esm": 5.195730777772936,
+      "export": 5.8888779583328805,
+      "risk": 5.8888779583328805
     },
     "intent:install-hooks-global-mode-inconsistency": {
-      "install": 5.10594547390058,
-      "hooks": 4.007333185232471,
-      "global": 4.412798293340635,
-      "mode": 5.799092654460526,
-      "inconsistency": 5.799092654460526
+      "install": 5.195730777772936,
+      "hooks": 4.097118489104826,
+      "global": 4.502583597212991,
+      "mode": 5.8888779583328805,
+      "inconsistency": 5.8888779583328805
     },
     "intent:silent-error-suppression": {
-      "silent": 3.4965075614664802,
-      "error": 3.6018680771243066,
-      "suppression": 5.799092654460526,
-      "in": 2.580216829592325,
-      "catch": 5.799092654460526,
-      "blocks": 5.799092654460526,
-      "creates": 5.10594547390058,
-      "undiagnosed": 5.799092654460526,
-      "failures": 5.799092654460526
+      "silent": 3.586292865338835,
+      "error": 3.6916533809966614,
+      "suppression": 5.8888779583328805,
+      "in": 2.630781420311399,
+      "catch": 5.8888779583328805,
+      "blocks": 5.8888779583328805,
+      "creates": 5.195730777772936,
+      "undiagnosed": 5.8888779583328805,
+      "failures": 5.8888779583328805
     },
     "intent:code-duplication-signal-handlers": {
-      "duplicated": 5.799092654460526,
-      "shutdown": 5.799092654460526,
-      "logic": 5.799092654460526,
-      "across": 5.799092654460526,
-      "signal": 5.799092654460526,
-      "handler": 5.10594547390058,
-      "callbacks": 5.799092654460526
+      "duplicated": 5.8888779583328805,
+      "shutdown": 5.8888779583328805,
+      "logic": 4.502583597212991,
+      "across": 5.8888779583328805,
+      "signal": 5.8888779583328805,
+      "handler": 5.195730777772936,
+      "callbacks": 5.8888779583328805
     },
     "intent:unused-api-parameters": {
-      "unused": 5.799092654460526,
-      "parameters": 5.799092654460526,
-      "indicate": 5.799092654460526,
-      "incomplete": 5.799092654460526,
-      "or": 4.700480365792417,
-      "evolving": 5.799092654460526,
-      "api": 3.8531825054052127,
-      "design": 5.10594547390058
+      "unused": 5.8888779583328805,
+      "parameters": 5.8888779583328805,
+      "indicate": 5.8888779583328805,
+      "incomplete": 5.8888779583328805,
+      "or": 4.790265669664771,
+      "evolving": 5.8888779583328805,
+      "api": 2.89314568477889,
+      "design": 5.195730777772936
     },
     "intent:sqlite-schema-migration-limitation": {
-      "sqlite": 3.8531825054052127,
-      "cannot": 5.799092654460526,
-      "alter": 5.799092654460526,
-      "check": 4.700480365792417,
-      "constraints": 4.189654742026425,
-      "database": 5.10594547390058,
-      "rebuild": 4.412798293340635,
-      "required": 4.412798293340635,
-      "for": 2.663598438531376,
-      "constraint": 5.10594547390058,
-      "changes": 5.10594547390058
+      "sqlite": 3.9429678092775675,
+      "cannot": 5.8888779583328805,
+      "alter": 5.8888779583328805,
+      "check": 4.790265669664771,
+      "constraints": 4.279440045898781,
+      "database": 5.195730777772936,
+      "rebuild": 4.502583597212991,
+      "required": 4.502583597212991,
+      "for": 2.556673448157677,
+      "constraint": 5.195730777772936,
+      "changes": 5.195730777772936
     },
     "intent:schema-version-migration-strategy": {
-      "schema": 3.6018680771243066,
-      "version": 5.799092654460526,
-      "hardcoded": 3.091042453358316,
-      "constant": 5.10594547390058,
-      "affects": 5.799092654460526,
-      "migration": 4.412798293340635,
-      "and": 1.8672670217362002,
-      "backwards": 5.799092654460526,
-      "compatibility": 5.10594547390058
+      "schema": 3.586292865338835,
+      "version": 5.8888779583328805,
+      "hardcoded": 3.249820628717622,
+      "constant": 5.195730777772936,
+      "affects": 5.8888779583328805,
+      "migration": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "backwards": 5.8888779583328805,
+      "compatibility": 5.195730777772936
     },
     "intent:reconciliation-silent-skipping": {
-      "reconciliation": 4.189654742026425,
-      "silently": 5.799092654460526,
-      "skips": 5.799092654460526,
-      "corrupt": 5.10594547390058,
-      "files": 4.700480365792417,
-      "instead": 4.700480365792417,
-      "of": 3.8531825054052127,
-      "failing": 5.799092654460526,
-      "fast": 5.10594547390058
+      "reconciliation": 4.279440045898781,
+      "silently": 5.8888779583328805,
+      "skips": 5.8888779583328805,
+      "corrupt": 5.195730777772936,
+      "files": 4.790265669664771,
+      "instead": 4.790265669664771,
+      "of": 4.097118489104826,
+      "failing": 5.8888779583328805,
+      "fast": 5.195730777772936
     },
     "intent:agent-tasks": {
-      "agent": 4.189654742026425,
-      "tasks": 3.3141860046725258
+      "agent": 4.279440045898781,
+      "tasks": 3.4039713085448806
     },
     "component:cli-store-initialization": {
-      "cli": 4.189654742026425,
-      "store": 3.8531825054052127,
-      "initialization": 4.700480365792417,
-      "community": 5.799092654460526
+      "cli": 4.279440045898781,
+      "store": 3.9429678092775675,
+      "initialization": 4.502583597212991,
+      "community": 5.8888779583328805
     },
     "component:frontmatter-inference-pipeline": {
-      "frontmatter": 4.189654742026425,
-      "inference": 5.10594547390058,
-      "pipeline": 5.799092654460526
+      "frontmatter": 4.097118489104826,
+      "inference": 5.195730777772936,
+      "pipeline": 5.8888779583328805
     },
     "component:git-legacy-reconciliation": {
-      "git": 3.3141860046725258,
-      "based": 5.10594547390058,
-      "legacy": 4.412798293340635,
-      "reconciliation": 4.189654742026425
+      "git": 3.4039713085448806,
+      "based": 5.195730777772936,
+      "legacy": 4.502583597212991,
+      "reconciliation": 4.279440045898781
     },
     "component:markdown-reference-parsing": {
-      "markdown": 4.189654742026425,
-      "reference": 4.412798293340635,
-      "parsing": 4.700480365792417
+      "markdown": 4.279440045898781,
+      "reference": 4.502583597212991,
+      "parsing": 4.790265669664771
     },
     "component:milestone-reference-repository": {
-      "milestone": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "reference": 4.412798293340635,
-      "repository": 5.799092654460526
+      "milestone": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "reference": 4.502583597212991,
+      "repository": 5.8888779583328805
     },
     "component:sqlite-reconciliation-core": {
-      "sqlite": 3.8531825054052127,
-      "index": 3.8531825054052127,
-      "and": 1.8672670217362002,
-      "reconciliation": 4.189654742026425,
-      "core": 5.799092654460526
+      "sqlite": 3.9429678092775675,
+      "index": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "reconciliation": 4.279440045898781,
+      "core": 5.8888779583328805
     },
     "component:error-handling-registry": {
-      "error": 3.6018680771243066,
-      "handling": 4.007333185232471,
-      "and": 1.8672670217362002,
-      "store": 3.8531825054052127,
-      "registry": 5.799092654460526
+      "error": 3.6916533809966614,
+      "handling": 3.9429678092775675,
+      "and": 1.7780040941595696,
+      "store": 3.9429678092775675,
+      "registry": 5.8888779583328805
     },
     "component:task-store-query-hub": {
-      "task": 1.5224265354444706,
-      "store": 3.8531825054052127,
-      "query": 5.10594547390058,
-      "hub": 3.4011973816621555
+      "task": 1.545072536479197,
+      "store": 3.9429678092775675,
+      "query": 5.195730777772936,
+      "hub": 3.4909826855345103
     },
     "component:task-update-validation": {
-      "task": 1.5224265354444706,
-      "update": 4.412798293340635,
-      "validation": 2.908720896564361
+      "task": 1.545072536479197,
+      "update": 4.502583597212991,
+      "validation": 2.710824127984935
     },
     "component:ui-server-api-integration": {
-      "ui": 4.007333185232471,
-      "server": 4.700480365792417,
-      "and": 1.8672670217362002,
-      "api": 3.8531825054052127,
-      "integration": 5.799092654460526
+      "ui": 4.097118489104826,
+      "server": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "api": 2.89314568477889,
+      "integration": 5.8888779583328805
     },
     "component:create-task-hub": {
-      "createtask": 5.10594547390058,
-      "hub": 3.4011973816621555,
-      "node": 4.700480365792417
+      "createtask": 5.195730777772936,
+      "hub": 3.4909826855345103,
+      "node": 4.790265669664771
     },
     "component:get-task-hub": {
-      "gettask": 5.10594547390058,
-      "hub": 3.4011973816621555,
-      "node": 4.700480365792417
+      "gettask": 5.195730777772936,
+      "hub": 3.4909826855345103,
+      "node": 4.790265669664771
     },
     "component:markdown-store-hub": {
-      "markdownstore": 4.189654742026425,
-      "hub": 3.4011973816621555,
-      "class": 4.189654742026425
+      "markdownstore": 4.097118489104826,
+      "hub": 3.4909826855345103,
+      "class": 4.279440045898781
     },
     "component:mcp-tasks-error-hub": {
-      "mcptaskserror": 5.10594547390058,
-      "hub": 3.4011973816621555,
-      "class": 4.189654742026425
+      "mcptaskserror": 5.195730777772936,
+      "hub": 3.4909826855345103,
+      "class": 4.279440045898781
     },
     "component:reconciler-hub": {
-      "reconciler": 4.700480365792417,
-      "hub": 3.4011973816621555,
-      "class": 4.189654742026425
+      "reconciler": 4.790265669664771,
+      "hub": 3.4909826855345103,
+      "class": 4.279440045898781
     },
     "component:sqlite-index-hub": {
-      "sqliteindex": 3.1600353248452673,
-      "hub": 3.4011973816621555,
-      "class": 4.189654742026425
+      "sqliteindex": 3.055664614276665,
+      "hub": 3.4909826855345103,
+      "class": 4.279440045898781
     },
     "component:start-ui-server-hub": {
-      "startuiserver": 5.799092654460526,
-      "hub": 3.4011973816621555,
-      "function": 4.412798293340635
+      "startuiserver": 5.8888779583328805,
+      "hub": 3.4909826855345103,
+      "function": 4.502583597212991
     },
     "component:task-store-hub": {
-      "taskstore": 4.007333185232471,
-      "hub": 3.4011973816621555,
-      "class": 4.189654742026425
+      "taskstore": 4.097118489104826,
+      "hub": 3.4909826855345103,
+      "class": 4.279440045898781
     },
     "component:update-task-hub": {
-      "updatetask": 5.10594547390058,
-      "hub": 3.4011973816621555,
-      "function": 4.412798293340635
+      "updatetask": 5.195730777772936,
+      "hub": 3.4909826855345103,
+      "function": 4.502583597212991
     },
     "component:validate-hub": {
-      "validate": 2.7545702167371027,
-      "hub": 3.4011973816621555,
-      "function": 4.412798293340635
+      "validate": 2.844355520609458,
+      "hub": 3.4909826855345103,
+      "function": 4.502583597212991
     },
     "component:documentation-and-planning": {
-      "documentation": 5.10594547390058,
-      "planning": 5.10594547390058,
-      "system": 5.10594547390058
+      "documentation": 5.195730777772936,
+      "planning": 5.195730777772936,
+      "system": 5.195730777772936
     },
     "component:domain-types-and-schemas": {
-      "domain": 4.700480365792417,
-      "types": 4.189654742026425,
-      "and": 1.8672670217362002,
-      "schemas": 5.10594547390058
+      "domain": 4.790265669664771,
+      "types": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "schemas": 5.195730777772936
     },
     "component:domain-types-schemas": {
-      "domain": 4.700480365792417,
-      "types": 4.189654742026425,
-      "schemas": 5.10594547390058
+      "domain": 4.790265669664771,
+      "types": 4.279440045898781,
+      "schemas": 5.195730777772936
     },
     "component:persistence-storage": {
-      "persistence": 5.799092654460526,
-      "storage": 4.412798293340635
+      "persistence": 4.790265669664771,
+      "storage": 4.279440045898781
     },
     "component:services-utilities": {
-      "services": 5.799092654460526,
-      "utilities": 5.799092654460526
+      "services": 5.8888779583328805,
+      "utilities": 5.8888779583328805
     },
     "component:api-tools-handlers": {
-      "api": 3.8531825054052127,
-      "tools": 5.10594547390058,
-      "handlers": 5.799092654460526
+      "api": 2.89314568477889,
+      "tools": 5.195730777772936,
+      "handlers": 5.8888779583328805
     },
     "component:application-entry-points": {
-      "application": 5.799092654460526,
-      "entry": 5.799092654460526,
-      "points": 5.799092654460526
+      "application": 5.8888779583328805,
+      "entry": 5.8888779583328805,
+      "points": 5.8888779583328805
     },
     "component:user-interface-react": {
-      "user": 5.799092654460526,
-      "interface": 5.799092654460526,
-      "react": 4.412798293340635
+      "user": 5.8888779583328805,
+      "interface": 5.8888779583328805,
+      "react": 4.279440045898781
     },
     "component:git-hooks-automation": {
-      "git": 3.3141860046725258,
-      "hooks": 4.007333185232471,
-      "automation": 4.700480365792417
+      "git": 3.4039713085448806,
+      "hooks": 4.097118489104826,
+      "automation": 4.790265669664771
     },
     "component:build-config-ci": {
-      "build": 4.189654742026425,
-      "config": 3.1600353248452673,
-      "ci": 4.700480365792417
+      "build": 4.279440045898781,
+      "config": 3.249820628717622,
+      "ci": 4.790265669664771
     },
     "component:testing-fixtures": {
-      "testing": 4.700480365792417,
-      "fixtures": 5.799092654460526
+      "testing": 4.790265669664771,
+      "fixtures": 5.8888779583328805
     },
     "component:documentation-planning": {
-      "documentation": 5.10594547390058,
-      "planning": 5.10594547390058
+      "documentation": 5.195730777772936,
+      "planning": 5.195730777772936
     },
     "component:key-patterns": {
-      "key": 4.700480365792417,
-      "patterns": 5.10594547390058
+      "key": 4.790265669664771,
+      "patterns": 5.195730777772936
     },
     "change:defer-reconcile-background": {
-      "fix": 5.799092654460526,
-      "defer": 5.799092654460526,
-      "reconcile": 4.700480365792417,
-      "to": 3.4011973816621555,
-      "background": 5.799092654460526,
-      "with": 2.540996116439044,
-      "per": 5.799092654460526,
-      "project": 3.3141860046725258,
-      "setimmediate": 5.799092654460526,
-      "chunking": 5.799092654460526
+      "fix": 5.8888779583328805,
+      "defer": 5.8888779583328805,
+      "reconcile": 4.790265669664771,
+      "to": 3.4909826855345103,
+      "background": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "per": 5.8888779583328805,
+      "project": 3.4039713085448806,
+      "setimmediate": 5.8888779583328805,
+      "chunking": 5.8888779583328805
     },
     "rule:stop-intent-extractor-hook-validation": {
-      "stop": 5.10594547390058,
-      "intent": 5.10594547390058,
-      "extractor": 5.10594547390058,
-      "hook": 4.189654742026425,
-      "validation": 2.908720896564361,
-      "and": 1.8672670217362002,
-      "silent": 3.4965075614664802,
-      "fallback": 2.663598438531376,
-      "behavior": 4.412798293340635
+      "stop": 5.195730777772936,
+      "intent": 5.195730777772936,
+      "extractor": 5.195730777772936,
+      "hook": 3.9429678092775675,
+      "validation": 2.710824127984935,
+      "and": 1.7780040941595696,
+      "silent": 3.586292865338835,
+      "fallback": 2.630781420311399,
+      "behavior": 4.502583597212991
+    },
+    "rule:task-schema-area-scheduled-fields": {
+      "task": 1.545072536479197,
+      "schema": 3.586292865338835,
+      "json": 3.9429678092775675,
+      "area": 4.279440045898781,
+      "scheduled": 4.502583597212991,
+      "for": 2.556673448157677,
+      "field": 3.9429678092775675,
+      "definitions": 5.195730777772936
+    },
+    "rule:resolve-area-precedence-fallback": {
+      "resolvearea": 5.8888779583328805,
+      "fallback": 2.630781420311399,
+      "precedence": 5.8888779583328805,
+      "with": 2.521582128346407,
+      "project": 3.4039713085448806,
+      "mapping": 5.195730777772936
+    },
+    "rule:markdown-store-area-scheduled-roundtrip": {
+      "markdownstore": 4.097118489104826,
+      "area": 4.279440045898781,
+      "scheduled": 4.502583597212991,
+      "for": 2.556673448157677,
+      "frontmatter": 4.097118489104826,
+      "persistence": 4.790265669664771
+    },
+    "rule:sqlite-index-area-scheduled-columns": {
+      "sqliteindex": 3.055664614276665,
+      "area": 4.279440045898781,
+      "scheduled": 4.502583597212991,
+      "for": 2.556673448157677,
+      "column": 5.8888779583328805,
+      "storage": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "migration": 4.279440045898781
+    },
+    "rule:task-factory-scheduled-for-default": {
+      "taskfactory": 4.279440045898781,
+      "scheduled": 4.502583597212991,
+      "for": 2.556673448157677,
+      "null": 4.790265669664771,
+      "initialization": 4.502583597212991,
+      "and": 1.7780040941595696,
+      "area": 4.279440045898781,
+      "resolution": 4.097118489104826
+    },
+    "rule:quick-capture-endpoint-validation": {
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "capture": 3.586292865338835,
+      "quick": 4.790265669664771,
+      "input": 5.8888779583328805,
+      "validation": 2.710824127984935,
+      "and": 1.7780040941595696,
+      "response": 5.8888779583328805
+    },
+    "rule:quick-capture-prefix-extraction": {
+      "quick": 4.790265669664771,
+      "capture": 3.586292865338835,
+      "prefix": 4.279440045898781,
+      "pattern": 5.8888779583328805,
+      "extraction": 5.195730777772936,
+      "for": 2.556673448157677,
+      "routing": 4.790265669664771
+    },
+    "rule:quick-capture-llm-fallback": {
+      "quick": 4.790265669664771,
+      "capture": 3.586292865338835,
+      "llm": 5.195730777772936,
+      "spawn": 5.8888779583328805,
+      "fallback": 2.630781420311399,
+      "and": 1.7780040941595696,
+      "prompt": 5.8888779583328805,
+      "building": 5.8888779583328805
+    },
+    "rule:capture-overlay-component-structure": {
+      "captureoverlay": 5.8888779583328805,
+      "react": 4.279440045898781,
+      "component": 4.279440045898781,
+      "and": 1.7780040941595696,
+      "hook": 3.9429678092775675,
+      "structure": 5.195730777772936
+    },
+    "rule:sqlite-index-get-tasks-by-scheduled-date": {
+      "sqliteindex": 3.055664614276665,
+      "gettasksbyscheduleddate": 5.8888779583328805,
+      "date": 4.790265669664771,
+      "filtered": 5.195730777772936,
+      "task": 1.545072536479197,
+      "retrieval": 5.8888779583328805
+    },
+    "rule:sqlite-index-get-candidates": {
+      "sqliteindex": 3.055664614276665,
+      "getcandidates": 5.8888779583328805,
+      "unscheduled": 5.8888779583328805,
+      "task": 1.545072536479197,
+      "filtering": 4.279440045898781
+    },
+    "rule:today-view-capacity-calculation": {
+      "capacity": 4.790265669664771,
+      "calculation": 5.8888779583328805,
+      "estimate": 5.8888779583328805,
+      "hours": 5.8888779583328805,
+      "aggregation": 5.195730777772936,
+      "logic": 4.502583597212991
+    },
+    "rule:today-endpoint-target-validation": {
+      "target": 5.8888779583328805,
+      "capacity": 4.790265669664771,
+      "parameter": 5.8888779583328805,
+      "bounds": 5.8888779583328805,
+      "validation": 2.710824127984935,
+      "minutes": 5.8888779583328805
+    },
+    "rule:task-schedule-endpoint-validation": {
+      "task": 1.545072536479197,
+      "schedule": 5.8888779583328805,
+      "endpoint": 3.809436416653045,
+      "date": 4.790265669664771,
+      "validation": 2.710824127984935
+    },
+    "rule:today-view-component-structure": {
+      "todayview": 4.790265669664771,
+      "component": 4.279440045898781,
+      "structure": 5.195730777772936,
+      "and": 1.7780040941595696,
+      "rendering": 5.8888779583328805
+    },
+    "rule:today-view-capacity-gauge-colors": {
+      "todayview": 4.790265669664771,
+      "capacity": 4.790265669664771,
+      "gauge": 5.8888779583328805,
+      "conditional": 4.502583597212991,
+      "color": 5.8888779583328805,
+      "logic": 4.502583597212991
+    },
+    "rule:use-today-hook-structure": {
+      "usetoday": 5.8888779583328805,
+      "hook": 3.9429678092775675,
+      "implementation": 5.195730777772936,
+      "with": 2.521582128346407,
+      "polling": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "helpers": 5.8888779583328805
+    },
+    "rule:api-today-endpoints": {
+      "api": 2.89314568477889,
+      "ts": 5.8888779583328805,
+      "today": 5.195730777772936,
+      "endpoint": 3.809436416653045,
+      "client": 5.8888779583328805,
+      "functions": 5.8888779583328805
+    },
+    "rule:app-today-view-integration": {
+      "app": 5.8888779583328805,
+      "tsx": 5.195730777772936,
+      "todayview": 4.790265669664771,
+      "tab": 4.790265669664771,
+      "routing": 4.790265669664771,
+      "and": 1.7780040941595696,
+      "default": 3.809436416653045
+    },
+    "rule:header-today-tab-structure": {
+      "header": 5.195730777772936,
+      "tsx": 5.195730777772936,
+      "today": 5.195730777772936,
+      "tab": 4.790265669664771,
+      "in": 2.630781420311399,
+      "navigation": 5.195730777772936,
+      "order": 5.8888779583328805
+    },
+    "rule:braindump-endpoint-validation": {
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "capture": 3.586292865338835,
+      "braindump": 5.195730777772936,
+      "endpoint": 3.809436416653045,
+      "validation": 2.710824127984935
+    },
+    "rule:braindump-json-extraction-and-area-fallback": {
+      "braindump": 5.195730777772936,
+      "json": 3.9429678092775675,
+      "extraction": 5.195730777772936,
+      "logic": 4.502583597212991,
+      "with": 2.521582128346407,
+      "area": 4.279440045898781,
+      "field": 3.9429678092775675,
+      "fallback": 2.630781420311399
+    },
+    "rule:braindump-commit-endpoint-task-creation": {
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "capture": 3.586292865338835,
+      "commit": 4.502583597212991,
+      "endpoint": 3.809436416653045,
+      "task": 1.545072536479197,
+      "creation": 4.097118489104826
+    },
+    "rule:acr-dispatch-endpoint-validation": {
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "acr": 4.790265669664771,
+      "dispatch": 5.8888779583328805,
+      "endpoint": 3.809436416653045,
+      "validation": 2.710824127984935,
+      "and": 1.7780040941595696,
+      "offline": 4.790265669664771,
+      "handling": 3.9429678092775675
+    },
+    "rule:artifacts-endpoint-list": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "artifacts": 4.790265669664771,
+      "endpoint": 3.809436416653045
+    },
+    "rule:artifacts-endpoint-processing": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "artifacts": 4.790265669664771,
+      "data": 4.502583597212991,
+      "processing": 5.8888779583328805,
+      "and": 1.7780040941595696,
+      "sorting": 5.8888779583328805
+    },
+    "rule:artifacts-opened-endpoint": {
+      "post": 3.809436416653045,
+      "api": 2.89314568477889,
+      "artifacts": 4.790265669664771,
+      "opened": 5.8888779583328805,
+      "endpoint": 3.809436416653045
+    },
+    "rule:artifacts-jsonl-append": {
+      "artifact": 5.195730777772936,
+      "jsonl": 5.8888779583328805,
+      "file": 3.4039713085448806,
+      "persistence": 4.790265669664771
+    },
+    "rule:acr-status-endpoint-online-behavior": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "acr": 4.790265669664771,
+      "status": 3.809436416653045,
+      "online": 5.195730777772936,
+      "path": 3.249820628717622
+    },
+    "rule:acr-status-endpoint-offline-behavior": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "acr": 4.790265669664771,
+      "status": 3.809436416653045,
+      "offline": 4.790265669664771,
+      "path": 3.249820628717622
+    },
+    "rule:brain-search-endpoint-online": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "brain": 4.790265669664771,
+      "search": 4.097118489104826,
+      "online": 5.195730777772936,
+      "path": 3.249820628717622
+    },
+    "rule:brain-search-endpoint-offline": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "brain": 4.790265669664771,
+      "search": 4.097118489104826,
+      "offline": 4.790265669664771,
+      "path": 3.249820628717622
+    },
+    "rule:brain-search-endpoint-validation": {
+      "get": 3.6916533809966614,
+      "api": 2.89314568477889,
+      "brain": 4.790265669664771,
+      "search": 4.097118489104826,
+      "validation": 2.710824127984935
     }
   },
   "fingerprints": {
@@ -3267,10 +3579,8 @@
     "pattern:unknown-enum-fallback-masking": "714685dd330a603f",
     "pattern:architectural-object-shape-invariants": "0ff5b7cc8ce034c1",
     "pattern:optional-chaining-with-empty-fallback": "1cc5645761a56467",
-    "pattern:conditional-rendering-optional-dates": "239a37e38af2510c",
     "pattern:unknown-error-type-masking": "c86b601efcbf8e80",
     "pattern:undefined-masking-in-hooks": "dac42774b85fe5da",
-    "pattern:hardcoded-default-project-string": "53a5f19d13067668",
     "pattern:platform-aware-env-deletion": "3df808b852f7a4fb",
     "pattern:test-environment-restoration-guards": "853520a842b851de",
     "pattern:dependency-array-validation-guards": "87f0908222e12386",
@@ -3552,6 +3862,39 @@
     "component:documentation-planning": "3acf77723525178d",
     "component:key-patterns": "eb753532ac254b1c",
     "change:defer-reconcile-background": "464f9de96138ca72",
-    "rule:stop-intent-extractor-hook-validation": "5922cca3c452fa2f"
+    "rule:stop-intent-extractor-hook-validation": "5922cca3c452fa2f",
+    "rule:task-schema-area-scheduled-fields": "64748a75047761c6",
+    "rule:resolve-area-precedence-fallback": "864e5407533c3a9d",
+    "rule:markdown-store-area-scheduled-roundtrip": "cb7f7fec1ff3a339",
+    "rule:sqlite-index-area-scheduled-columns": "aabf4ef0d2ea9e97",
+    "rule:task-factory-scheduled-for-default": "94dd20f88e36f2ef",
+    "rule:quick-capture-endpoint-validation": "47ece3bbe304d52a",
+    "rule:quick-capture-prefix-extraction": "ba9593480a91912a",
+    "rule:quick-capture-llm-fallback": "3349c193b0247a9c",
+    "rule:capture-overlay-component-structure": "f564e8856397e80b",
+    "rule:sqlite-index-get-tasks-by-scheduled-date": "d0b7118d6c5938a3",
+    "rule:sqlite-index-get-candidates": "e0386b44f86e95fc",
+    "rule:today-view-capacity-calculation": "b196735407754786",
+    "rule:today-endpoint-target-validation": "102f881b2da28fb7",
+    "rule:task-schedule-endpoint-validation": "7565bca089568b88",
+    "rule:today-view-component-structure": "59438957350fed61",
+    "rule:today-view-capacity-gauge-colors": "ee21c19c716f2bab",
+    "rule:use-today-hook-structure": "6d95455bc5c4ef24",
+    "rule:api-today-endpoints": "015a58cadfd7992b",
+    "rule:app-today-view-integration": "9491a3e734576a8b",
+    "rule:header-today-tab-structure": "2cf3b9b5d6c4e2b8",
+    "rule:braindump-endpoint-validation": "4031b3b049455782",
+    "rule:braindump-json-extraction-and-area-fallback": "04458d355b34f0b4",
+    "rule:braindump-commit-endpoint-task-creation": "9ba36d5803cbc014",
+    "rule:acr-dispatch-endpoint-validation": "37b81d43ca2e1ffe",
+    "rule:artifacts-endpoint-list": "2faf9091ad9f43fa",
+    "rule:artifacts-endpoint-processing": "509585156cef7900",
+    "rule:artifacts-opened-endpoint": "93965636baf59ed3",
+    "rule:artifacts-jsonl-append": "23f022ecde77b0e3",
+    "rule:acr-status-endpoint-online-behavior": "2ed49ba2b5b47d5b",
+    "rule:acr-status-endpoint-offline-behavior": "e56a82a16397f55e",
+    "rule:brain-search-endpoint-online": "6281039c0b9a912f",
+    "rule:brain-search-endpoint-offline": "ead6495fad767427",
+    "rule:brain-search-endpoint-validation": "80df0072286dfaa1"
   }
 }

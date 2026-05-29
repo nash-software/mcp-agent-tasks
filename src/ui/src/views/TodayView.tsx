@@ -1,217 +1,358 @@
-import React from 'react'
+/**
+ * TodayView — rebuilt for P1-03.
+ *
+ * Layout: HeroTask → CapacityGauge → committed list → collapsible candidate queue
+ *
+ * Selection state is owned by App (P1-02). TodayView receives selectedTaskId + onSelectTask.
+ * Keyboard actions (J/K, D, P, T) are dispatched by useGlobalKeyboard in App.
+ * Filter forward-compat: hero + capacity never filtered; committed + candidates can be narrowed.
+ */
+import React, { useState, useEffect, useCallback } from 'react'
 import { useToday } from '../hooks/useToday'
-import { LiveFeedSection } from '../components/LiveFeedSection'
-import type { Task, TaskArea } from '../types'
+import { HeroTask } from '../components/HeroTask'
+import { CapacityGauge } from '../components/CapacityGauge'
+import { TaskCard } from '../components/TaskCard'
+import { AreaChip } from '../components/atoms'
+import { useQuery } from '@tanstack/react-query'
+import { fetchTasks } from '../api'
+import type { Task, TaskArea, TaskPriority } from '../types'
+import { PRI_RANK, localToday } from '../lib/format'
 
-const AREA_COLORS: Record<TaskArea, string> = {
-  client:    'bg-violet-900 text-violet-300',
-  personal:  'bg-emerald-900 text-emerald-300',
-  outsource: 'bg-amber-900 text-amber-300',
-  internal:  'bg-slate-700 text-slate-300',
+// ── Constants ────────────────────────────────────────────────────────────
+
+const DEFAULT_TARGET_MINUTES = 6 * 60 // 6 hours
+
+const AREA_ORDER: TaskArea[] = ['client', 'personal', 'internal', 'outsource']
+
+function readTargetMinutes(): number {
+  const raw = localStorage.getItem('lifeos-target')
+  if (!raw) return DEFAULT_TARGET_MINUTES
+  const v = parseInt(raw, 10)
+  return !isNaN(v) && v > 0 ? v : DEFAULT_TARGET_MINUTES
 }
 
-function formatMinutes(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = Math.round(minutes % 60)
-  if (h === 0) return `${m}m`
-  if (m === 0) return `${h}h`
-  return `${h}h ${m}m`
-}
+// ── Helpers ──────────────────────────────────────────────────────────────
 
-function AreaBadge({ area }: { area: TaskArea | undefined }): React.JSX.Element {
-  const resolved: TaskArea = area ?? 'internal'
-  return (
-    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${AREA_COLORS[resolved]}`}>
-      {resolved}
-    </span>
-  )
-}
-
-function CapacityGauge({ committedMinutes, targetMinutes }: { committedMinutes: number; targetMinutes: number }): React.JSX.Element {
-  const pct = targetMinutes > 0 ? committedMinutes / targetMinutes : 0
-  const clampedPct = Math.min(pct, 1)
-
-  let barColor: string
-  if (pct > 1) {
-    barColor = 'bg-red-500'
-  } else if (pct >= 0.8) {
-    barColor = 'bg-amber-500'
-  } else {
-    barColor = 'bg-emerald-500'
-  }
-
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-slate-400">
-        <span>Capacity</span>
-        <span>{formatMinutes(committedMinutes)} / {formatMinutes(targetMinutes)}</span>
-      </div>
-      <div className="h-2 bg-slate-700 rounded overflow-hidden">
-        <div
-          className={`h-full rounded transition-all ${barColor}`}
-          style={{ width: `${Math.round(clampedPct * 100)}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-interface TaskCardProps {
-  task: Task
-  action: React.ReactNode
-}
-
-function TaskCard({ task, action }: TaskCardProps): React.JSX.Element {
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 rounded bg-slate-800 hover:bg-surface-2">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-mono text-slate-500">{task.project ?? ''}-</span>
-          <span className="text-sm text-slate-100 truncate">{task.title}</span>
-        </div>
-        <div className="flex items-center gap-2 mt-1">
-          <AreaBadge area={task.area} />
-          {task.project && (
-            <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-900 text-indigo-300 font-mono">
-              {task.project}
-            </span>
-          )}
-        </div>
-      </div>
-      {action}
-    </div>
-  )
+function sortCommitted(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    // Done tasks sink to the bottom
+    const doneDiff = (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0)
+    if (doneDiff !== 0) return doneDiff
+    return PRI_RANK[a.priority] - PRI_RANK[b.priority]
+  })
 }
 
 function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
   const map = new Map<TaskArea, Task[]>()
-  for (const task of tasks) {
-    const area: TaskArea = task.area ?? 'internal'
-    const group = map.get(area)
-    if (group) {
-      group.push(task)
-    } else {
-      map.set(area, [task])
+  for (const area of AREA_ORDER) {
+    const group = tasks.filter(t => (t.area ?? 'internal') === area)
+    if (group.length > 0) {
+      map.set(area, group.sort((a, b) => PRI_RANK[a.priority] - PRI_RANK[b.priority]))
     }
   }
   return map
 }
 
-interface Props {
-  targetMinutes?: number
+// ── Props ────────────────────────────────────────────────────────────────
+
+interface TodayViewProps {
+  selectedTaskId?: string | null
+  onSelectTask?: (id: string | null) => void
+  onOpenDetail?: (task: Task) => void
+  onVisibleIdsChange?: (ids: string[]) => void
 }
 
-export function TodayView({ targetMinutes }: Props): React.JSX.Element {
-  const { data, isLoading, error, scheduleForToday, removeFromToday } = useToday(targetMinutes)
+// ── Component ────────────────────────────────────────────────────────────
+
+export function TodayView({
+  selectedTaskId,
+  onSelectTask,
+  onOpenDetail,
+  onVisibleIdsChange,
+}: TodayViewProps): React.JSX.Element {
+  const [targetMinutes, setTargetMinutes] = useState<number>(readTargetMinutes)
+  const [candidatesOpen, setCandidatesOpen] = useState(true)
+  const [needsCallOpen, setNeedsCallOpen] = useState(false)
+
+  const {
+    data,
+    isLoading,
+    error,
+    scheduleForToday,
+    removeFromToday,
+    markDone,
+    pauseTask,
+    blockTask,
+    cyclePriority,
+  } = useToday(targetMinutes)
+
+  // "Needs your call" — draft tasks (P2-04b stub)
+  const { data: draftTasks = [] } = useQuery({
+    queryKey: ['tasks', 'draft'],
+    queryFn: () => fetchTasks({ status: 'draft' }),
+    staleTime: 60000,
+  })
+
+  const today = localToday()
+
+  // ── Derived lists (filtering-ready structure) ─────────────────────────
+
+  const committed = data?.committed ?? []
+  const candidates = data?.candidates ?? []
+  const capacity = data?.capacity ?? { committedMinutes: 0, targetMinutes }
+
+  // Hero: the first in_progress task (defensive: log warning if multiple)
+  const inProgressTasks = committed.filter(t => t.status === 'in_progress')
+  if (inProgressTasks.length > 1) {
+    console.warn('[TodayView] Multiple in_progress tasks — rendering highest-priority as hero')
+  }
+  const heroTask: Task | null = inProgressTasks[0] ?? null
+
+  // Committed list: all scheduled today excluding the hero and cancelled
+  const committedList = sortCommitted(
+    committed.filter(t => t.status !== 'in_progress' && t.status !== 'cancelled')
+  )
+
+  // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
+  const candidatesByArea = groupByArea(candidates)
+
+  // Flatten visible IDs for keyboard navigation (hero first, then committed, then candidates)
+  const visibleIds: string[] = [
+    ...(heroTask ? [heroTask.id] : []),
+    ...committedList.map(t => t.id),
+    ...candidates.map(t => t.id),
+  ]
+
+  // Notify App of current visible IDs whenever they change
+  useEffect(() => {
+    onVisibleIdsChange?.(visibleIds)
+  }, [visibleIds.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Target change handler ─────────────────────────────────────────────
+
+  const handleTargetChange = useCallback((newMinutes: number): void => {
+    setTargetMinutes(newMinutes)
+    localStorage.setItem('lifeos-target', String(newMinutes))
+  }, [])
+
+  // ── Hero action handlers ──────────────────────────────────────────────
+
+  const handleMarkDone = useCallback((task: Task): void => {
+    void markDone(task.id)
+  }, [markDone])
+
+  const handlePause = useCallback((task: Task): void => {
+    void pauseTask(task.id)
+  }, [pauseTask])
+
+  const handleBlock = useCallback((task: Task): void => {
+    const reason = window.prompt('Reason for blocking (optional):') ?? undefined
+    void blockTask(task.id, reason || undefined)
+  }, [blockTask])
+
+  const handleOpenDetail = useCallback((task: Task): void => {
+    onOpenDetail?.(task)
+  }, [onOpenDetail])
+
+  // ── Task row handlers ─────────────────────────────────────────────────
+
+  const handleCommit = useCallback((task: Task): void => {
+    void scheduleForToday(task.id)
+  }, [scheduleForToday])
+
+  const handleRemove = useCallback((task: Task): void => {
+    void removeFromToday(task.id)
+  }, [removeFromToday])
+
+  const handleCyclePriority = useCallback((task: Task): void => {
+    void cyclePriority(task.id, task.priority as TaskPriority)
+  }, [cyclePriority])
+
+  // ── Loading / error states ────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-48 text-slate-500 text-sm">
-        Loading today&apos;s tasks…
+      <div className="p-6 space-y-4 max-w-3xl mx-auto">
+        <div className="h-24 bg-surface-1 rounded-card animate-pulse" />
+        <div className="h-4 bg-surface-1 rounded animate-pulse w-1/2" />
+        <div className="space-y-1">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-10 bg-surface-1 rounded animate-pulse" />
+          ))}
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-48 text-red-400 text-sm">
+      <div className="flex items-center justify-center h-48 text-status-red text-sm">
         Failed to load: {error.message}
       </div>
     )
   }
 
-  if (!data) return <></>
-
-  const { committed, candidates, capacity } = data
-  const completedCount = committed.filter(t => t.status === 'done').length
-  const committedGroups = groupByArea(committed)
+  // ── Main render ───────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8">
-      {/* Header + stats */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-slate-100 text-xl font-semibold">Today</h2>
-          <span className="text-sm text-slate-400">
-            {completedCount} completed / {committed.length} committed
+    <div className="p-6 max-w-3xl mx-auto space-y-5">
+
+      {/* Hero */}
+      <HeroTask
+        task={heroTask}
+        onDone={handleMarkDone}
+        onPause={handlePause}
+        onBlock={handleBlock}
+        onOpenDetail={handleOpenDetail}
+      />
+
+      {/* Capacity gauge */}
+      <CapacityGauge
+        committedMinutes={capacity.committedMinutes}
+        targetMinutes={targetMinutes}
+        onTargetChange={handleTargetChange}
+      />
+
+      {/* Committed list */}
+      <section>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs text-ink-muted uppercase tracking-wide font-medium">
+            Committed today
           </span>
+          <span className="text-xs text-ink-faint font-mono">{committedList.length}</span>
         </div>
-        <CapacityGauge
-          committedMinutes={capacity.committedMinutes}
-          targetMinutes={capacity.targetMinutes}
-        />
-      </div>
 
-      {/* Committed tasks */}
-      <section>
-        <h3 className="text-slate-300 text-sm font-semibold uppercase tracking-wide mb-3">
-          Committed
-        </h3>
-        {committed.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">
-            Nothing committed yet — add tasks from the queue below.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {Array.from(committedGroups.entries()).map(([area, tasks]) => (
-              <div key={area}>
-                <div className="flex items-center gap-2 mb-2">
-                  <AreaBadge area={area} />
-                  <span className="text-xs text-slate-500">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</span>
-                </div>
-                <div className="space-y-1 pl-1">
-                  {tasks.map(task => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      action={
-                        <button
-                          onClick={() => void removeFromToday(task.id)}
-                          className="text-xs px-2 py-1 rounded text-slate-400 hover:text-red-300 hover:bg-slate-700 transition-colors shrink-0"
-                          title="Remove from today"
-                        >
-                          Remove
-                        </button>
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+        {committedList.length === 0 ? (
+          <div
+            className="flex items-center justify-center rounded-card border border-dashed border-surface-3 text-ink-muted text-sm"
+            style={{ height: 40 }}
+          >
+            Nothing committed yet. Commit something from below.
           </div>
-        )}
-      </section>
-
-      {/* Candidate queue */}
-      <section>
-        <h3 className="text-slate-300 text-sm font-semibold uppercase tracking-wide mb-3">
-          Queue
-        </h3>
-        {candidates.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">All caught up!</p>
         ) : (
-          <div className="space-y-1">
-            {candidates.map(task => (
+          <div className="group">
+            {committedList.map(task => (
               <TaskCard
                 key={task.id}
                 task={task}
-                action={
-                  <button
-                    onClick={() => void scheduleForToday(task.id)}
-                    className="text-xs px-2 py-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-slate-700 transition-colors shrink-0"
-                    title="Commit to today"
-                  >
-                    + Today
-                  </button>
-                }
+                mode="committed"
+                selected={selectedTaskId === task.id}
+                onClick={() => onSelectTask?.(task.id)}
+                onMarkDone={() => handleMarkDone(task)}
+                onOpenDetail={() => handleOpenDetail(task)}
               />
             ))}
           </div>
         )}
       </section>
 
-      {/* Live Feed — ACR job status */}
-      <LiveFeedSection />
+      {/* Needs your call (P2-04b stub) — hidden when empty */}
+      {draftTasks.length > 0 && (
+        <section>
+          <button
+            className="flex items-center gap-2 w-full text-left py-1 text-xs text-ink-muted uppercase tracking-wide font-medium hover:text-ink-2 transition-colors"
+            onClick={() => setNeedsCallOpen(o => !o)}
+          >
+            <span className="text-xs">{needsCallOpen ? '▾' : '▸'}</span>
+            Needs your call
+            <span className="font-mono text-ink-faint">{draftTasks.length}</span>
+          </button>
+          {needsCallOpen && (
+            <div>
+              {draftTasks.map(task => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  mode="candidate"
+                  selected={selectedTaskId === task.id}
+                  onClick={() => onSelectTask?.(task.id)}
+                  onCommit={() => handleCommit(task)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Candidate queue */}
+      {candidates.length > 0 && (
+        <section>
+          <button
+            className="flex items-center gap-2 w-full text-left py-1 text-xs text-ink-muted uppercase tracking-wide font-medium hover:text-ink-2 transition-colors"
+            onClick={() => setCandidatesOpen(o => !o)}
+          >
+            <span className="text-xs">{candidatesOpen ? '▾' : '▸'}</span>
+            <span>{candidates.length} unscheduled</span>
+            <span className="text-ink-faint normal-case font-normal">commit to today</span>
+          </button>
+
+          {candidatesOpen && (
+            <div className="mt-1 space-y-3">
+              {Array.from(candidatesByArea.entries()).map(([area, tasks]) => (
+                <div key={area}>
+                  {/* Area group header */}
+                  <div className="flex items-center gap-2 px-3 py-1">
+                    <AreaChip area={area} />
+                    <span className="text-xs font-mono text-ink-faint">{tasks.length}</span>
+                  </div>
+                  {/* Candidate rows */}
+                  {tasks.map(task => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      mode="candidate"
+                      selected={selectedTaskId === task.id}
+                      onClick={() => onSelectTask?.(task.id)}
+                      onCommit={() => handleCommit(task)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
+}
+
+// ── Exported helpers for App keyboard wiring ─────────────────────────────
+
+/**
+ * Hook for App to call today-view mutations based on selectedTaskId.
+ * Returns handlers that App's keyboard dispatch can call directly.
+ */
+export function useTodayActions(
+  targetMinutes: number,
+  selectedTaskId: string | null,
+  getTaskById: (id: string) => Task | undefined,
+): {
+  markDone: () => void
+  cyclePriority: () => void
+  toggleCommitted: (today: string) => void
+} {
+  const { markDone, cyclePriority, scheduleForToday, removeFromToday } = useToday(targetMinutes)
+
+  return {
+    markDone: () => {
+      if (!selectedTaskId) return
+      void markDone(selectedTaskId)
+    },
+    cyclePriority: () => {
+      if (!selectedTaskId) return
+      const task = getTaskById(selectedTaskId)
+      if (!task) return
+      void cyclePriority(selectedTaskId, task.priority as TaskPriority)
+    },
+    toggleCommitted: (today: string) => {
+      if (!selectedTaskId) return
+      const task = getTaskById(selectedTaskId)
+      if (!task) return
+      if (task.scheduled_for === today) {
+        void removeFromToday(selectedTaskId)
+      } else {
+        void scheduleForToday(selectedTaskId)
+      }
+    },
+  }
 }

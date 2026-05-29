@@ -1,32 +1,203 @@
-import React from 'react'
+/**
+ * TaskCard — consolidated 40px row component.
+ *
+ * Replaces both the old bordered-card TaskCard and the private inline TaskCard in TodayView.
+ * Used by TodayView (committed + candidate rows) and adapted for BoardView.
+ *
+ * Props:
+ *   task        — the task to render
+ *   mode        — 'committed' (shows … menu) | 'candidate' (shows + button)
+ *   selected    — J/K selection highlight (shell owns the selection state)
+ *   onClick     — row click handler (open peek)
+ *   onCommit    — candidate + button handler
+ *   onMenu      — committed … menu handler
+ *   onMarkDone  — from … menu
+ *   onOpenDetail — from … menu / button
+ *   animClass   — optional animation class (e.g. "animate-fade-in") for commit animation
+ */
+import React, { useState } from 'react'
 import type { Task } from '../types'
-import { Badge } from './Badge'
+import { StatusDot, AreaDot, AreaChip, PrefixBadge } from './atoms'
+import { fmtEst } from '../lib/format'
 
-interface Props {
-  task: Task
-  onClick?: () => void
+// 2px left priority bar colours
+const PRIORITY_BAR: Record<string, string> = {
+  critical: 'bg-status-red',
+  high:     'bg-status-amber',
+  medium:   'bg-surface-3',
+  low:      '',  // no bar for low
 }
 
-export function TaskCard({ task, onClick }: Props): React.JSX.Element {
-  const labels = task.labels?.slice(0, 3) ?? []
+// Priority text tag — only for critical + high
+const PRIORITY_TAG: Record<string, string> = {
+  critical: 'text-status-red',
+  high:     'text-status-amber',
+}
+
+export interface TaskCardProps {
+  task: Task
+  mode?: 'committed' | 'candidate'
+  selected?: boolean
+  onClick?: () => void
+  onCommit?: (task: Task) => void
+  onMenu?: (task: Task, e: React.MouseEvent) => void
+  onMarkDone?: (task: Task) => void
+  onOpenDetail?: (task: Task) => void
+  animClass?: string
+}
+
+export function TaskCard({
+  task,
+  mode = 'committed',
+  selected = false,
+  onClick,
+  onCommit,
+  onMenu,
+  onMarkDone,
+  onOpenDetail,
+  animClass,
+}: TaskCardProps): React.JSX.Element {
+  const [hoverArea, setHoverArea] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const priorityBar = PRIORITY_BAR[task.priority] ?? ''
+  const priorityTag = PRIORITY_TAG[task.priority]
+  const estStr = fmtEst(task.estimate_hours)
+  const isDone = task.status === 'done'
+
+  const bgClass = selected
+    ? 'bg-surface-2 ring-1 ring-inset ring-accent/30'
+    : 'hover:bg-surface-1'
+
+  const handleMenuClick = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    if (onMenu) {
+      onMenu(task, e)
+    } else {
+      setMenuOpen(m => !m)
+    }
+  }
+
   return (
-    <div
-      className="bg-slate-800 border border-slate-700 rounded-lg p-3 space-y-2 cursor-pointer hover:border-slate-500 hover:bg-surface-2 transition-colors"
+    <div className={`relative flex items-center gap-2 px-3 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
+      style={{ height: 40, minHeight: 40 }}
       onClick={onClick}
+      data-task-id={task.id}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs text-slate-500 font-mono">{task.id}</span>
-        <Badge variant="priority" value={task.priority} />
-      </div>
-      <p className="text-sm text-slate-200 leading-snug">{task.title}</p>
-      <div className="flex flex-wrap gap-1">
-        <Badge variant="type" value={task.type} />
-        {labels.map(l => (
-          <span key={l} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-slate-700 text-slate-400">
-            {l}
+      {/* 2px priority bar — left edge */}
+      {priorityBar && (
+        <div className={`absolute left-0 top-0 bottom-0 w-0.5 rounded-l ${priorityBar}`} />
+      )}
+
+      {/* Status dot */}
+      <StatusDot status={task.status} />
+
+      {/* Title — 14px, truncate at ~60ch */}
+      <span
+        className="flex-1 min-w-0 text-sm text-ink truncate"
+        style={{ maxWidth: '60ch' }}
+        title={task.title}
+      >
+        {task.title}
+      </span>
+
+      {/* Right meta cluster */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Priority tag — only critical/high */}
+        {priorityTag && (
+          <span className={`text-xs font-medium ${priorityTag}`}>
+            {task.priority}
           </span>
-        ))}
+        )}
+
+        {/* Estimate */}
+        {estStr && (
+          <span className="text-xs text-ink-muted font-mono tabular-nums">
+            {estStr}
+          </span>
+        )}
+
+        {/* Area — dot normally, chip on hover */}
+        {task.area && (
+          <span
+            className="inline-flex items-center"
+            onMouseEnter={() => setHoverArea(true)}
+            onMouseLeave={() => setHoverArea(false)}
+          >
+            {hoverArea
+              ? <AreaChip area={task.area} />
+              : <AreaDot area={task.area} title={task.area} />
+            }
+          </span>
+        )}
+
+        {/* Prefix badge */}
+        {task.project && <PrefixBadge project={task.project} />}
+
+        {/* Action: + (candidate) or … menu (committed) */}
+        {mode === 'candidate' ? (
+          <button
+            className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors text-base leading-none"
+            title="Commit to today (T)"
+            onClick={(e) => { e.stopPropagation(); onCommit?.(task) }}
+          >
+            +
+          </button>
+        ) : (
+          <div className="relative">
+            <button
+              className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100"
+              title="Actions"
+              onClick={handleMenuClick}
+              style={{ opacity: menuOpen ? 1 : undefined }}
+            >
+              <span className="text-xs leading-none">•••</span>
+            </button>
+            {menuOpen && !onMenu && (
+              <div
+                className="absolute right-0 top-7 z-50 w-44 bg-surface-1 border border-surface-3 rounded-card shadow-lg py-1"
+                onClick={e => e.stopPropagation()}
+              >
+                <MenuButton
+                  label="Mark done"
+                  onClick={() => { setMenuOpen(false); onMarkDone?.(task) }}
+                />
+                <MenuButton
+                  label="Open detail"
+                  onClick={() => { setMenuOpen(false); onOpenDetail?.(task) }}
+                />
+                {/* P2 stubs — present but disabled */}
+                <MenuButton label="Sign off to Hermes" disabled />
+                <MenuButton label="Dispatch to ACR" disabled />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
+  )
+}
+
+function MenuButton({
+  label,
+  onClick,
+  disabled = false,
+}: {
+  label: string
+  onClick?: () => void
+  disabled?: boolean
+}): React.JSX.Element {
+  return (
+    <button
+      className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
+        disabled
+          ? 'text-ink-faint cursor-not-allowed'
+          : 'text-ink-2 hover:bg-surface-2 hover:text-ink'
+      }`}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+    >
+      {label}
+    </button>
   )
 }

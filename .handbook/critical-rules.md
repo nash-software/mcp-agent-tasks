@@ -85,3 +85,69 @@
 ## [HIGH] Resolve agent-tasks executable with npm prefix fallback
 
 ## [HIGH] stop-intent-extractor hook validation and silent fallback behavior
+
+## [HIGH] task.schema.json — area + scheduled_for field definitions
+
+## [HIGH] resolveArea — fallback precedence with project mapping
+
+## [HIGH] MarkdownStore — area + scheduled_for frontmatter persistence
+
+## [HIGH] SqliteIndex — area + scheduled_for column storage and migration
+
+## [HIGH] TaskFactory — scheduled_for null initialization and area resolution
+
+## [HIGH] POST /api/capture/quick — input validation and response
+
+## [HIGH] Quick capture — #PREFIX pattern extraction for routing
+
+## [HIGH] Quick capture — LLM spawn fallback and prompt building
+
+## [HIGH] CaptureOverlay — React component and hook structure
+
+## [HIGH] SqliteIndex.getTasksByScheduledDate — date-filtered task retrieval
+
+## [HIGH] SqliteIndex.getCandidates — unscheduled task filtering
+
+## [HIGH] Capacity calculation — estimate_hours aggregation logic
+
+## [HIGH] Target capacity parameter — bounds validation (60–600 minutes)
+
+## [HIGH] Task schedule endpoint date validation
+
+## [HIGH] TodayView component structure and rendering
+
+## [HIGH] TodayView — capacity gauge conditional color logic
+
+## [HIGH] useToday — hook implementation with polling and helpers
+
+## [HIGH] api.ts — today endpoint client functions
+
+## [HIGH] App.tsx — TodayView tab routing and default
+
+## [HIGH] Header.tsx — today tab in navigation order
+
+## [HIGH] POST /api/capture/braindump endpoint validation
+
+## [HIGH] braindump JSON extraction logic with area field fallback
+
+## [HIGH] POST /api/capture/commit endpoint task creation
+
+## [HIGH] POST /api/acr/dispatch endpoint validation and offline handling
+
+## [HIGH] GET /api/artifacts endpoint
+
+## [HIGH] GET /api/artifacts data processing and sorting
+
+## [HIGH] POST /api/artifacts/opened endpoint
+
+## [HIGH] Artifact JSONL file persistence
+
+## [HIGH] GET /api/acr/status — online path
+
+## [HIGH] GET /api/acr/status — offline path
+
+## [HIGH] GET /api/brain/search — online path
+
+## [HIGH] GET /api/brain/search — offline path
+
+## [HIGH] GET /api/brain/search — validation
