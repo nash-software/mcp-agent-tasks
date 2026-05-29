@@ -1,4 +1,4 @@
-// @version 1.0.0
+// @version 1.1.0
 'use strict';
 
 // hooks/stop-intent-extractor.js
@@ -306,8 +306,24 @@ if (require.main === module) {
     process.exit(0);
   }
 
-  // Validate transcript: must be an array
-  if (!Array.isArray(payload.transcript)) {
+  // Resolve transcript: prefer transcript_path (real Stop event payload);
+  // fall back to payload.transcript array (test harness / legacy compat).
+  let transcript = Array.isArray(payload.transcript) ? payload.transcript : null;
+
+  if (payload.transcript_path) {
+    try {
+      const raw = fs.readFileSync(payload.transcript_path, 'utf8');
+      transcript = raw.trim().split('\n')
+        .filter(Boolean)
+        .map(line => JSON.parse(line));
+    } catch (err) {
+      process.stderr.write(`[stop-intent] could not read transcript_path: ${err.message}\n`);
+      process.exit(0);
+    }
+  }
+
+  // Neither transcript_path nor transcript array present → nothing to do
+  if (!Array.isArray(transcript)) {
     process.exit(0);
   }
 
@@ -322,7 +338,7 @@ if (require.main === module) {
   }
 
   // Filter transcript to only well-formed { role: 'user'|'assistant', content: string } entries
-  const filteredTranscript = payload.transcript.filter(entry => {
+  const filteredTranscript = transcript.filter(entry => {
     if (!entry || typeof entry !== 'object') return false;
     if (entry.role !== 'user' && entry.role !== 'assistant') return false;
     if (typeof entry.content !== 'string') return false;
