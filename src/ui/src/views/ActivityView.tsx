@@ -3,8 +3,11 @@ import type { TaskStatus, PanelState } from '../types'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
 import { STATUS_DOT } from '../lib/tokens'
+import { type Filter, matchFilter, projectOfId, type Area } from '../lib/filter'
 
 interface Props {
+  filter: Filter
+  areaMap?: Record<string, Area>
   onOpenPanel: (panel: PanelState) => void
 }
 
@@ -28,8 +31,12 @@ function statusLabel(s: string): string {
   return s.replace(/_/g, ' ')
 }
 
-export function ActivityView({ onOpenPanel }: Props): React.JSX.Element {
+export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
   const { activity, isLoading, error } = useActivity()
+
+  // Activity rows expose a task id but no `project` field — derive the prefix with projectOfId,
+  // then matchFilter (area resolved via areaMap).
+  const filtered = activity.filter(e => matchFilter(filter, projectOfId(e.task_id), undefined, areaMap))
 
   if (isLoading) {
     return (
@@ -49,16 +56,18 @@ export function ActivityView({ onOpenPanel }: Props): React.JSX.Element {
     )
   }
 
-  if (activity.length === 0) {
+  if (filtered.length === 0) {
     return (
-      <div className="p-6 text-ink-muted text-sm">No activity yet.</div>
+      <div className="p-6 text-ink-muted text-sm">
+        {activity.length === 0 ? 'No activity yet.' : 'No activity matches this filter.'}
+      </div>
     )
   }
 
   return (
     <div className="p-6">
       <ol className="relative border-l border-surface-3 space-y-6">
-        {activity.map((entry, i) => {
+        {filtered.map((entry, i) => {
           const nodeClass = STATUS_DOT[entry.to_status] ?? 'bg-ink-faint'
           return (
             <li

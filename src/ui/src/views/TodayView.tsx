@@ -17,6 +17,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
 import { PRI_RANK, localToday } from '../lib/format'
+import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
 // ── Props ────────────────────────────────────────────────────────────────
 
 interface TodayViewProps {
+  filter: Filter
+  areaMap?: Record<string, Area>
   selectedTaskId?: string | null
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
@@ -65,6 +68,8 @@ interface TodayViewProps {
 // ── Component ────────────────────────────────────────────────────────────
 
 export function TodayView({
+  filter,
+  areaMap = {},
   selectedTaskId,
   onSelectTask,
   onOpenDetail,
@@ -108,19 +113,24 @@ export function TodayView({
   }
   const heroTask: Task | null = inProgressTasks[0] ?? null
 
-  // Committed list: all scheduled today excluding the hero and cancelled
+  // AC3: filtering narrows the committed list + candidate queue ONLY — never the hero or
+  // capacity gauge (hero is the single current focus; capacity is the whole day's load).
+  // Committed list: all scheduled today excluding the hero and cancelled, then matchFilter.
   const committedList = sortCommitted(
-    committed.filter(t => t.status !== 'in_progress' && t.status !== 'cancelled')
+    committed
+      .filter(t => t.status !== 'in_progress' && t.status !== 'cancelled')
+      .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
   // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
-  const candidatesByArea = groupByArea(candidates)
+  const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
+  const candidatesByArea = groupByArea(filteredCandidates)
 
   // Flatten visible IDs for keyboard navigation (hero first, then committed, then candidates)
   const visibleIds: string[] = [
     ...(heroTask ? [heroTask.id] : []),
     ...committedList.map(t => t.id),
-    ...candidates.map(t => t.id),
+    ...filteredCandidates.map(t => t.id),
   ]
 
   // Notify App of current visible IDs whenever they change
@@ -275,14 +285,14 @@ export function TodayView({
       )}
 
       {/* Candidate queue */}
-      {candidates.length > 0 && (
+      {filteredCandidates.length > 0 && (
         <section>
           <button
             className="flex items-center gap-2 w-full text-left py-1 text-xs text-ink-muted uppercase tracking-wide font-medium hover:text-ink-2 transition-colors"
             onClick={() => setCandidatesOpen(o => !o)}
           >
             <span className="text-xs">{candidatesOpen ? '▾' : '▸'}</span>
-            <span>{candidates.length} unscheduled</span>
+            <span>{filteredCandidates.length} unscheduled</span>
             <span className="text-ink-faint normal-case font-normal">commit to today</span>
           </button>
 

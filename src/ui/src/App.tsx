@@ -10,22 +10,53 @@ import { TaskPanel } from './components/TaskPanel'
 import { CaptureOverlay } from './components/CaptureOverlay'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
+import { FilterBar, type FilterBarProject } from './components/FilterBar'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
 import { useCaptureOverlay } from './hooks/useCaptureOverlay'
 import { useGlobalKeyboard } from './hooks/useGlobalKeyboard'
 import { NAV } from './lib/nav'
-import type { ViewId, PanelState, FilterState, Task, TaskPriority } from './types'
+import type { ViewId, PanelState, Task, TaskPriority, TaskArea } from './types'
 import { localToday } from './lib/format'
-
-const EMPTY_FILTERS: FilterState = { project: '', status: '', milestone: '', label: '' }
+import { fetchProjects, type ProjectEntry } from './api'
+import { useQuery } from '@tanstack/react-query'
+import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
+
+/** Views the global filter bar applies to (epic §4 — five filterable surfaces). */
+const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
+  'today', 'board', 'roadmap', 'artifacts', 'activity',
+])
 
 function readStoredView(): ViewId {
   const raw = localStorage.getItem('lifeos-view')
   return (raw && VALID_VIEWS.includes(raw as ViewId)) ? (raw as ViewId) : 'today'
+}
+
+/** Read the persisted filter, falling back to EMPTY_FILTER on missing / corrupt / legacy JSON. */
+function readStoredFilter(): Filter {
+  try {
+    const raw = localStorage.getItem('lifeos-filter')
+    if (!raw) return EMPTY_FILTER
+    const parsed = JSON.parse(raw) as unknown
+    if (
+      parsed && typeof parsed === 'object' &&
+      Array.isArray((parsed as { projects?: unknown }).projects) &&
+      Array.isArray((parsed as { areas?: unknown }).areas)
+    ) {
+      const p = parsed as { projects: unknown[]; areas: unknown[] }
+      return {
+        projects: p.projects.filter((x): x is string => typeof x === 'string'),
+        areas: p.areas.filter((x): x is TaskArea =>
+          x === 'client' || x === 'personal' || x === 'outsource' || x === 'internal'),
+      }
+    }
+    return EMPTY_FILTER
+  } catch {
+    return EMPTY_FILTER
+  }
 }
 
 function HermesPlaceholder(): React.JSX.Element {
@@ -39,12 +70,70 @@ export function App(): React.JSX.Element {
   const [cmdkOpen, setCmdkOpen]     = useState(false)
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
+  const [filter, setFilter]         = useState<Filter>(readStoredFilter)
+
+  // Favourites are owned by P2-02 — consume an empty set + no-op until it ships.
+  const favorites: string[] = []
+  const onToggleFav = useCallback((_prefix: string): void => { /* P2-02 */ }, [])
 
   useEffect(() => { localStorage.setItem('lifeos-view', view) }, [view])
+  useEffect(() => { localStorage.setItem('lifeos-filter', JSON.stringify(filter)) }, [filter])
 
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
   const { artifacts } = useArtifacts()
+  const { data: projectEntries = [] } = useQuery<ProjectEntry[]>({
+    queryKey: ['projects'],
+    queryFn: fetchProjects,
+  })
+
+  // ─── Filter: area map + project list + counts (derived from tasks ∪ /api/projects) ──────
+  const areaMap = useMemo((): Record<string, TaskArea> => {
+    const map: Record<string, TaskArea> = {}
+    for (const t of allTasks) {
+      if (t.project && t.area) map[t.project] = t.area
+    }
+    return map
+  }, [allTasks])
+
+  const projectCounts = useMemo((): Record<string, number> => {
+    const counts: Record<string, number> = {}
+    for (const t of allTasks) {
+      if (!t.project) continue
+      if (t.status === 'done' || t.status === 'archived' || t.status === 'cancelled') continue
+      counts[t.project] = (counts[t.project] ?? 0) + 1
+    }
+    return counts
+  }, [allTasks])
+
+  const filterProjects = useMemo((): FilterBarProject[] => {
+    const prefixes = new Set<string>()
+    for (const t of allTasks) if (t.project) prefixes.add(t.project)
+    for (const p of projectEntries) prefixes.add(p.prefix)
+    return Array.from(prefixes)
+      .sort((a, b) => a.localeCompare(b))
+      .map(prefix => ({ prefix, name: prefix, area: areaMap[prefix] ?? null }))
+  }, [allTasks, projectEntries, areaMap])
+
+  const toggleProject = useCallback((prefix: string): void => {
+    setFilter(f => ({
+      ...f,
+      projects: f.projects.includes(prefix)
+        ? f.projects.filter(p => p !== prefix)
+        : [...f.projects, prefix],
+    }))
+  }, [])
+
+  const toggleArea = useCallback((area: TaskArea): void => {
+    setFilter(f => ({
+      ...f,
+      areas: f.areas.includes(area)
+        ? f.areas.filter(a => a !== area)
+        : [...f.areas, area],
+    }))
+  }, [])
+
+  const clearFilter = useCallback((): void => { setFilter(EMPTY_FILTER) }, [])
 
   const [targetMinutes] = useState<number>(() => {
     const raw = localStorage.getItem('lifeos-target')
@@ -212,15 +301,26 @@ export function App(): React.JSX.Element {
       run: () => { setFocusMode(!focusMode) },
     })
 
-    // 4. Filter group (Phase 1 stub)
-    cmds.push({
-      id: 'filter-stub',
-      cat: 'Filter',
-      label: 'Filter by… (coming soon)',
-      disabled: true,
-      disabledHint: 'Filter actions land in Phase 2 (P2-01)',
-      run: () => { /* Phase 2 stub */ },
-    })
+    // 4. Filter group (P2-01) — one "Filter by <PREFIX>" per known project + Clear all
+    // Label is always "Filter by <PREFIX>" (toggles on/off); "Clear all filters" appears only
+    // when a filter is active — per spec §4 palette requirements.
+    for (const p of filterProjects) {
+      cmds.push({
+        id: `filter-project-${p.prefix}`,
+        cat: 'Filter',
+        label: `Filter by ${p.prefix}`,
+        sub: p.area ?? undefined,
+        run: () => { toggleProject(p.prefix) },
+      })
+    }
+    if (filterActive(filter)) {
+      cmds.push({
+        id: 'filter-clear-all',
+        cat: 'Filter',
+        label: 'Clear all filters',
+        run: () => { clearFilter() },
+      })
+    }
 
     // 5. Tasks group — fuzzy over all tasks
     for (const task of allTasks) {
@@ -252,6 +352,7 @@ export function App(): React.JSX.Element {
   }, [
     selectedTaskId, allTasks, todayHook, today,
     artifacts, focusMode, handleViewChange, setPanel, setSel, capture,
+    filterProjects, filter, toggleProject, clearFilter,
   ])
 
   // P2-03 affordance: Shift+Enter / expand in capture bar switches to braindump view
@@ -273,21 +374,36 @@ export function App(): React.JSX.Element {
 
       {/* main scroll region */}
       <main className="main">
+        {/* Global filter bar — shown above all five filterable views (P2-01) */}
+        {FILTERABLE_VIEWS.has(view) && (
+          <FilterBar
+            filter={filter}
+            projects={filterProjects}
+            favorites={favorites}
+            projectCounts={projectCounts}
+            onToggleProject={toggleProject}
+            onToggleArea={toggleArea}
+            onToggleFav={onToggleFav}
+            onClear={clearFilter}
+          />
+        )}
         <div className="main-inner">
           {view === 'today'     && (
             <TodayView
+              filter={filter}
+              areaMap={areaMap}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSel}
               onOpenDetail={(task) => setPanel({ mode: 'detail', taskId: task.id })}
               onVisibleIdsChange={setVisibleIds}
             />
           )}
-          {view === 'board'     && <BoardView filters={EMPTY_FILTERS} onOpenPanel={setPanel} />}
+          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesPlaceholder />}
           {view === 'braindump' && <BrainDumpView projects={[]} />}
-          {view === 'artifacts' && <ArtifactsView onOpenPanel={setPanel} />}
-          {view === 'roadmap'   && <RoadmapView filters={EMPTY_FILTERS} />}
-          {view === 'activity'  && <ActivityView onOpenPanel={setPanel} />}
+          {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
+          {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
+          {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
         </div>
       </main>
 
