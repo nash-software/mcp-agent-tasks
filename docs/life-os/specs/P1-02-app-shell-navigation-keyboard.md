@@ -285,16 +285,13 @@ useEffect(() => { localStorage.setItem('lifeos-view', view); }, [view]);
 
 ## Open Questions
 
-- **InboxView fate — RESOLVED (decision).** Drop `InboxView` from the shell; it is **not** in the
-  target nav (epic §2 / §11). Its draft-promote queue overlaps the Brain Dump / GEN-inbox candidate
-  flow (P1-07), which is the canonical "review captured items before they become tasks" surface.
-  **Recommendation: fold draft-review into Brain Dump / GEN inbox** rather than keep a hidden route —
-  a hidden, unreachable route is dead weight that drifts and confuses the next reader. Concretely:
-  remove the `inbox` `TabId`, stop rendering `InboxView` in `App`, and file a follow-up note for P1-07
-  to absorb any draft-promote affordance the GEN inbox doesn't already cover. If P1-07 finds a
-  draft-review need it can't serve, re-open as its own nav item then — but do not ship a hidden tab.
-  *(Rationale: matches the prototype's 7-view nav exactly; avoids an 8th orphaned route; keeps "review
-  before commit" in one place.)*
+- **InboxView fate — DECIDED: fold into Brain Dump.** Delete `InboxView` and the `inbox` `TabId`.
+  The draft-promote queue it served is absorbed by Brain Dump / GEN-inbox candidate flow (P1-07),
+  which is the canonical "review captured items before they become tasks" surface. Any `status:'draft'`
+  tasks created by the passive-capture hook should surface as candidates in Brain Dump's post-process
+  candidate list; the `POST /api/tasks/:id/promote` action becomes "Create task" in that flow.
+  Concretely: remove `inbox` from the `TabId` union, stop rendering `InboxView` in `App`, delete the
+  component file. *(User confirmed 2026-05-29.)*
 - **Router vs view-string state — RESOLVED (decision).** **Keep simple `view`-string state +
   `localStorage('lifeos-view')`** — no router library. Rationale: the prototype is a single-window,
   single-user localhost dashboard with seven flat views and no deep-linking, route params, or back/

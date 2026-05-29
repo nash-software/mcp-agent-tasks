@@ -300,7 +300,8 @@ P2-04 (backend) can start in parallel with Phase 1. P2-05/P2-06 need P2-04 + Pha
 - **Capacity target persistence:** prototype uses `localStorage('lifeos-target')`. Promote to a
   `GET/PUT /api/config` user-setting, or keep client-only? (Default: client-only for Phase 1; revisit
   if multi-device.) Resolve in P1-03.
-- **InboxView fate:** the existing draft-promote `InboxView` is not in the target nav. Fold its
-  draft-review into Brain Dump / GEN inbox, or drop the tab? Resolve in P1-02.
+- **InboxView fate — DECIDED:** delete `InboxView`; fold draft-promote into Brain Dump. `status:'draft'`
+  tasks surface as candidates in Brain Dump on entry; "Create task" maps to `POST /api/tasks/:id/promote`.
+  See P1-02 (delete tab) and P1-07 (absorb drafts). *(User confirmed 2026-05-29.)*
 - **Triage location:** keep `lib/triage.ts` client-side heuristic, or call `/api/agent/triage`?
   Default: client heuristic in P2-05, endpoint optional in P2-04. Resolve when starting P2-05.
