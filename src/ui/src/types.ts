@@ -108,7 +108,11 @@ export interface ArtifactEntry {
 export interface AcrJob {
   id: string
   title: string
-  status: string
+  status: 'pending' | 'running' | 'done' | 'failed'
+  project?: string
+  elapsed_s?: number
+  error?: string
+  hermes?: boolean   // P2-06: Hermes-dispatched badge (leave room, no render yet)
 }
 
 export interface AcrStatusResponse {
