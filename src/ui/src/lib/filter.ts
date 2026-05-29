@@ -24,12 +24,21 @@ export interface Filter {
 export const EMPTY_FILTER: Filter = { projects: [], areas: [] }
 
 // ── Area map (injected at App level) ───────────────────────────────────────
+//
+// Design note (F2): the `areaMap` is intentionally module-global rather than threaded as an
+// explicit parameter through every `matchFilter` call site. The single root-level owner is
+// `App.tsx`, which reduces the `['tasks']` react-query cache to a `prefix → area` map and calls
+// `setAreaMap` inside a `useEffect` — guaranteed to run before any filter-consuming view renders.
+// There are 6 call sites spread across 5 view files; most views don't receive `areaMap` as a prop
+// and obtaining it would require either a new context/hook or heavy prop drilling. The current
+// single-root injection is the accepted trade-off: one owner, one write point, zero race risk.
 
 let areaMap: Record<string, Area> = {}
 
 /**
  * Set the prefix→area lookup used by `areaOfProject` for records that don't carry their own area.
  * App reduces the `['tasks']` cache (`task.project → task.area`) and calls this on change.
+ * Must be called before any view that uses `matchFilter` renders — App's useEffect ensures this.
  */
 export function setAreaMap(map: Record<string, Area>): void {
   areaMap = map
