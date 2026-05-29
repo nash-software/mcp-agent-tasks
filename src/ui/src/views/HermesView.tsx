@@ -377,21 +377,28 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
   }, [])
 
   // ── P2-06: runSkillDirect — called by Dispatch button for automatable skills ──
-  // Optimistically bumps the skill's runs + minutesSaved and adds an AgentLog run entry (the
-  // visible payoff of the flywheel), for BOTH engines. ACR skills additionally dispatch a real
-  // job to the ACR machine (source:'hermes'); n8n/hermes skills run locally for now (P2-06 UI).
   const runSkillDirect = useCallback((skill: Skill): void => {
-    // savings credited for this run = the skill's per-run average (fallback to lifetime/runs).
+    if (skill.engine === 'acr') {
+      // ACR skills run on the real ACR machine. Dispatch only (source:'hermes', skillId); the
+      // mutation's onSuccess consumes budget (real jobId only) and invalidates ['skills']/['agent','log']
+      // so the runs/minutesSaved bump + run log come from backend truth — no unrollbackable
+      // optimistic counters, no double budget count.
+      const matchingTask = scheduled.find(t => triage(t, [skill]).bucket === 'automatable')
+      if (matchingTask) {
+        dispatchAcrMut.mutate({ taskId: matchingTask.id, skillId: skill.id })
+      }
+      return
+    }
+    // n8n / hermes skills run locally (no backend execution yet, P2-06 UI) — these always "succeed",
+    // so optimistic bump + run log + budget are safe and never need rollback.
     const savedThisRun = skill.runs > 0
       ? Math.round(skill.minutesSaved / Math.max(skill.runs, 1))
       : skill.minutesSaved
-    // Optimistically bump the skill in the ['skills'] cache (runs +1, minutesSaved += savedThisRun).
     qc.setQueryData<Skill[]>(['skills'], (old = []) =>
       old.map(s => s.id === skill.id
         ? { ...s, runs: s.runs + 1, minutesSaved: s.minutesSaved + savedThisRun, lastRun: 'just now' }
         : s),
     )
-    // Optimistic AgentLog run entry.
     const logEntry: AgentLog = {
       id: `opt-run-${Date.now()}`,
       kind: 'run',
@@ -402,14 +409,6 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     }
     qc.setQueryData<AgentLog[]>(['agent', 'log'], (old = []) => [logEntry, ...old])
     incrementJobsToday()
-
-    if (skill.engine === 'acr') {
-      // Dispatch a real ACR job (source:'hermes', skillId) for a task this skill automates.
-      const matchingTask = scheduled.find(t => triage(t, [skill]).bucket === 'automatable')
-      if (matchingTask) {
-        dispatchAcrMut.mutate({ taskId: matchingTask.id, skillId: skill.id })
-      }
-    }
   }, [scheduled, dispatchAcrMut, incrementJobsToday, qc])
 
   // ── Action dispatcher ────────────────────────────────────────────────────
