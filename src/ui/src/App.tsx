@@ -6,6 +6,7 @@ import { RoadmapView } from './views/RoadmapView'
 import { ActivityView } from './views/ActivityView'
 import { InboxView } from './views/InboxView'
 import { TodayView } from './views/TodayView'
+import { BrainDumpView } from './views/BrainDumpView'
 import { TaskDetailPanel } from './components/TaskDetailPanel'
 import { CaptureOverlay, CaptureToast } from './components/CaptureOverlay'
 import { useTasks } from './hooks/useTasks'
@@ -29,7 +30,7 @@ export function App(): React.JSX.Element {
   const projects = [...new Set(allTasks.map(t => t.project).filter((p): p is string => Boolean(p)))].sort()
   const labels = [...new Set(allTasks.flatMap(t => t.labels ?? []))].sort()
 
-  const showFilterBar = activeTab !== 'activity' && activeTab !== 'today'
+  const showFilterBar = activeTab !== 'activity' && activeTab !== 'today' && activeTab !== 'braindump'
 
   function handleCaptured(): void {
     setShowToast(true)
@@ -53,7 +54,8 @@ export function App(): React.JSX.Element {
         {activeTab === 'board'    && <BoardView filters={filters} onTaskClick={setSelectedTask} />}
         {activeTab === 'roadmap'  && <RoadmapView filters={filters} />}
         {activeTab === 'activity' && <ActivityView />}
-        {activeTab === 'inbox'    && <InboxView projects={projects} />}
+        {activeTab === 'inbox'     && <InboxView projects={projects} />}
+        {activeTab === 'braindump' && <BrainDumpView projects={projects} />}
       </main>
       <TaskDetailPanel task={selectedTask} onClose={() => setSelectedTask(null)} />
       {capture.isOpen && (

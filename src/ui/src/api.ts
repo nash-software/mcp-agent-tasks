@@ -99,6 +99,41 @@ export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; condu
   return res.json() as Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }>
 }
 
+export interface BrainDumpCandidate {
+  title: string
+  project: string
+  area: 'client' | 'personal' | 'outsource' | 'internal'
+  why?: string
+}
+
+export async function brainDump(text: string): Promise<{ candidates: BrainDumpCandidate[]; error?: string }> {
+  const res = await fetch('/api/capture/braindump', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  })
+  return res.json() as Promise<{ candidates: BrainDumpCandidate[]; error?: string }>
+}
+
+export async function commitCandidates(candidates: BrainDumpCandidate[]): Promise<{ created: string[] }> {
+  const res = await fetch('/api/capture/commit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidates }),
+  })
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json() as Promise<{ created: string[] }>
+}
+
+export async function acrDispatch(title: string, detail: string): Promise<{ jobId?: string; error?: string }> {
+  const res = await fetch('/api/acr/dispatch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, detail }),
+  })
+  return res.json() as Promise<{ jobId?: string; error?: string }>
+}
+
 export async function createMilestone(data: {
   id: string; title: string; project: string; description?: string; due_date?: string
 }): Promise<Milestone> {
