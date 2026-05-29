@@ -594,7 +594,7 @@ function spawnBackgroundRouting(
  * Read DRAFT_TRIAGE_THRESHOLD from env at call time (default 0.8, clamped to [0, 1]).
  * NaN (non-numeric env value) falls back to 0.8.
  */
-function getDraftTriageThreshold(): number {
+export function getDraftTriageThreshold(): number {
   const raw = parseFloat(process.env['DRAFT_TRIAGE_THRESHOLD'] ?? '0.8');
   const val = isNaN(raw) ? 0.8 : raw;
   return Math.min(1.0, Math.max(0.0, val));
@@ -630,7 +630,7 @@ interface TriageResponse {
 const VALID_PRIORITIES = new Set(['critical', 'high', 'medium', 'low']);
 const VALID_AREAS = new Set(['client', 'personal', 'outsource', 'internal']);
 
-function parseTriageResponse(stdout: string): TriageResponse | null {
+export function parseTriageResponse(stdout: string): TriageResponse | null {
   const match = stdout.match(/\{[\s\S]*\}/);
   if (!match) return null;
   let parsed: unknown;
@@ -683,7 +683,7 @@ function applyFallback(taskId: string, projectIndexes: ProjectIndex[]): void {
   pIdx.index.upsertTask(task);
 }
 
-function applyTriageResult(
+export function applyTriageResult(
   taskId: string,
   stdout: string,
   projectIndexes: ProjectIndex[],
