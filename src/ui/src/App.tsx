@@ -78,6 +78,7 @@ export function App(): React.JSX.Element {
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
   // P2-03 — transient seed: capture bar hands text to Brain Dump through this state
   const [brainDumpSeed, setBrainDumpSeed] = useState<BrainDumpSeed | null>(null)
+  const seedNonceRef = useRef(0) // monotonic — unique nonce per handoff (collision-free vs Date.now)
 
   // ─── Favourites (P2-02) — persisted to localStorage('lifeos-favs') ──────────
   const [favorites, setFavorites] = useState<string[]>(() => {
@@ -396,11 +397,14 @@ export function App(): React.JSX.Element {
 
   // P2-03 — capture bar → Brain Dump handoff.
   // Empty / whitespace-only text is a no-op (spec Failure Modes).
-  // The nonce (Date.now()) ensures identical text triggers the consumer effect again (AC 5).
+  // A monotonic counter (not Date.now(), which collides within the same millisecond) guarantees
+  // every handoff has a unique nonce so identical text dispatched twice always re-fires the
+  // consumer effect (AC 5).
   const handleCaptureExpand = useCallback((text: string): void => {
     const trimmed = text.trim()
     if (trimmed === '') return
-    setBrainDumpSeed({ text, nonce: Date.now() })
+    seedNonceRef.current += 1
+    setBrainDumpSeed({ text, nonce: seedNonceRef.current })
     handleViewChange('braindump')
   }, [handleViewChange])
 

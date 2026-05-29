@@ -52,9 +52,11 @@ describe('App.tsx — P2-03 handoff wiring', () => {
     expect(appSrc).toMatch(/if\s*\(\s*trimmed\s*===\s*''\s*\)\s*return/)
   })
 
-  it('handleCaptureExpand sets brainDumpSeed with text and a Date.now() nonce', () => {
+  it('handleCaptureExpand sets brainDumpSeed with text and a unique monotonic nonce', () => {
     expect(appSrc).toMatch(/setBrainDumpSeed\s*\(\s*\{\s*text/)
-    expect(appSrc).toMatch(/nonce:\s*Date\.now\(\)/)
+    // Monotonic counter (collision-free), not Date.now() which can repeat within a millisecond.
+    expect(appSrc).toMatch(/nonce:\s*seedNonceRef\.current/)
+    expect(appSrc).not.toMatch(/nonce:\s*Date\.now\(\)/)
   })
 
   it('handleCaptureExpand switches view to braindump', () => {
