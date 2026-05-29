@@ -86,6 +86,8 @@ export class MarkdownStore {
       scheduled_for?: string | Date | null;
       agent_status?: AgentStatus;
       block_reason?: string;
+      triage_note?: string;
+      triage_confidence?: number;
     };
 
     if (fm.schema_version !== SCHEMA_VERSION) {
@@ -155,6 +157,8 @@ export class MarkdownStore {
       ...(fm.scheduled_for !== undefined ? { scheduled_for: toDateStringOrNull(fm.scheduled_for) } : {}),
       ...(fm.agent_status !== undefined ? { agent_status: fm.agent_status } : {}),
       ...(fm.block_reason !== undefined ? { block_reason: fm.block_reason } : {}),
+      ...(fm.triage_note !== undefined ? { triage_note: fm.triage_note } : {}),
+      ...(fm.triage_confidence !== undefined ? { triage_confidence: fm.triage_confidence } : {}),
     };
 
     // Parse and validate references
@@ -200,6 +204,8 @@ export class MarkdownStore {
     if (task.scheduled_for === undefined || task.scheduled_for === null) delete frontmatterToWrite['scheduled_for'];
     if (task.agent_status === undefined) delete frontmatterToWrite['agent_status'];
     if (task.block_reason === undefined) delete frontmatterToWrite['block_reason'];
+    if (task.triage_note === undefined) delete frontmatterToWrite['triage_note'];
+    if (task.triage_confidence === undefined) delete frontmatterToWrite['triage_confidence'];
 
     // Remove labels/tags if both are empty to keep output clean
     if (!task.tags?.length) {

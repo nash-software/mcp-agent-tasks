@@ -122,6 +122,37 @@ describe('Hermes backend endpoints (P2-04)', () => {
     expect(data.error).toBe('TASK_NOT_FOUND');
   });
 
+  it('POST /api/tasks/FAKE-999/triage returns 404 NOT_FOUND', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/FAKE-999/triage`, { method: 'POST' });
+    expect(res.status).toBe(404);
+    const data = await res.json() as { error: string };
+    expect(data.error).toBe('NOT_FOUND');
+  });
+
+  it('GET /api/today returns flagged drafts in needs_review (not candidates) — P2-04b', async () => {
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    const dbPath = path.join(tasksDir, '.index.db');
+    const ts = new Date().toISOString();
+    const idx = new SqliteIndex(dbPath); idx.init(); idx.ensureProject('TST');
+    idx.upsertTask({
+      schema_version: 1, id: 'TST-900', title: 'Ambiguous capture', type: 'plan',
+      status: 'draft', priority: 'medium', project: 'TST', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'TST-900.md',
+      triage_note: 'project unclear — your call', triage_confidence: 0.4,
+    } as never);
+    idx.close();
+
+    const res = await fetch(`${baseUrl}/api/today`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as { needs_review: Array<{ id: string }>; candidates: Array<{ id: string }> };
+    expect(data.needs_review.some(t => t.id === 'TST-900')).toBe(true);
+    expect(data.candidates.some(t => t.id === 'TST-900')).toBe(false);
+  });
+
   it('signoff endpoint writes agent_status to markdown and it survives rebuild (durability)', async () => {
     const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
     const { MarkdownStore } = await import('../../src/store/markdown-store.js');
