@@ -207,13 +207,13 @@ describe('CaptureOverlay source structure', () => {
     expect(fs.existsSync(filePath)).toBe(true);
   });
 
-  it('CaptureOverlay.tsx exports CaptureOverlay and CaptureToast', () => {
+  // P1-06: CaptureToast was inlined into CaptureOverlay; no longer a separate export
+  it('CaptureOverlay.tsx exports CaptureOverlay', () => {
     const source = fs.readFileSync(
       path.join(process.cwd(), 'src', 'ui', 'src', 'components', 'CaptureOverlay.tsx'),
       'utf-8',
     );
     expect(source).toContain('export function CaptureOverlay');
-    expect(source).toContain('export function CaptureToast');
   });
 
   it('useCaptureOverlay.ts exists', () => {
