@@ -18,6 +18,18 @@ function deriveProject(related: Task[]): string | null {
   return null
 }
 
+/**
+ * Collect the distinct project prefixes for all tasks related to a milestone.
+ * A milestone passes the filter if ANY of its related tasks' projects matches (OR semantics).
+ */
+function relatedProjects(related: Task[]): string[] {
+  const seen = new Set<string>()
+  for (const t of related) {
+    if (t.project) seen.add(t.project)
+  }
+  return Array.from(seen)
+}
+
 export function RoadmapView({ filter }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
   const { milestones, isLoading: mlLoading, error: mlError } = useMilestones()
@@ -78,14 +90,15 @@ export function RoadmapView({ filter }: Props): React.JSX.Element {
     )
   }
 
-  // Milestones carry no `area` — derive project from related tasks, then matchFilter
-  // (area resolved via areaOfProject). A milestone whose project can't be derived passes
-  // only when no project filter is active.
+  // Milestones carry no `area`. A milestone passes the filter if ANY of its related tasks'
+  // projects matches (OR across projects — a milestone spanning multiple projects must not be
+  // wrongly excluded by a single-project derivation). When a milestone has no related tasks,
+  // it passes only when no filter is active.
   const visibleMilestones = milestones.filter(ms => {
-    const related = tasks.filter(t => t.milestone === ms.id)
-    const project = deriveProject(related)
-    if (project == null) return filter.projects.length === 0 && filter.areas.length === 0
-    return matchFilter(filter, project)
+    const related  = tasks.filter(t => t.milestone === ms.id)
+    const projects = relatedProjects(related)
+    if (projects.length === 0) return filter.projects.length === 0 && filter.areas.length === 0
+    return projects.some(p => matchFilter(filter, p))
   })
 
   return (

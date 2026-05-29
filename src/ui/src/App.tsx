@@ -315,14 +315,14 @@ export function App(): React.JSX.Element {
         run: () => { toggleProject(p.prefix) },
       })
     }
-    cmds.push({
-      id: 'filter-clear-all',
-      cat: 'Filter',
-      label: 'Clear all filters',
-      disabled: !filterActive(filter),
-      disabledHint: 'No filters active',
-      run: () => { clearFilter() },
-    })
+    if (filterActive(filter)) {
+      cmds.push({
+        id: 'filter-clear-all',
+        cat: 'Filter',
+        label: 'Clear all filters',
+        run: () => { clearFilter() },
+      })
+    }
 
     // 5. Tasks group — fuzzy over all tasks
     for (const task of allTasks) {
