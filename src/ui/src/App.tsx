@@ -30,8 +30,12 @@ const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifac
 const VALID_DENSITIES: Density[] = ['compact', 'cozy', 'spacious']
 
 function readStoredDensity(): Density {
-  const raw = localStorage.getItem('lifeos-density')
-  return (raw && VALID_DENSITIES.includes(raw as Density)) ? (raw as Density) : 'cozy'
+  try {
+    const raw = localStorage.getItem('lifeos-density')
+    return (raw && VALID_DENSITIES.includes(raw as Density)) ? (raw as Density) : 'cozy'
+  } catch {
+    return 'cozy' // localStorage unavailable (SSR / sandboxed) — fall back to default
+  }
 }
 
 /** Views that use the full main width (no column cap). All others get the readable column. */

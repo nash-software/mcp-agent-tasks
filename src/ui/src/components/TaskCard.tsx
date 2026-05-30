@@ -152,7 +152,7 @@ export function TaskCard({
         ) : (
           <div className="relative">
             <button
-              className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100"
+              className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
               title="Actions"
               onClick={handleMenuClick}
               style={{ opacity: menuOpen ? 1 : undefined }}
