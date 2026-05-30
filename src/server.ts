@@ -237,7 +237,10 @@ async function main(): Promise<void> {
         (filePath) => {
           try {
             const task = markdownStore.read(filePath);
-            sqliteIndex.upsertTask(task);
+            // Pass the canonical full-file hash so a later reconcile can skip
+            // this unchanged task instead of re-upserting it (MCPAT-049 F1).
+            const fileHash = SqliteIndex.hashBody(fs.readFileSync(filePath, 'utf-8'));
+            sqliteIndex.upsertTask(task, fileHash);
           } catch (err) {
             logStoreError('watcher upsert', err);
           }
@@ -249,7 +252,10 @@ async function main(): Promise<void> {
         (filePath) => {
           try {
             const task = markdownStore.read(filePath);
-            sqliteIndex.upsertTask(task);
+            // Pass the canonical full-file hash so a later reconcile can skip
+            // this unchanged task instead of re-upserting it (MCPAT-049 F1).
+            const fileHash = SqliteIndex.hashBody(fs.readFileSync(filePath, 'utf-8'));
+            sqliteIndex.upsertTask(task, fileHash);
           } catch (err) {
             logStoreError('watcher upsert', err);
           }
