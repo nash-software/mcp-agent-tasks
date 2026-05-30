@@ -1,6 +1,6 @@
 # P3-01 — UI polish pass: card readability, content width & a real density switcher
 
-**Type:** Chore (UI refinement) · **Epic:** MCPAT-022 (Life OS) · **Size:** M
+**Type:** Chore (UI refinement) · **Epic:** MCPAT-022 (Life OS) · **Size:** M–L
 **Surfaces:** all views; primary fixes in Board + the shell width system + a new density control.
 
 > A "once-over" pass after Phase 1/2 shipped. Driven by a visual QA of the live build
@@ -79,6 +79,27 @@ Plus a dedicated **Board card** component (the single biggest readability win).
     rows keep the dimmed treatment; the `…` actions menu is reachable (visible on row hover/focus,
     and on touch).
 
+### View chrome & filter — match the mockups ("the little things")
+11. **Consistent view header on every view**, matching the screenshots — currently `TodayView` (and
+    most views) render no header while `HermesView` has its own; unify them. Add a small shared
+    `ViewHeader` (title 19px/600 `-0.02em` tracking, optional subtitle in `ink-2`, optional
+    right-aligned meta) used by all views:
+    - Today → `Today` + weekday (e.g. "Friday") · right: date (mono, `2026-05-29`) + the focus-mode
+      toggle icon — per `01-today.png`.
+    - Board → `Board` + "All tasks across every project" (`03-board.png`).
+    - Hermes → keep its existing title/subtitle, routed through `ViewHeader` for consistency.
+    - Brain dump / Artifacts / Roadmap / Activity → title + the subtitle/meta shown in `04`–`07.png`
+      (e.g. Artifacts "last 30 days · N files · M unvisited").
+12. **FilterBar visual match** to `01-today.png`: favourite quick-chips are rounded pills (★ + mono
+    prefix + count), the **Filter** button is an outlined `surface-1` pill with the filter glyph,
+    active-filter chips are removable, all on a hairline-bottomed bar. Match chip height/padding/
+    radius, the star colour (`area-client` amber), and the muted count styling to the mockup.
+13. **General fidelity sweep** against `screenshots/01`–`07.png`: section labels (11px/600, muted,
+    uppercase, `0.07em` tracking), hairline dividers, status/area chips, badge styling, the
+    "commit to today" affordance, and inter-section spacing should read like the mockups. Where a
+    secondary element visibly diverges (chip shape, label weight, spacing, divider), bring it into
+    line. Polish sweep, not a redesign — no new components beyond `ViewHeader` / `BoardCard`.
+
 ---
 
 ## Technical notes
@@ -109,8 +130,10 @@ Plus a dedicated **Board card** component (the single biggest readability win).
   `screenshots/01-today.png` / `03-board.png`: Board titles readable (≤3 lines, no micro-truncation),
   columns full-width; Today column comfortable; density switch re-flows all views.
 
-## Open questions
-- Should **Hermes** be `column` or `full`? (Default: `column` — its cards are a single stream. Revisit
-  if the proposals/skills grid feels cramped.)
-- Density default — **Cozy (40px)** assumed to match current. Confirm if you'd prefer Compact as the
-  out-of-box default.
+## Decisions (confirmed)
+- **Hermes width = `column`.** Only Board is `full`; every other view uses the readable centred column.
+- **Density default = Cozy (40px).** Compact (34) and Spacious (46) are the other two stops.
+- **Fix the "natural" margins.** The readable column must look intentional, not cramped: centred,
+  comfortable gutter, page padding from the density `--page-pad` — not the current double-constraint
+  (860px shell cap **and** a 768px `max-w-3xl`). Pick one comfortable column width (≈800–860px),
+  centre it, and let the side gutters breathe; Board fills the full main width with only `--page-pad`.
