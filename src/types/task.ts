@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved';
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved' | 'closed';
 export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan';
 export type Priority = 'critical' | 'high' | 'medium' | 'low';
 export type Area = 'client' | 'personal' | 'outsource' | 'internal';
@@ -96,6 +96,8 @@ export interface TaskFrontmatter {
   block_reason?: string;        // shown when status === 'blocked'
   triage_note?: string;         // Haiku triage explanation (max 500 chars); set when draft stays draft
   triage_confidence?: number;   // Haiku confidence score 0.0–1.0; set alongside triage_note
+  closed_at?: number;           // epoch ms — when the batch close ran (P4-02)
+  close_batch?: string;         // batch id stamped by POST /api/tasks/close-batch (P4-02)
   git: GitLink;
   transitions: StatusTransition[]; // capped at 100 in frontmatter
   files: string[];             // relative paths to files this task touches

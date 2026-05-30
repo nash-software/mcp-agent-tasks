@@ -25,6 +25,7 @@ const STATUS_NODE: Record<TaskStatus, string> = {
   archived:    'bg-ink-faint',
   draft:       'bg-ink-faint',
   approved:    'bg-status-green',
+  closed:      'bg-ink-faint',
 }
 
 /** Human-readable status label. */

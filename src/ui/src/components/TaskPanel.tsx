@@ -53,6 +53,7 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   archived:    'archived',
   draft:       'draft',
   approved:    'approved',
+  closed:      'closed',
 }
 
 const PRIORITIES: TaskPriority[] = ['critical', 'high', 'medium', 'low']

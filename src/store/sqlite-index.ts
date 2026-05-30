@@ -50,6 +50,8 @@ interface TaskRow {
   block_reason: string | null;
   triage_note: string | null;
   triage_confidence: number | null;
+  closed_at: number | null;
+  close_batch: string | null;
 }
 
 interface SubtaskRow {
@@ -158,6 +160,8 @@ export class SqliteIndex {
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN closed_at INTEGER');
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN close_batch TEXT');
 
     // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
     this.db.exec(`
@@ -276,6 +280,8 @@ export class SqliteIndex {
       ...(row.block_reason !== null ? { block_reason: row.block_reason } : {}),
       ...(row.triage_note !== null ? { triage_note: row.triage_note } : {}),
       ...(row.triage_confidence !== null ? { triage_confidence: row.triage_confidence } : {}),
+      ...(row.closed_at !== null ? { closed_at: row.closed_at } : {}),
+      ...(row.close_batch !== null ? { close_batch: row.close_batch } : {}),
     };
 
     // Attach references if any exist
@@ -329,7 +335,7 @@ export class SqliteIndex {
         file_path, body, body_hash, schema_version, spec_file,
         milestone, estimate_hours, plan_file, auto_captured,
         area, scheduled_for, agent_status, block_reason,
-        triage_note, triage_confidence
+        triage_note, triage_confidence, closed_at, close_batch
       ) VALUES (
         @id, @title, @type, @status, @priority, @project,
         @complexity, @complexity_manual, @why, @parent,
@@ -339,7 +345,7 @@ export class SqliteIndex {
         @file_path, @body, @body_hash, @schema_version, @spec_file,
         @milestone, @estimate_hours, @plan_file, @auto_captured,
         @area, @scheduled_for, @agent_status, @block_reason,
-        @triage_note, @triage_confidence
+        @triage_note, @triage_confidence, @closed_at, @close_batch
       )
     `);
 
@@ -383,6 +389,8 @@ export class SqliteIndex {
         block_reason: t.block_reason ?? null,
         triage_note: t.triage_note ?? null,
         triage_confidence: t.triage_confidence ?? null,
+        closed_at: t.closed_at ?? null,
+        close_batch: t.close_batch ?? null,
       });
 
       // Delete and re-insert related rows
@@ -539,6 +547,7 @@ export class SqliteIndex {
       todo: 0,
       in_progress: 0,
       done: 0,
+      closed: 0,
       blocked: 0,
       archived: 0,
       draft: 0,

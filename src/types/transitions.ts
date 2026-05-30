@@ -4,10 +4,11 @@ export const VALID_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[
   todo:        ['in_progress', 'blocked'],
   in_progress: ['done', 'blocked', 'todo', 'approved'],
   blocked:     ['in_progress', 'todo'],
-  done:        ['in_progress'],
+  done:        ['in_progress', 'closed'],
   archived:    [],
   draft:       ['approved', 'blocked'],
   approved:    ['in_progress', 'draft', 'blocked'],
+  closed:      [],
 } as const;
 
 export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {

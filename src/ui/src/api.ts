@@ -1,4 +1,4 @@
-import type { Task, TaskPriority, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
+import type { Task, TaskPriority, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine, BatchCloseResponse } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -213,6 +213,20 @@ export async function updateTask(
 /** Thin wrapper for existing callers that only update priority. */
 export function updateTaskPriority(id: string, priority: TaskPriority): Promise<Task> {
   return updateTask(id, { priority })
+}
+
+// P4-02: sprint closure — batch-close all done tasks
+export async function closeBatch(project?: string): Promise<BatchCloseResponse> {
+  const res = await fetch('/api/tasks/close-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(project ? { project } : {}),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Close batch failed: ${res.status}`)
+  }
+  return res.json() as Promise<BatchCloseResponse>
 }
 
 export interface ProjectEntry {

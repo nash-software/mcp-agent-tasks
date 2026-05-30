@@ -15,8 +15,8 @@ describe('VALID_TRANSITIONS', () => {
     expect(VALID_TRANSITIONS.in_progress).toContain('todo');
   });
 
-  it('done can only go back to in_progress', () => {
-    expect(VALID_TRANSITIONS.done).toEqual(['in_progress']);
+  it('done can reopen to in_progress or close (P4-02)', () => {
+    expect(VALID_TRANSITIONS.done).toEqual(['in_progress', 'closed']);
   });
 
   it('archived has no valid transitions', () => {

@@ -1,6 +1,8 @@
 import React from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Task, TaskStatus, PanelState } from '../types'
 import { useTasks } from '../hooks/useTasks'
+import { closeBatch } from '../api'
 import { BoardCard } from '../components/BoardCard'
 import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
@@ -21,6 +23,16 @@ interface Props {
 export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
   const { tasks: allTasks, isLoading, error } = useTasks()
   const tasks = allTasks.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
+
+  // "Complete all" — batch-close every done task into the Completed sprint-closure (P4-02)
+  const queryClient = useQueryClient()
+  const completeAll = useMutation({
+    mutationFn: () => closeBatch(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
 
   if (isLoading) {
     return (
@@ -60,15 +72,34 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
         return (
           <div key={col.status} className="space-y-2">
             {/* Column header — 11px/600/muted/uppercase */}
-            <h2
-              className="font-semibold text-ink-muted uppercase tracking-wider"
-              style={{ fontSize: 11 }}
-            >
-              {col.label}{' '}
-              <span className="text-ink-faint font-mono tabular-nums">
-                ({colTasks.length})
-              </span>
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2
+                className="font-semibold text-ink-muted uppercase tracking-wider"
+                style={{ fontSize: 11 }}
+              >
+                {col.label}{' '}
+                <span className="text-ink-faint font-mono tabular-nums">
+                  ({colTasks.length})
+                </span>
+              </h2>
+              {/* Complete all — closes every done task into the Completed tab (P4-02) */}
+              {col.status === 'done' && colTasks.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Confirm — this closes every Done task (across all projects) into Completed
+                    if (window.confirm('Complete all Done tasks? They move to the Completed tab.')) {
+                      completeAll.mutate()
+                    }
+                  }}
+                  disabled={completeAll.isPending}
+                  className="text-[10px] font-medium text-accent hover:underline disabled:opacity-50"
+                  title="Move all done tasks to Completed"
+                >
+                  {completeAll.isPending ? 'Completing…' : 'Complete all'}
+                </button>
+              )}
+            </div>
 
             {/* Cards */}
             {colTasks.map((task: Task) => (

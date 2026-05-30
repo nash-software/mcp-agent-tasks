@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Trello, MessageSquare, Brain,
-  Package, Map, Activity, type LucideIcon
+  Package, Map, Activity, CheckCircle, type LucideIcon
 } from 'lucide-react'
 import type { ViewId } from '../types'
 
@@ -8,7 +8,7 @@ export interface NavItem {
   id: ViewId
   label: string
   icon: LucideIcon
-  kbd: number   // 1-based number shortcut (1–7)
+  kbd: number   // 1-based number shortcut (1–8)
 }
 
 export const NAV: NavItem[] = [
@@ -19,4 +19,5 @@ export const NAV: NavItem[] = [
   { id: 'artifacts', label: 'Artifacts',  icon: Package,         kbd: 5 },
   { id: 'roadmap',   label: 'Roadmap',    icon: Map,             kbd: 6 },
   { id: 'activity',  label: 'Activity',   icon: Activity,        kbd: 7 },
+  { id: 'completed', label: 'Completed',  icon: CheckCircle,     kbd: 8 },
 ]
