@@ -4,10 +4,9 @@ import matter from 'gray-matter';
 import { stringify as yamlStringify } from 'yaml';
 import type { Task, TaskFrontmatter, TaskReference, Area, AgentStatus } from '../types/task.js';
 import { McpTasksError } from '../types/errors.js';
+import { MAX_TRANSITIONS, MAX_COMMITS } from './limits.js';
 
 const SCHEMA_VERSION = 1;
-const MAX_TRANSITIONS = 100;
-const MAX_COMMITS = 50;
 
 /**
  * gray-matter uses js-yaml which parses ISO date strings as Date objects.

@@ -223,7 +223,36 @@ if (require.main === module) {
     try {
       fs.mkdirSync(mcpTasksDir, { recursive: true });
     } catch { /* ignore if already exists */ }
-    fs.appendFileSync(artifactsPath, record + '\n');
+    // Compact artifacts.jsonl on write (MCPAT-049 F3): apply the same semantics
+    // the read path uses — dedupe by path (keep newest) and drop records older
+    // than the 30-day TTL — then persist only that reduced set, hard-capped at
+    // ARTIFACTS_MAX. This bounds size AND keeps the file canonical.
+    const ARTIFACTS_MAX = 5000;
+    const TTL_MS = 30 * 24 * 60 * 60 * 1000;
+    try {
+      let records = [];
+      if (fs.existsSync(artifactsPath)) {
+        for (const l of fs.readFileSync(artifactsPath, 'utf-8').split('\n')) {
+          if (!l.trim()) continue;
+          try { records.push(JSON.parse(l)); } catch { /* skip malformed */ }
+        }
+      }
+      records.push(JSON.parse(record));
+      // Dedupe by path, keeping the last (newest) occurrence.
+      const byPath = new Map();
+      for (const r of records) byPath.set(r && r.path, r);
+      const now = Date.now();
+      let kept = [...byPath.values()].filter(r => {
+        const t = r && r.created_at ? Date.parse(r.created_at) : NaN;
+        return Number.isNaN(t) || (now - t) <= TTL_MS; // keep undated + within TTL
+      });
+      if (kept.length > ARTIFACTS_MAX) kept = kept.slice(-ARTIFACTS_MAX);
+      const tmp = artifactsPath + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, kept.map(r => JSON.stringify(r)).join('\n') + '\n');
+      fs.renameSync(tmp, artifactsPath);
+    } catch {
+      fs.appendFileSync(artifactsPath, record + '\n'); // fallback: plain append
+    }
   } catch (e) {
     process.stderr.write('[passive-capture] artifact log write failed: ' + (e && e.message ? e.message : String(e)) + '\n');
   }

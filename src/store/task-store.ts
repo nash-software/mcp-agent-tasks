@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from '../types/task.js';
+import type { Task, TaskStatus, StatusTransition } from '../types/task.js';
 import type { TaskCreateInput, TaskUpdateInput } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
 import { isValidTransition } from '../types/transitions.js';
@@ -7,6 +7,7 @@ import type { SqliteIndex } from './sqlite-index.js';
 import type { ManifestWriter } from './manifest-writer.js';
 import { TaskFactory } from './task-factory.js';
 import { detectCycle } from './dependency-graph.js';
+import { MAX_TRANSITIONS } from './limits.js';
 
 const DEFAULT_CLAIM_TTL_HOURS = 4;
 
@@ -174,7 +175,10 @@ export class TaskStore {
     const updated: Task = {
       ...existing,
       status: to,
-      transitions: [...existing.transitions, transition],
+      // Cap to last MAX_TRANSITIONS before persisting — prevents the feedback
+      // loop where reading from SQLite returns an uncapped array that grows
+      // without bound across repeated transition + upsert cycles.
+      transitions: [...existing.transitions, transition].slice(-MAX_TRANSITIONS),
     };
 
     this.sqliteIndex.upsertTask(updated);
@@ -237,13 +241,16 @@ export class TaskStore {
     }
 
     const now = new Date().toISOString();
+    const archiveTransition: StatusTransition = {
+      from: existing.status,
+      to: 'archived',
+      at: now,
+      reason: 'Archived',
+    };
     const archived: Task = {
       ...existing,
       status: 'archived',
-      transitions: [
-        ...existing.transitions,
-        { from: existing.status, to: 'archived', at: now, reason: 'Archived' },
-      ],
+      transitions: [...existing.transitions, archiveTransition].slice(-MAX_TRANSITIONS),
     };
 
     // Write protocol: bypass isValidTransition — archiving is an admin operation

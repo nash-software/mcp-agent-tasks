@@ -1,10 +1,12 @@
 import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Task, TaskStatus, Priority, Area, AgentStatus, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
+import { MAX_TRANSITIONS, MAX_COMMITS, MAX_TAGS } from './limits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -104,6 +106,23 @@ export class SqliteIndex {
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
+    // Apply connection-scoped pragmas unconditionally.
+    // foreign_keys and journal_mode are NOT persisted across connections —
+    // they must be set on every open. Setting them here (before init()/schema)
+    // guarantees they are always active regardless of call order.
+    try {
+      this.db.pragma('foreign_keys = ON');
+      this.db.pragma('busy_timeout = 5000');
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('synchronous = NORMAL');
+      this.db.pragma('wal_autocheckpoint = 1000');
+    } catch (err) {
+      // A corrupt/non-database file throws on the first pragma. Release the
+      // file handle before rethrowing so callers (e.g. index-health rebuild)
+      // can delete the bad file — otherwise it stays locked on Windows.
+      try { this.db.close(); } catch { /* ignore */ }
+      throw err;
+    }
   }
 
   init(): void {
@@ -127,6 +146,7 @@ export class SqliteIndex {
       }
     };
 
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
@@ -272,7 +292,33 @@ export class SqliteIndex {
     return task;
   }
 
-  upsertTask(task: Task): void {
+  /**
+   * Compute a stable SHA-1 hash of a task's markdown body.
+   * Used by the incremental reconciler to skip upserts when the body has not changed.
+   */
+  static hashBody(body: string): string {
+    return crypto.createHash('sha1').update(body).digest('hex');
+  }
+
+  /**
+   * Return the stored body_hash for the task with the given id, or null if
+   * the task is not in the index or has no hash recorded.
+   */
+  getBodyHash(id: string): string | null {
+    const row = this.db
+      .prepare<string>('SELECT body_hash FROM tasks WHERE id=?')
+      .get(id) as { body_hash: string | null } | undefined;
+    return row?.body_hash ?? null;
+  }
+
+  /**
+   * Upsert a task. `bodyHash` is the single canonical change-detection hash —
+   * the reconciler passes the hash of the FULL markdown file (frontmatter +
+   * body). Callers without a file (MCP tool writes) omit it; body_hash is then
+   * null and the next reconcile re-syncs it once (MCPAT-049 F4 — one hash owner,
+   * no post-upsert patching).
+   */
+  upsertTask(task: Task, bodyHash?: string | null): void {
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO tasks (
         id, title, type, status, priority, project,
@@ -280,7 +326,7 @@ export class SqliteIndex {
         created, updated, last_activity,
         claimed_by, claimed_at, claim_ttl_hours,
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
-        file_path, body, schema_version, spec_file,
+        file_path, body, body_hash, schema_version, spec_file,
         milestone, estimate_hours, plan_file, auto_captured,
         area, scheduled_for, agent_status, block_reason,
         triage_note, triage_confidence
@@ -290,7 +336,7 @@ export class SqliteIndex {
         @created, @updated, @last_activity,
         @claimed_by, @claimed_at, @claim_ttl_hours,
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
-        @file_path, @body, @schema_version, @spec_file,
+        @file_path, @body, @body_hash, @schema_version, @spec_file,
         @milestone, @estimate_hours, @plan_file, @auto_captured,
         @area, @scheduled_for, @agent_status, @block_reason,
         @triage_note, @triage_confidence
@@ -324,6 +370,7 @@ export class SqliteIndex {
         pr_base_branch: t.git.pr?.base_branch ?? null,
         file_path: t.file_path,
         body: t.body,
+        body_hash: bodyHash ?? null,
         schema_version: t.schema_version,
         spec_file: t.spec_file ?? null,
         milestone: t.milestone ?? null,
@@ -355,18 +402,22 @@ export class SqliteIndex {
       const insertDep = this.db.prepare('INSERT OR IGNORE INTO dependencies (task_id, depends_on) VALUES (?, ?)');
       t.dependencies.forEach(dep => insertDep.run(t.id, dep));
 
+      // Cap + dedup tags before inserting — never store more than MAX_TAGS
+      const uniqueTags = [...new Set(t.tags)].slice(0, MAX_TAGS);
       const insertTag = this.db.prepare('INSERT OR IGNORE INTO tags (task_id, tag) VALUES (?, ?)');
-      t.tags.forEach(tag => insertTag.run(t.id, tag));
+      uniqueTags.forEach(tag => insertTag.run(t.id, tag));
 
+      // Cap transitions to last MAX_TRANSITIONS — prevents unbounded child-row growth
       const insertTransition = this.db.prepare(
         'INSERT INTO transitions (task_id, from_status, to_status, at, reason) VALUES (?, ?, ?, ?, ?)',
       );
-      t.transitions.forEach(tr => insertTransition.run(t.id, tr.from, tr.to, tr.at, tr.reason ?? null));
+      t.transitions.slice(-MAX_TRANSITIONS).forEach(tr => insertTransition.run(t.id, tr.from, tr.to, tr.at, tr.reason ?? null));
 
+      // Cap commits to last MAX_COMMITS — prevents unbounded child-row growth
       const insertCommit = this.db.prepare(
         'INSERT OR IGNORE INTO commits (sha, task_id, message, authored_at) VALUES (?, ?, ?, ?)',
       );
-      t.git.commits.forEach(c => insertCommit.run(c.sha, t.id, c.message, c.authored_at));
+      t.git.commits.slice(-MAX_COMMITS).forEach(c => insertCommit.run(c.sha, t.id, c.message, c.authored_at));
 
       const insertChild = this.db.prepare('INSERT OR IGNORE INTO children (parent_id, child_id) VALUES (?, ?)');
       t.children.forEach(childId => insertChild.run(t.id, childId));
@@ -387,7 +438,21 @@ export class SqliteIndex {
   }
 
   deleteTask(id: string): void {
-    this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
+    // Belt-and-suspenders explicit cascade: delete all child rows BEFORE the
+    // task row, in addition to the FK CASCADE triggers already in schema.sql.
+    // This ensures no orphan rows survive even if FK enforcement was temporarily off.
+    const deleteCascade = this.db.transaction((taskId: string) => {
+      this.db.prepare('DELETE FROM subtasks WHERE parent_id=?').run(taskId);
+      this.db.prepare('DELETE FROM dependencies WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM tags WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM transitions WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM commits WHERE task_id=?').run(taskId);
+      // Both directions: the task may appear as parent OR child / from OR to.
+      this.db.prepare('DELETE FROM children WHERE parent_id=? OR child_id=?').run(taskId, taskId);
+      this.db.prepare('DELETE FROM task_references WHERE from_id=? OR to_id=?').run(taskId, taskId);
+      this.db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
+    });
+    deleteCascade(id);
   }
 
   getTask(id: string): Task | null {
@@ -694,7 +759,73 @@ export class SqliteIndex {
     return rows.map(r => this.rowToTask(r));
   }
 
+  /**
+   * Flush and truncate the WAL file back to zero bytes.
+   * Called automatically by close() and can be called by callers that want
+   * to compact the WAL without closing the connection.
+   * Never throws — failures are logged to stderr.
+   */
+  checkpoint(): void {
+    if (!this.db.open) return; // no-op if the connection is already closed
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] checkpoint failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Rebuild the FTS5 shadow tables from scratch.
+   * Call after a full reconcile to prevent orphaned shadow rows from leaking
+   * across reconcile runs and inflating the database file.
+   * Never throws — failures are logged to stderr.
+   */
+  rebuildFts(): void {
+    if (!this.db.open) return;
+    try {
+      this.db.exec("INSERT INTO tasks_fts(tasks_fts) VALUES('rebuild')");
+      this.db.exec("INSERT INTO tasks_fts(tasks_fts) VALUES('optimize')");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] rebuildFts failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Run SQLite's built-in quick_check integrity verification.
+   * Returns true if the database passes ('ok'), false if corrupt.
+   * Never throws — failures are treated as corrupt.
+   */
+  quickCheck(): boolean {
+    if (!this.db.open) return false;
+    try {
+      const result = this.db.pragma('quick_check', { simple: true }) as string;
+      return result === 'ok';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Run VACUUM to reclaim free pages and compact the database file.
+   * Called after a forced rebuild to start with a minimal file size.
+   * Never throws — failures are logged to stderr.
+   */
+  vacuum(): void {
+    if (!this.db.open) return;
+    try {
+      this.db.exec('VACUUM');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] vacuum failed: ${msg}`);
+    }
+  }
+
   close(): void {
+    if (!this.db.open) return; // idempotent: safe to call multiple times
+    // Checkpoint WAL before closing so the WAL file is not left behind.
+    this.checkpoint();
     this.db.close();
   }
 }
