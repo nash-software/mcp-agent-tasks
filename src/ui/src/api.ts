@@ -192,6 +192,8 @@ export interface TaskUpdateFields {
   why?: string
   priority?: TaskPriority
   estimate_hours?: number
+  /** Assign a task to a milestone by id, or null/undefined to clear. */
+  milestone?: string | null
 }
 
 export async function updateTask(

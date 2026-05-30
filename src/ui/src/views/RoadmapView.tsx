@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Milestone } from '../types'
+import type { Milestone, Task } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
-import { createMilestone } from '../api'
+import { createMilestone, updateTask } from '../api'
 import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 
@@ -25,6 +25,100 @@ function milestoneProject(ms: Milestone): string {
   return dash > 0 ? ms.id.slice(0, dash) : ms.id
 }
 
+/** Status dot colour per task status, matching the design-token colour palette. */
+function statusDotClass(status: Task['status']): string {
+  switch (status) {
+    case 'done':       return 'bg-status-green'
+    case 'in_progress': return 'bg-status-blue'
+    case 'blocked':    return 'bg-status-red'
+    case 'cancelled':
+    case 'closed':     return 'bg-ink-muted'
+    default:           return 'bg-ink-2'
+  }
+}
+
+/**
+ * Inline task picker for a single milestone card.
+ * Shows tasks in the same project that are not yet assigned to this milestone.
+ */
+interface TaskPickerProps {
+  milestoneId: string
+  /** All tasks available — filtered by project and current assignment inside. */
+  candidates: Task[]
+  onSelect: (taskId: string) => void
+  onClose: () => void
+  isPending: boolean
+}
+
+function TaskPicker({ milestoneId, candidates, onSelect, onClose, isPending }: TaskPickerProps): React.JSX.Element {
+  const [query, setQuery] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus input on mount
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  // Close on Escape
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  const filtered = candidates.filter(t =>
+    !query || t.title.toLowerCase().includes(query.toLowerCase()) || t.id.toLowerCase().includes(query.toLowerCase()),
+  )
+
+  return (
+    <div className="mt-2 bg-surface-2 border border-surface-3 rounded-card p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          className="flex-1 bg-surface-1 border border-surface-3 rounded-input px-2 py-1 text-xs text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-accent/60"
+          placeholder="Search tasks…"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          disabled={isPending}
+        />
+        <button
+          className="text-xs text-ink-muted hover:text-ink transition-colors"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-xs text-ink-muted py-1">
+          {candidates.length === 0 ? 'All tasks already linked or no tasks in this project.' : 'No tasks match.'}
+        </p>
+      ) : (
+        <ul className="space-y-0.5 max-h-48 overflow-y-auto">
+          {filtered.map(t => (
+            <li key={t.id}>
+              <button
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-surface-3 transition-colors text-left group"
+                onClick={() => onSelect(t.id)}
+                disabled={isPending}
+              >
+                <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${statusDotClass(t.status)}`} />
+                <span className="flex-1 text-xs text-ink truncate">{t.title}</span>
+                <span className="shrink-0 text-xs text-ink-muted font-mono opacity-60 group-hover:opacity-100">{t.id}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Milestone id shown in the picker as a reference, hidden — used only for aria / test */}
+      <span className="sr-only" data-milestone-id={milestoneId} />
+    </div>
+  )
+}
+
 export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
   const { milestones, isLoading: mlLoading, error: mlError } = useMilestones()
@@ -37,7 +131,10 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
   const [newDue, setNewDue]         = useState('')
   const [formError, setFormError]   = useState<string | null>(null)
 
-  const mutation = useMutation({
+  // Per-milestone picker open state (milestoneId or null)
+  const [pickerOpen, setPickerOpen] = useState<string | null>(null)
+
+  const createMutation = useMutation({
     mutationFn: createMilestone,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['milestones'] })
@@ -52,6 +149,38 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
     },
   })
 
+  // Assign / unassign task mutation — optimistic update on tasks list
+  const assignMutation = useMutation({
+    mutationFn: ({ taskId, milestoneId }: { taskId: string; milestoneId: string | null }) =>
+      updateTask(taskId, { milestone: milestoneId }),
+    onMutate: async ({ taskId, milestoneId }) => {
+      // Cancel outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: ['tasks'] })
+      const previous = queryClient.getQueryData<Task[]>(['tasks'])
+      // Optimistically update the task in cache
+      if (previous) {
+        queryClient.setQueryData<Task[]>(
+          ['tasks'],
+          prev => prev?.map(t =>
+            t.id === taskId ? { ...t, milestone: milestoneId ?? undefined } : t,
+          ) ?? [],
+        )
+      }
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      // Roll back on error
+      if (context?.previous) {
+        queryClient.setQueryData(['tasks'], context.previous)
+      }
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['milestones'] })
+    },
+  })
+
   const handleCreate = useCallback((): void => {
     const title   = newTitle.trim()
     const project = newProject.trim().toUpperCase()
@@ -59,13 +188,22 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
     if (!project) { setFormError('Project is required'); return }
     // Generate a simple ID: PROJECT-ms-<timestamp>
     const id = `${project}-ms-${Date.now().toString(36)}`
-    mutation.mutate({
+    createMutation.mutate({
       id,
       title,
       project,
       ...(newDue ? { due_date: newDue } : {}),
     })
-  }, [newTitle, newProject, newDue, mutation])
+  }, [newTitle, newProject, newDue, createMutation])
+
+  const handleAssign = useCallback((taskId: string, milestoneId: string): void => {
+    assignMutation.mutate({ taskId, milestoneId })
+    setPickerOpen(null)
+  }, [assignMutation])
+
+  const handleUnassign = useCallback((taskId: string): void => {
+    assignMutation.mutate({ taskId, milestoneId: null })
+  }, [assignMutation])
 
   if (mlLoading || tLoading) {
     return (
@@ -142,10 +280,10 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
             </button>
             <button
               className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-input transition-colors disabled:opacity-50"
-              disabled={mutation.isPending}
+              disabled={createMutation.isPending}
               onClick={handleCreate}
             >
-              {mutation.isPending ? 'Creating…' : 'Create'}
+              {createMutation.isPending ? 'Creating…' : 'Create'}
             </button>
           </div>
         </div>
@@ -164,6 +302,14 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
         const done      = related.filter(t => t.status === 'done').length
         const pct       = related.length > 0 ? Math.round((done / related.length) * 100) : 0
         const project   = milestoneProject(ms)
+
+        // Candidate tasks: same project, not already linked to this milestone
+        const candidates = tasks.filter(t =>
+          t.project === project && t.milestone !== ms.id,
+        )
+
+        const isPickerOpen = pickerOpen === ms.id
+        const isAssigning  = assignMutation.isPending
 
         return (
           <div key={ms.id} className="bg-surface-1 border border-surface-3 rounded-card p-4 space-y-3">
@@ -197,6 +343,48 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
                 />
               </div>
             </div>
+
+            {/* Assigned tasks list */}
+            {related.length > 0 && (
+              <ul className="space-y-0.5 pt-1 border-t border-surface-3">
+                {related.map(t => (
+                  <li key={t.id} className="flex items-center gap-2 py-1 group">
+                    <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${statusDotClass(t.status)}`} />
+                    <span className="flex-1 text-xs text-ink truncate">{t.title}</span>
+                    <span className="shrink-0 text-xs text-ink-muted font-mono opacity-60">{t.id}</span>
+                    <button
+                      className="shrink-0 text-xs text-ink-muted hover:text-status-red transition-colors opacity-0 group-hover:opacity-100"
+                      title="Remove from milestone"
+                      onClick={() => handleUnassign(t.id)}
+                      disabled={isAssigning}
+                      aria-label={`Remove ${t.id} from milestone`}
+                    >
+                      &times;
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Add task control */}
+            {isPickerOpen ? (
+              <TaskPicker
+                milestoneId={ms.id}
+                candidates={candidates}
+                onSelect={(taskId) => handleAssign(taskId, ms.id)}
+                onClose={() => setPickerOpen(null)}
+                isPending={isAssigning}
+              />
+            ) : (
+              <button
+                className="w-full flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink transition-colors py-0.5"
+                onClick={() => setPickerOpen(ms.id)}
+                disabled={isAssigning}
+              >
+                <span className="text-base leading-none">+</span>
+                <span>Add task</span>
+              </button>
+            )}
           </div>
         )
       })}

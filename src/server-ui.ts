@@ -1390,14 +1390,14 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
             // Require at least one patchable field (empty PATCH is a no-op error)
             if (Object.keys(body).length === 0) {
-              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours) is required');
+              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours, milestone) is required');
               return;
             }
 
-            const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours']);
+            const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours', 'milestone']);
             for (const key of Object.keys(body)) {
               if (!VALID_PATCH_FIELDS.has(key)) {
-                sendError(res, 400, `INVALID_FIELD: field '${key}' is not patchable; allowed: title, why, priority, estimate_hours`);
+                sendError(res, 400, `INVALID_FIELD: field '${key}' is not patchable; allowed: title, why, priority, estimate_hours, milestone`);
                 return;
               }
             }
@@ -1429,6 +1429,13 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 return;
               }
             }
+            if ('milestone' in body) {
+              const ms = body['milestone'];
+              if (ms !== null && typeof ms !== 'string') {
+                sendError(res, 400, 'INVALID_FIELD: milestone must be a string (milestone id) or null to clear');
+                return;
+              }
+            }
 
             // Apply allowed fields
             const now = new Date().toISOString();
@@ -1436,6 +1443,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             if ('why' in body) task.why = body['why'] as string;
             if ('priority' in body) task.priority = body['priority'] as Priority;
             if ('estimate_hours' in body) task.estimate_hours = body['estimate_hours'] as number;
+            if ('milestone' in body) {
+              // Normalize empty string to null (unlink)
+              const ms = body['milestone'];
+              task.milestone = (ms === '' || ms === null) ? undefined : ms as string;
+            }
             task.updated = now;
             task.last_activity = now;
 
@@ -1445,6 +1457,10 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               if ('why' in body) md.why = body['why'] as string;
               if ('priority' in body) md.priority = body['priority'] as Priority;
               if ('estimate_hours' in body) md.estimate_hours = body['estimate_hours'] as number;
+              if ('milestone' in body) {
+                const ms = body['milestone'];
+                md.milestone = (ms === '' || ms === null) ? undefined : ms as string;
+              }
               md.updated = now;
               md.last_activity = now;
             });
