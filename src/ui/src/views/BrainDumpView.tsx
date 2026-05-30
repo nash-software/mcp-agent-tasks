@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useBrainDump } from '../hooks/useBrainDump'
 import { CandidateCard } from '../components/CandidateCard'
 import { useAcrStatus } from '../hooks/useAcrStatus'
+import { ViewHeader } from '../components/ViewHeader'
 import type { BrainDumpCandidate } from '../hooks/useBrainDump'
 
 // Abort timeout in milliseconds for the parse request
@@ -337,9 +338,10 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
   return (
     <div className="p-6 space-y-5 max-w-3xl">
       {/* Header */}
-      <div className="space-y-0.5">
-        <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Brain Dump</h2>
-      </div>
+      <ViewHeader
+        title="Brain dump"
+        subtitle="Dump everything on your mind — tasks, ideas, problems. Hermes will sort it."
+      />
 
       {/* Input + processing area */}
       {(phase === 'input' || phase === 'processing') && (

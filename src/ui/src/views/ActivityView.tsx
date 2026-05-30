@@ -1,5 +1,6 @@
 import React from 'react'
 import type { TaskStatus, PanelState } from '../types'
+import { ViewHeader } from '../components/ViewHeader'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
 import { STATUS_DOT } from '../lib/tokens'
@@ -66,6 +67,7 @@ export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): Reac
 
   return (
     <div className="p-6">
+      <ViewHeader title="Activity" subtitle="Recent task transitions" />
       <ol className="relative border-l border-surface-3 space-y-6">
         {filtered.map((entry, i) => {
           const nodeClass = STATUS_DOT[entry.to_status] ?? 'bg-ink-faint'

@@ -66,16 +66,16 @@ export function HeroTask({
 
   // ── Empty state ──────────────────────────────────────────────────────
   if (!task) {
+    // AC #9: compact one-line empty state (no tall dashed block).
     return (
-      <div
-        className="flex items-center justify-center rounded-card border border-dashed border-surface-3 text-ink-muted text-sm"
-        style={{ minHeight: 96, padding: '16px 20px' }}
+      <div className="flex items-center gap-1.5 rounded-card border border-dashed border-surface-3 text-ink-muted text-sm px-3"
+        style={{ height: 'var(--row-h, 40px)' }}
       >
-        Nothing in progress — pick one from today&apos;s list, or press{' '}
-        <kbd className="mx-1 px-1.5 py-0.5 rounded text-xs font-mono bg-surface-2 border border-surface-3 text-ink-2">J</kbd>{' '}
-        then{' '}
-        <kbd className="mx-1 px-1.5 py-0.5 rounded text-xs font-mono bg-surface-2 border border-surface-3 text-ink-2">Enter</kbd>
-        .
+        <span>Nothing in progress — press</span>
+        <kbd className="px-1.5 py-0.5 rounded text-xs font-mono bg-surface-2 border border-surface-3 text-ink-2">J</kbd>
+        <span>then</span>
+        <kbd className="px-1.5 py-0.5 rounded text-xs font-mono bg-surface-2 border border-surface-3 text-ink-2">Enter</kbd>
+        <span>to start.</span>
       </div>
     )
   }

@@ -26,6 +26,18 @@ import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
 
+// ─── Density types + persistence ────────────────────────────────────────────
+export type Density = 'compact' | 'cozy' | 'spacious'
+const VALID_DENSITIES: Density[] = ['compact', 'cozy', 'spacious']
+
+function readStoredDensity(): Density {
+  const raw = localStorage.getItem('lifeos-density')
+  return (raw && VALID_DENSITIES.includes(raw as Density)) ? (raw as Density) : 'cozy'
+}
+
+/** Views that use the full main width (no column cap). All others get the readable column. */
+const FULL_WIDTH_VIEWS = new Set<ViewId>(['board'])
+
 /** Transient handoff state from the capture bar to Brain Dump (P2-03). */
 interface BrainDumpSeed {
   text: string
@@ -76,6 +88,7 @@ export function App(): React.JSX.Element {
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
+  const [density, setDensity]       = useState<Density>(readStoredDensity)
   // P2-03 — transient seed: capture bar hands text to Brain Dump through this state
   const [brainDumpSeed, setBrainDumpSeed] = useState<BrainDumpSeed | null>(null)
   const seedNonceRef = useRef(0) // monotonic — unique nonce per handoff (collision-free vs Date.now)
@@ -108,6 +121,13 @@ export function App(): React.JSX.Element {
       // localStorage may be unavailable — fail silently
     }
   }, [favorites])
+  useEffect(() => {
+    try { localStorage.setItem('lifeos-density', density) } catch { /* noop */ }
+  }, [density])
+
+  const setDensityPersisted = useCallback((d: Density): void => {
+    setDensity(d)
+  }, [])
 
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
@@ -388,11 +408,28 @@ export function App(): React.JSX.Element {
       })
     }
 
+    // 7. Density group (P3-01)
+    const densityOptions: { id: Density; label: string }[] = [
+      { id: 'compact',  label: 'Density: Compact'  },
+      { id: 'cozy',     label: 'Density: Cozy'     },
+      { id: 'spacious', label: 'Density: Spacious' },
+    ]
+    for (const opt of densityOptions) {
+      cmds.push({
+        id: `density-${opt.id}`,
+        cat: 'Density',
+        label: opt.label,
+        sub: density === opt.id ? 'active' : undefined,
+        run: () => { setDensityPersisted(opt.id) },
+      })
+    }
+
     return cmds
   }, [
     selectedTaskId, allTasks, todayHook, today,
     artifacts, focusMode, handleViewChange, setPanel, setSel, capture,
     filterProjects, filter, toggleProject, clearFilter,
+    density, setDensityPersisted,
   ])
 
   // P2-03 — capture bar → Brain Dump handoff.
@@ -409,7 +446,7 @@ export function App(): React.JSX.Element {
   }, [handleViewChange])
 
   return (
-    <div className="app-shell" data-focus={focusMode ? 'true' : undefined}>
+    <div className="app-shell" data-focus={focusMode ? 'true' : undefined} data-density={density}>
       {/* Global capture bar — always visible, spans all columns (P1-06) */}
       <CaptureOverlay
         onExpand={handleCaptureExpand}
@@ -427,6 +464,8 @@ export function App(): React.JSX.Element {
         onToggleProject={toggleProject}
         activeProjects={filter.projects}
         areaMap={areaMap}
+        density={density}
+        onDensityChange={setDensityPersisted}
       />
 
       {/* main scroll region */}
@@ -444,7 +483,7 @@ export function App(): React.JSX.Element {
             onClear={clearFilter}
           />
         )}
-        <div className="main-inner">
+        <div className="main-inner" data-width={FULL_WIDTH_VIEWS.has(view) ? 'full' : undefined}>
           {view === 'today'     && (
             <TodayView
               filter={filter}
