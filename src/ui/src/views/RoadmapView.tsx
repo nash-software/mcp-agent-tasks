@@ -31,7 +31,6 @@ function statusDotClass(status: Task['status']): string {
     case 'done':       return 'bg-status-green'
     case 'in_progress': return 'bg-status-blue'
     case 'blocked':    return 'bg-status-red'
-    case 'cancelled':
     case 'closed':     return 'bg-ink-muted'
     default:           return 'bg-ink-2'
   }

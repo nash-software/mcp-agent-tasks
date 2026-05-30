@@ -374,3 +374,90 @@ today) and P4-02 (lifecycle) after the P4-01 keystone.
 - **Estimate require vs prompt (P4-04):** default = prompt-but-skippable; hard-require is an Open Q.
 - **Project/area re-assignment (P4-01):** deferred — `task_update` excludes `project`; re-routing is a
   separate "move task" affordance.
+
+---
+
+## 13. Phase 5 — Close the daily-use gaps + harden the gate (Epic MCPAT-050)
+
+Post-Phase-4 review (`docs/life-os/audit/2026-05-31-post-phase4-gaps.md` — two read-only audits of
+`main`) found three classes of gap left after Phase 4 made the UI mutable: (1) a **blind type-check
+gate** — `src/ui`'s `type-check` script runs plain `tsc --noEmit` against a solution-style tsconfig
+(`files: []` + `references`), so it compiles **0 files** and **22 real UI type errors ship green**;
+(2) **daily-use functional gaps** — no field editing for area/tags/type/milestone, no New-task form,
+no delete, closed tasks can't be reopened, capture `context` bias is dormant; (3) **backend
+correctness/security + mobile** — `rerouteTask` is SQLite-only (violates markdown-first, silent data
+loss), capture prompts skip the sentinel hardening the triage path uses, and the board is desktop-only.
+
+> **Epic: MCPAT-050.** Sub-specs reference the shared tokens (§3), data shapes (§4), and client
+> conventions (§5) above — they are **not** restated per-spec. Each Phase-5 spec is single-builder-sized.
+> The audit (`2026-05-31-post-phase4-gaps.md`) carries the `file:line` evidence; specs cite it rather
+> than re-investigating.
+
+> **Status vocabulary (authoritative):** the real `TaskStatus` union is
+> `'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved' | 'closed'`
+> (`src/types/task.ts:1`). There is **no `'cancelled'`** — every `'cancelled'` branch in the UI is dead
+> code (P5-01 removes them). CLAUDE.md's `queued → in_progress → done | blocked | cancelled` line is
+> **stale** and is reconciled in P5-01.
+
+### Phase 5 sub-spec index & build order
+
+| Task | Spec | Title | Depends on | Size |
+|---|---|---|---|---|
+| MCPAT-051 | **P5-01** | Type-check gate (`tsc -b`) + fix 22 UI type errors + reconcile status vocab | — (foundational — real gate) | M |
+| MCPAT-052 | **P5-02** | Backend correctness: `rerouteTask` markdown-first ID-migration + prompt sentinel hardening | P5-01 | M |
+| MCPAT-053 | **P5-03** | Task field editing — area / tags / type / milestone in PATCH + TaskPanel editors | P5-01 (P5-02 for project note) | M |
+| MCPAT-054 | **P5-04** | New-task modal + delete task (`DELETE /api/tasks/:id`) | P5-01 | M |
+| MCPAT-055 | **P5-05** | Reopen closed tasks + interactive CompletedView | P5-01 | M |
+| MCPAT-056 | **P5-06** | Wire capture `context` + roadmap-assign error toast | P5-01 | S |
+| MCPAT-057 | **P5-07** | Mobile board — `TouchSensor` + responsive grid | P5-01 | S |
+| MCPAT-058 | **P5-08** | Build hygiene — decouple `npm --prefix src/ui ci` from `build` | — (chore) | S |
+
+### Build-order DAG
+
+```
+   P5-01 (MCPAT-051) — FOUNDATIONAL: type-check gate → `tsc -b` (the REAL gate)
+     │   once landed, CI catches UI type errors — every later phase keeps `tsc -b` green
+     │
+     ▼
+   P5-02 (MCPAT-052) — backend correctness + prompt hardening
+     │   builds the markdown-first ID-migration primitive
+     │   └── UNBLOCKS project reassignment (deferred A1-project; noted in P5-03)
+     │
+     ├──────────┬──────────┬──────────┬──────────┐
+     ▼          ▼          ▼          ▼          ▼
+   P5-03      P5-04      P5-05      P5-06      P5-07
+ (field edit)(new+del)  (reopen)  (context)  (mobile)
+   053        054        055        056        057
+
+   P5-08 (MCPAT-058, build chore) ── independent of all UI work ── can run any time
+```
+
+**Critical path:** **P5-01 first** — it converts the no-op UI type-check into a real `tsc -b` gate, so
+every subsequent phase is actually checked. **P5-02 second** — its ID-migration primitive is the
+prerequisite for the deferred *project* reassignment that P5-03 explicitly excludes. **P5-03..P5-08 are
+otherwise parallelizable, but ship sequentially** — they share heavy file overlap (`server-ui.ts`,
+`TaskPanel.tsx`, `api.ts`, `transitions.ts`) and concurrent builders would collide on claims.
+
+**Sequencing rationale (heavy file overlap — ship one builder at a time):**
+- `server-ui.ts` is touched by P5-02 (rerouteTask, prompts), P5-03 (PATCH whitelist), P5-04 (DELETE route, POST), P5-05 (transition map), P5-06 (capture body).
+- `TaskPanel.tsx` is touched by P5-03 (editors), P5-04 (delete affordance), P5-05 (reopen from Completed).
+- `transitions.ts` (client + `src/types/transitions.ts` server) is touched by P5-01 (Record completion) and P5-05 (closed→todo/in_progress).
+
+### Phase 5 flagged decisions (carry into the named spec)
+
+- **`'cancelled'` is not a status (P5-01):** the canonical union (`src/types/task.ts:1`) has no
+  `'cancelled'`. Every `'cancelled'` branch (`useToday.ts:101`, `TodayView.tsx:131,142`,
+  `RoadmapView.tsx:34`, `LiveFeedSection.tsx:217`) is **dead code — remove it**, do not add `'cancelled'`
+  to the union. Reconcile CLAUDE.md's stale state-machine line in the same spec.
+- **`tsc -b` is the gate going forward (P5-01):** after P5-01, `src/ui`'s `type-check` is `tsc -b`. CI
+  now catches UI type errors. **Every later Phase-5 (and future) spec must keep `tsc -b` green** — a
+  green plain-`tsc` is no longer sufficient evidence.
+- **Project reassignment stays deferred (P5-03):** P5-03 edits area/tags/type/milestone but **excludes
+  `project`**. Project reassignment needs P5-02's markdown-first ID-migration primitive (the prefix is
+  the task ID; reassignment mints a new ID + moves the file). Spec it as a follow-up once P5-02 lands.
+- **Mutations stay markdown-first (P5-02, P5-04):** the dashboard HTTP layer uses `persistTaskDurable`
+  (markdown-first) for **all** mutations. Do **not** introduce `TaskStore` into `server-ui.ts` — that is
+  the established convention. The `rerouteTask` fix and the new `DELETE` route both go through
+  `persistTaskDurable` / markdown move primitives, not a `TaskStore` round-trip.
+- **`draft`/`approved` board home (D2) stays deferred:** out of Phase 5 scope (design decision; see audit
+  §D2). The mobile board (P5-07) does not add a column for them.

@@ -7,8 +7,8 @@ import {
   File,
   Copy,
   ExternalLink,
-  Clock,
   Files,
+  type LucideIcon,
 } from 'lucide-react'
 import { useArtifacts } from '../hooks/useArtifacts'
 import { markArtifactOpened } from '../api'
@@ -38,7 +38,7 @@ function extOf(p: string): string {
 // ── File-type icon + color map ───────────────────────────────────────────────
 
 interface ExtConfig {
-  Icon: React.ComponentType<{ className?: string; size?: number }>
+  Icon: LucideIcon
   className: string
 }
 

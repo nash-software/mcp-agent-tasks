@@ -632,11 +632,15 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
           </button>
         </div>
 
-        {/* Peek hint — only in peek mode */}
+        {/* Peek hint — only in peek mode; click promotes peek → detail (onPromote) */}
         {isPeek && (
-          <p className="text-[10px] text-ink-faint select-none">
+          <button
+            type="button"
+            onClick={onPromote}
+            className="text-[10px] text-ink-faint hover:text-ink-muted select-none transition-colors"
+          >
             <kbd className="font-mono">↵</kbd> full detail&nbsp;&nbsp;·&nbsp;&nbsp;<kbd className="font-mono">Esc</kbd> close
-          </p>
+          </button>
         )}
       </div>
     </div>

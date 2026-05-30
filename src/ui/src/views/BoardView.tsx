@@ -145,7 +145,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
     if (!taskData) return
 
     const toStatus = over.id as TaskStatus
-    if (!BOARD_STATUSES.includes(toStatus)) return // dropped outside a column
+    if (!(BOARD_STATUSES as readonly TaskStatus[]).includes(toStatus)) return // dropped outside a column
 
     // No-op: same column
     if (taskData.status === toStatus) return

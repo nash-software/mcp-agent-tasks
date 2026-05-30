@@ -98,7 +98,7 @@ export function useToday(targetMinutes?: number): UseTodayReturn {
             const task = d.committed.find(t => t.id === id)
             if (!task) return d
             const updatedTask = { ...task, scheduled_for: null }
-            const removedMinutes = task.status !== 'done' && task.status !== 'cancelled'
+            const removedMinutes = task.status !== 'done'
               ? (task.estimate_hours ?? 0) * 60
               : 0
             return {
