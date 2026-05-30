@@ -5,6 +5,7 @@ import { useAcrStatus } from '../hooks/useAcrStatus'
 import { AreaDot } from './atoms'
 import type { ViewId, TaskArea } from '../types'
 import type { FilterBarProject } from './FilterBar'
+import type { Density } from '../types'
 
 interface NavProps {
   view: ViewId
@@ -22,7 +23,17 @@ interface NavProps {
   activeProjects: string[]
   /** Area map for resolving project area — prefix → area (P2-01, built in App). */
   areaMap: Record<string, TaskArea>
+  /** Current density setting (P3-01). */
+  density: Density
+  /** Callback to change density (P3-01). */
+  onDensityChange: (d: Density) => void
 }
+
+const DENSITY_OPTIONS: { label: string; value: Density }[] = [
+  { label: 'Compact', value: 'compact' },
+  { label: 'Cozy',    value: 'cozy'    },
+  { label: 'Spacious',  value: 'spacious'  },
+]
 
 export function Nav({
   view,
@@ -34,6 +45,8 @@ export function Nav({
   onToggleProject,
   activeProjects,
   areaMap,
+  density,
+  onDensityChange,
 }: NavProps): React.JSX.Element {
   const acrQ = useAcrStatus()
 
@@ -144,6 +157,30 @@ export function Nav({
             }`}
           />
           <span className="text-ink-faint text-xs overflow-hidden whitespace-nowrap">Brain</span>
+        </div>
+
+        {/* Density segmented control (P3-01) */}
+        <div
+          className="flex items-center rounded overflow-hidden"
+          style={{ border: '1px solid var(--color-surface-3, #27272a)' }}
+          role="group"
+          aria-label="Density"
+        >
+          {DENSITY_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => onDensityChange(opt.value)}
+              title={opt.label}
+              aria-pressed={density === opt.value}
+              className={`flex-1 py-1 transition-colors text-[11px] leading-none ${
+                density === opt.value
+                  ? 'bg-surface-2 text-ink'
+                  : 'bg-transparent text-ink-faint hover:text-ink-muted'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {/* Search / palette button */}

@@ -1,7 +1,8 @@
 import React from 'react'
 import type { Task, TaskStatus, PanelState } from '../types'
 import { useTasks } from '../hooks/useTasks'
-import { TaskCard } from '../components/TaskCard'
+import { BoardCard } from '../components/BoardCard'
+import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 const COLUMNS: { status: TaskStatus; label: string }[] = [
@@ -24,7 +25,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   if (isLoading) {
     return (
       <div
-        className="grid gap-4 p-6"
+        className="grid gap-4"
         style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
       >
         {COLUMNS.map(col => (
@@ -41,17 +42,19 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
 
   if (error) {
     return (
-      <div className="p-6 text-status-red text-sm">
+      <div className="text-status-red text-sm">
         Failed to load tasks: {error.message}
       </div>
     )
   }
 
   return (
-    <div
-      className="grid gap-4 p-6"
-      style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
-    >
+    <div className="flex flex-col gap-4">
+      <ViewHeader title="Board" subtitle="All tasks across every project" />
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+      >
       {COLUMNS.map(col => {
         const colTasks = tasks.filter((t: Task) => t.status === col.status)
         return (
@@ -69,11 +72,10 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
 
             {/* Cards */}
             {colTasks.map((task: Task) => (
-              <TaskCard
+              <BoardCard
                 key={task.id}
                 task={task}
-                mode="committed"
-                onClick={() => onOpenPanel({ mode: 'detail', taskId: task.id })}
+                onOpenPanel={onOpenPanel}
               />
             ))}
 
@@ -84,6 +86,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

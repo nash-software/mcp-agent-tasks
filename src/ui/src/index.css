@@ -10,11 +10,8 @@
     --accent: #0070F3;
     --accent-hover: #0062D6;
     --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
-    --row-h: 40px;
     --nav-w: 216px;
     --ambient-w: 296px;
-    --page-pad: 24px;
-    --section-gap: 24px;
   }
 
   html {
@@ -27,12 +24,34 @@
   }
 
   /* DENSITY_TEST_MARKER */
-  [data-density="compact"] {
-    --row-h: 34px;
+  /* Density scale — default = cozy (40px). All density-aware vars live here.
+     Components MUST read these vars — never hardcode heights/padding/gaps. */
+  .app-shell,
+  .app-shell[data-density="cozy"] {
+    --row-h: 40px;
+    --row-px: 12px;
+    --card-pad: 12px;
+    --section-gap: 24px;
+    --font-row: 14px;
+    --page-pad: 24px;
   }
 
-  [data-density="airy"] {
+  .app-shell[data-density="compact"] {
+    --row-h: 34px;
+    --row-px: 10px;
+    --card-pad: 8px;
+    --section-gap: 16px;
+    --font-row: 13px;
+    --page-pad: 20px;
+  }
+
+  .app-shell[data-density="spacious"] {
     --row-h: 46px;
+    --row-px: 14px;
+    --card-pad: 16px;
+    --section-gap: 32px;
+    --font-row: 15px;
+    --page-pad: 28px;
   }
 }
 
@@ -58,7 +77,9 @@
   scrollbar-gutter: stable;
 }
 .app-shell > .ambient { grid-area: ambient; min-width: 0; }
-.main-inner { max-width: 860px; margin: 0 auto; padding: 24px; }
+/* Per-view width mode: column (default) centres at a readable ~840px; full = no cap */
+.main-inner { max-width: 840px; margin: 0 auto; padding: var(--page-pad, 24px); }
+.main-inner[data-width="full"] { max-width: none; margin: 0; padding: var(--page-pad, 24px); }
 
 /* focus mode: collapse side columns via transform, NOT opacity (epic §9 anti-pattern) */
 .app-shell[data-focus="true"] { grid-template-columns: 0 1fr 0; }

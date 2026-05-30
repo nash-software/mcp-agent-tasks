@@ -13,6 +13,8 @@ import { HeroTask } from '../components/HeroTask'
 import { CapacityGauge } from '../components/CapacityGauge'
 import { TaskCard } from '../components/TaskCard'
 import { AreaChip } from '../components/atoms'
+import { ViewHeader } from '../components/ViewHeader'
+import { Minimize2, Maximize2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
@@ -63,6 +65,8 @@ interface TodayViewProps {
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
   onVisibleIdsChange?: (ids: string[]) => void
+  focusMode?: boolean
+  onToggleFocus?: () => void
 }
 
 // ── Component ────────────────────────────────────────────────────────────
@@ -74,6 +78,8 @@ export function TodayView({
   onSelectTask,
   onOpenDetail,
   onVisibleIdsChange,
+  focusMode = false,
+  onToggleFocus,
 }: TodayViewProps): React.JSX.Element {
   const [targetMinutes, setTargetMinutes] = useState<number>(readTargetMinutes)
   const [candidatesOpen, setCandidatesOpen] = useState(true)
@@ -182,12 +188,12 @@ export function TodayView({
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-4 max-w-3xl mx-auto">
+      <div className="p-6 space-y-4">
         <div className="h-24 bg-surface-1 rounded-card animate-pulse" />
         <div className="h-4 bg-surface-1 rounded animate-pulse w-1/2" />
         <div className="space-y-1">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-10 bg-surface-1 rounded animate-pulse" />
+            <div key={i} className="bg-surface-1 rounded animate-pulse" style={{ height: 'var(--row-h, 40px)' }} />
           ))}
         </div>
       </div>
@@ -204,8 +210,32 @@ export function TodayView({
 
   // ── Main render ───────────────────────────────────────────────────────
 
+  const weekday = new Date().toLocaleDateString(undefined, { weekday: 'long' })
+  // Local YYYY-MM-DD so the date matches the (local) weekday around timezone boundaries.
+  const isoDate = new Date().toLocaleDateString('en-CA')
+
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-5">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap, 24px)' }}>
+
+      {/* View header */}
+      <ViewHeader
+        title="Today"
+        subtitle={weekday}
+        right={
+          <>
+            <span className="font-mono text-xs text-ink-muted tabular-nums">{isoDate}</span>
+            <button
+              type="button"
+              onClick={onToggleFocus}
+              title={focusMode ? 'Exit focus mode (.)' : 'Focus mode (.)'}
+              aria-pressed={focusMode}
+              className="ml-1 w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
+            >
+              {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          </>
+        }
+      />
 
       {/* Hero */}
       <HeroTask
@@ -234,10 +264,10 @@ export function TodayView({
 
         {committedList.length === 0 ? (
           <div
-            className="flex items-center justify-center rounded-card border border-dashed border-surface-3 text-ink-muted text-sm"
-            style={{ height: 40 }}
+            className="flex items-center px-3 rounded-card text-ink-muted text-xs italic"
+            style={{ height: 'var(--row-h, 40px)', color: 'var(--color-muted, #71717a)' }}
           >
-            Nothing committed yet. Commit something from below.
+            Nothing committed yet — commit something from below.
           </div>
         ) : (
           <div className="group">

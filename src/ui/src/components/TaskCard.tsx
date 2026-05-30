@@ -79,8 +79,14 @@ export function TaskCard({
   }
 
   return (
-    <div className={`relative flex items-center gap-2 px-3 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
-      style={{ height: 40, minHeight: 40 }}
+    <div className={`group relative flex items-center gap-2 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
+      style={{
+        height: 'var(--row-h, 40px)',
+        minHeight: 'var(--row-h, 40px)',
+        paddingLeft: 'var(--row-px, 12px)',
+        paddingRight: 'var(--row-px, 12px)',
+        fontSize: 'var(--font-row, 14px)',
+      }}
       onClick={onClick}
       data-task-id={task.id}
     >
@@ -92,10 +98,10 @@ export function TaskCard({
       {/* Status dot */}
       <StatusDot status={task.status} />
 
-      {/* Title — 14px, truncate at ~60ch */}
+      {/* Title — font-size from density var; max-width keeps meta cluster adjacent */}
       <span
-        className="flex-1 min-w-0 text-sm text-ink truncate"
-        style={{ maxWidth: '60ch' }}
+        className="min-w-0 text-ink truncate"
+        style={{ maxWidth: '52ch', flex: '0 1 52ch' }}
         title={task.title}
       >
         {task.title}
@@ -146,7 +152,7 @@ export function TaskCard({
         ) : (
           <div className="relative">
             <button
-              className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100"
+              className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
               title="Actions"
               onClick={handleMenuClick}
               style={{ opacity: menuOpen ? 1 : undefined }}

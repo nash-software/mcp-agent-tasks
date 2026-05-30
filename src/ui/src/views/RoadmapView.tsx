@@ -4,6 +4,7 @@ import type { Milestone } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone } from '../api'
+import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 interface Props {
@@ -91,16 +92,19 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
   )
 
   return (
-    <div className="p-6 space-y-4">
-      {/* Header row */}
-      <div className="flex justify-end">
-        <button
-          className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-input transition-colors"
-          onClick={() => setShowForm(s => !s)}
-        >
-          {showForm ? 'Cancel' : 'New Milestone'}
-        </button>
-      </div>
+    <div className="space-y-4">
+      {/* Header */}
+      <ViewHeader
+        title="Roadmap"
+        right={
+          <button
+            className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-input transition-colors font-sans"
+            onClick={() => setShowForm(s => !s)}
+          >
+            {showForm ? 'Cancel' : 'New Milestone'}
+          </button>
+        }
+      />
 
       {/* Inline create form */}
       {showForm && (

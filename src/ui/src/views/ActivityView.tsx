@@ -1,5 +1,6 @@
 import React from 'react'
 import type { TaskStatus, PanelState } from '../types'
+import { ViewHeader } from '../components/ViewHeader'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
 import { STATUS_DOT } from '../lib/tokens'
@@ -40,7 +41,7 @@ export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): Reac
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-3">
+      <div className="space-y-3">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="h-14 bg-surface-2 rounded-card animate-pulse" />
         ))}
@@ -50,7 +51,7 @@ export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): Reac
 
   if (error) {
     return (
-      <div className="p-6 text-status-red text-sm">
+      <div className="text-status-red text-sm">
         Failed to load activity: {error.message}
       </div>
     )
@@ -58,14 +59,15 @@ export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): Reac
 
   if (filtered.length === 0) {
     return (
-      <div className="p-6 text-ink-muted text-sm">
+      <div className="text-ink-muted text-sm">
         {activity.length === 0 ? 'No activity yet.' : 'No activity matches this filter.'}
       </div>
     )
   }
 
   return (
-    <div className="p-6">
+    <div className="">
+      <ViewHeader title="Activity" subtitle="Recent task transitions" />
       <ol className="relative border-l border-surface-3 space-y-6">
         {filtered.map((entry, i) => {
           const nodeClass = STATUS_DOT[entry.to_status] ?? 'bg-ink-faint'

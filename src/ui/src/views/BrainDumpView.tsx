@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { useBrainDump } from '../hooks/useBrainDump'
 import { CandidateCard } from '../components/CandidateCard'
 import { useAcrStatus } from '../hooks/useAcrStatus'
+import { ViewHeader } from '../components/ViewHeader'
 import type { BrainDumpCandidate } from '../hooks/useBrainDump'
 
 // Abort timeout in milliseconds for the parse request
@@ -309,7 +310,7 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
   if (phase === 'done') {
     const n = createdCount ?? 0
     return (
-      <div className="p-6 max-w-3xl">
+      <div className="">
         <div className="rounded-card bg-surface-1 border border-surface-3 p-8 flex flex-col items-center gap-4 text-center">
           <div className="w-12 h-12 rounded-full bg-status-green/15 flex items-center justify-center">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-status-green">
@@ -335,11 +336,12 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="space-y-0.5">
-        <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wider">Brain Dump</h2>
-      </div>
+      <ViewHeader
+        title="Brain dump"
+        subtitle="Dump everything on your mind — tasks, ideas, problems. Hermes will sort it."
+      />
 
       {/* Input + processing area */}
       {(phase === 'input' || phase === 'processing') && (

@@ -10,6 +10,7 @@
 import React, { useState, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Bot, Server, Zap, Minus, Plus } from 'lucide-react'
+import { ViewHeader } from '../components/ViewHeader'
 import { fetchTasks } from '../api'
 import {
   fetchSkills, fetchAgentLog, clearSignoffTask, dispatchToAcr,
@@ -473,14 +474,12 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     : 'Done for today'
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-2xl mx-auto">
+    <div className="flex flex-col gap-6">
       {/* View header */}
-      <div>
-        <h1 className="text-2xl font-semibold text-ink">Hermes</h1>
-        <p className="text-sm text-ink-2 mt-0.5">
-          Your assistant — triages, automates, and hands software work to ACR
-        </p>
-      </div>
+      <ViewHeader
+        title="Hermes"
+        subtitle="Your assistant — triages, automates, and hands software work to ACR"
+      />
 
       {/* Agent control header */}
       <div className="flex items-start justify-between gap-4 p-4 rounded-card bg-surface-1 border border-surface-3">

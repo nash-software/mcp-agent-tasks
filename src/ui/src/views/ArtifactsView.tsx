@@ -13,6 +13,7 @@ import {
 import { useArtifacts } from '../hooks/useArtifacts'
 import { markArtifactOpened } from '../api'
 import { PrefixBadge } from '../components/atoms'
+import { ViewHeader } from '../components/ViewHeader'
 import type { ArtifactEntry, PanelState } from '../types'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 
@@ -223,20 +224,16 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
   const unvisited = sorted.filter(a => a.last_opened_at === null).length
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-6">
-      {/* Header — section-label style: 11px/600/muted/uppercase/tracked */}
-      <div className="mb-5">
-        <h2 className="text-ink font-semibold text-base">Artifacts</h2>
-        {!isLoading && sorted.length > 0 && (
-          <p className="text-ink-muted text-[11px] font-semibold uppercase tracking-wider mt-0.5">
-            last 30 days &middot; {sorted.length} files &middot; {unvisited} unvisited
-          </p>
-        )}
-        <p className="flex items-center gap-1.5 text-ink-muted text-xs mt-1.5">
-          <Clock size={11} className="shrink-0" />
-          Sorted by staleness — oldest-viewed first. This is what you might be forgetting.
-        </p>
-      </div>
+    <div className="">
+      {/* Header */}
+      <ViewHeader
+        title="Artifacts"
+        subtitle={
+          !isLoading && sorted.length > 0
+            ? `last 30 days · ${sorted.length} files · ${unvisited} unvisited`
+            : undefined
+        }
+      />
 
       {/* Copy toast notification */}
       {toastMsg && (
