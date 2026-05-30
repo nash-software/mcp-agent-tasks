@@ -320,7 +320,7 @@ export function TodayView({
             Nothing committed yet — commit something from below.
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-2">
             {committedList.map(task => (
               <TaskCard
                 key={task.id}

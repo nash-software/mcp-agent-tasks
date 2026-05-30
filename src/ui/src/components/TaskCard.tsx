@@ -95,11 +95,11 @@ export function TaskCard({
       if (e.key === 'Escape') setMenuOpen(false)
     }
 
-    document.addEventListener('mousedown', handleDocClick)
+    document.addEventListener('pointerdown', handleDocClick)
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
-      document.removeEventListener('mousedown', handleDocClick)
+      document.removeEventListener('pointerdown', handleDocClick)
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [menuOpen])
