@@ -242,7 +242,9 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   // Show "Start" for todo/blocked tasks (per P4-01 AC)
   const canStart = task && (task.status === 'todo' || task.status === 'blocked')
-  const canDone  = task && task.status !== 'done' && task.status !== 'archived'
+  // Done is only a valid transition from in_progress (per the state machine) —
+  // showing it elsewhere produces guaranteed 409s (codex F5).
+  const canDone  = task && task.status === 'in_progress'
 
   return (
     /*
