@@ -96,23 +96,27 @@ async function main(): Promise<void> {
   // any tool requests.
   const dbPath = path.join(config.storageDir, '.index.db');
   const healthResult = ensureHealthyIndex(dbPath, {}, (freshIndex) => {
-    // Reconcile all configured projects into the fresh index during rebuild.
-    // Mirrors the resolveTasksDir logic in StoreRegistry.
-    const seen = new Set<string>();
+    // Reconcile every configured project into the fresh index during rebuild.
+    // Reconcile is PREFIX-scoped, not directory-scoped — global-storage prefixes
+    // (e.g. MCPAT/NASH/IFS) share one tasksDir, so we must NOT dedupe by tasksDir
+    // or sibling prefixes would be dropped (MCPAT-049 codex F1). Errors are
+    // accumulated and rethrown so ensureHealthyIndex can fall back to the normal
+    // startup reconcile instead of silently leaving a partial index (F2).
+    const errors: string[] = [];
     for (const entry of config.projects) {
       const tasksDir =
         entry.storage === 'global'
           ? config.storageDir
           : path.join(entry.path, config.tasksDirName);
-      if (seen.has(tasksDir) || !fs.existsSync(tasksDir)) continue;
-      seen.add(tasksDir);
+      if (!fs.existsSync(tasksDir)) continue;
       try {
-        const reconciler = new Reconciler(freshIndex, tasksDir, entry.prefix);
-        reconciler.reconcile();
+        new Reconciler(freshIndex, tasksDir, entry.prefix).reconcile();
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[index-health] rebuild reconcile failed for ${entry.prefix}: ${msg}\n`);
+        errors.push(`${entry.prefix}: ${err instanceof Error ? err.message : String(err)}`);
       }
+    }
+    if (errors.length > 0) {
+      throw new Error(`rebuild reconcile failed for ${errors.length} project(s): ${errors.join('; ')}`);
     }
   });
   if (healthResult === 'rebuilt') {

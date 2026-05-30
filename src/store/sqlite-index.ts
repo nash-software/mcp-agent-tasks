@@ -312,15 +312,13 @@ export class SqliteIndex {
   }
 
   /**
-   * Overwrite the stored body_hash for a task. Used by the reconciler to record
-   * the hash of the full markdown file (frontmatter + body) so subsequent
-   * reconciles can skip unchanged files correctly (MCPAT-049 F1).
+   * Upsert a task. `bodyHash` is the single canonical change-detection hash —
+   * the reconciler passes the hash of the FULL markdown file (frontmatter +
+   * body). Callers without a file (MCP tool writes) omit it; body_hash is then
+   * null and the next reconcile re-syncs it once (MCPAT-049 F4 — one hash owner,
+   * no post-upsert patching).
    */
-  setBodyHash(id: string, hash: string): void {
-    this.db.prepare('UPDATE tasks SET body_hash=? WHERE id=?').run(hash, id);
-  }
-
-  upsertTask(task: Task): void {
+  upsertTask(task: Task, bodyHash?: string | null): void {
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO tasks (
         id, title, type, status, priority, project,
@@ -372,7 +370,7 @@ export class SqliteIndex {
         pr_base_branch: t.git.pr?.base_branch ?? null,
         file_path: t.file_path,
         body: t.body,
-        body_hash: SqliteIndex.hashBody(t.body ?? ''),
+        body_hash: bodyHash ?? null,
         schema_version: t.schema_version,
         spec_file: t.spec_file ?? null,
         milestone: t.milestone ?? null,

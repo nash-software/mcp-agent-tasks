@@ -67,8 +67,7 @@ export class Reconciler {
           continue;
         }
 
-        this.sqliteIndex.upsertTask(task);
-        this.sqliteIndex.setBodyHash(task.id, fileHash);
+        this.sqliteIndex.upsertTask(task, fileHash);
         count++;
         changed++;
       } catch (err) {

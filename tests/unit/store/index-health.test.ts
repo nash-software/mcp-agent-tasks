@@ -134,22 +134,23 @@ describe('SqliteIndex — body_hash (incremental reconcile mechanism)', () => {
     rmDirSafe(tmpDir);
   });
 
-  it('stores body_hash on upsert; getBodyHash matches hashBody(body)', () => {
-    const task = makeTask('TEST-1', { body: 'hello world' });
-    idx.upsertTask(task);
-    expect(idx.getBodyHash('TEST-1')).toBe(SqliteIndex.hashBody('hello world'));
+  it('stores the canonical hash passed to upsertTask', () => {
+    idx.upsertTask(makeTask('TEST-1', { body: 'hello' }), 'abc123');
+    expect(idx.getBodyHash('TEST-1')).toBe('abc123');
   });
 
-  it('hash changes when body changes (so reconcile will re-index)', () => {
-    idx.upsertTask(makeTask('TEST-1', { body: 'v1' }));
-    const h1 = idx.getBodyHash('TEST-1');
-    idx.upsertTask(makeTask('TEST-1', { body: 'v2' }));
-    const h2 = idx.getBodyHash('TEST-1');
-    expect(h1).not.toBe(h2);
+  it('stores null when no hash is provided (MCP-tool write path re-syncs next reconcile)', () => {
+    idx.upsertTask(makeTask('TEST-1', { body: 'hello' }));
+    expect(idx.getBodyHash('TEST-1')).toBeNull();
   });
 
   it('getBodyHash returns null for unknown task', () => {
     expect(idx.getBodyHash('NOPE-9')).toBeNull();
+  });
+
+  it('hashBody is deterministic and content-sensitive', () => {
+    expect(SqliteIndex.hashBody('x')).toBe(SqliteIndex.hashBody('x'));
+    expect(SqliteIndex.hashBody('x')).not.toBe(SqliteIndex.hashBody('y'));
   });
 });
 
@@ -242,13 +243,4 @@ describe('SqliteIndex — body_hash column migration (existing DBs)', () => {
     idx.close();
   });
 
-  it('setBodyHash overwrites the stored hash', () => {
-    const idx = new SqliteIndex(dbPath);
-    idx.init();
-    void idx.nextId('TEST');
-    idx.upsertTask(makeTask('TEST-1', { body: 'body' }));
-    idx.setBodyHash('TEST-1', 'deadbeef');
-    expect(idx.getBodyHash('TEST-1')).toBe('deadbeef');
-    idx.close();
-  });
 });
