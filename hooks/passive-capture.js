@@ -223,7 +223,22 @@ if (require.main === module) {
     try {
       fs.mkdirSync(mcpTasksDir, { recursive: true });
     } catch { /* ignore if already exists */ }
-    fs.appendFileSync(artifactsPath, record + '\n');
+    // Cap artifacts.jsonl to the newest ARTIFACTS_MAX records (MCPAT-049) — the
+    // file is append-only with only a read-time TTL, so trim on write.
+    const ARTIFACTS_MAX = 5000;
+    try {
+      let lines = [];
+      if (fs.existsSync(artifactsPath)) {
+        lines = fs.readFileSync(artifactsPath, 'utf-8').split('\n').filter(l => l.trim() !== '');
+      }
+      lines.push(record);
+      if (lines.length > ARTIFACTS_MAX) lines = lines.slice(-ARTIFACTS_MAX);
+      const tmp = artifactsPath + '.tmp.' + process.pid;
+      fs.writeFileSync(tmp, lines.join('\n') + '\n');
+      fs.renameSync(tmp, artifactsPath);
+    } catch {
+      fs.appendFileSync(artifactsPath, record + '\n'); // fallback: plain append
+    }
   } catch (e) {
     process.stderr.write('[passive-capture] artifact log write failed: ' + (e && e.message ? e.message : String(e)) + '\n');
   }

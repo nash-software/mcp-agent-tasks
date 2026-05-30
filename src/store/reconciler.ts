@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse as yamlParse } from 'yaml';
-import type { SqliteIndex } from './sqlite-index.js';
+import { SqliteIndex } from './sqlite-index.js';
 import { MarkdownStore } from './markdown-store.js';
 import { MilestoneRepository } from './milestone-repository.js';
 import { McpTasksError } from '../types/errors.js';
@@ -48,15 +48,26 @@ export class Reconciler {
 
     const files = fs.readdirSync(this.tasksDir).filter(f => f.endsWith('.md'));
     let count = 0;
+    let changed = 0;
 
     for (const file of files) {
       const filePath = path.join(this.tasksDir, file);
       try {
         const task = this.markdownStore.read(filePath);
-        if (task.project === this.project) {
-          this.sqliteIndex.upsertTask(task);
+        if (task.project !== this.project) continue;
+
+        // Incremental reconcile: skip upsert when the body hash is unchanged.
+        const newHash = SqliteIndex.hashBody(task.body ?? '');
+        const storedHash = this.sqliteIndex.getBodyHash(task.id);
+        if (storedHash !== null && storedHash === newHash) {
+          // Body is identical — no need to rewrite SQLite rows.
           count++;
+          continue;
         }
+
+        this.sqliteIndex.upsertTask(task);
+        count++;
+        changed++;
       } catch (err) {
         // Skip corrupt files — log and continue
         if (err instanceof McpTasksError && err.code === 'SCHEMA_MISMATCH') {
@@ -67,9 +78,9 @@ export class Reconciler {
       }
     }
 
-    // After processing tasks, reset FTS5 shadow tables to prevent orphaned rows
-    // from leaking across reconcile runs and inflating the database.
-    if (count >= 1) {
+    // After processing tasks, reset FTS5 shadow tables only when at least one
+    // task actually changed — avoids unnecessary FTS churn on no-op reconciles.
+    if (changed >= 1) {
       this.sqliteIndex.rebuildFts();
     }
 

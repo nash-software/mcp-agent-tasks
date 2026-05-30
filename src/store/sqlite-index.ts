@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,11 +110,19 @@ export class SqliteIndex {
     // foreign_keys and journal_mode are NOT persisted across connections —
     // they must be set on every open. Setting them here (before init()/schema)
     // guarantees they are always active regardless of call order.
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('busy_timeout = 5000');
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('synchronous = NORMAL');
-    this.db.pragma('wal_autocheckpoint = 1000');
+    try {
+      this.db.pragma('foreign_keys = ON');
+      this.db.pragma('busy_timeout = 5000');
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('synchronous = NORMAL');
+      this.db.pragma('wal_autocheckpoint = 1000');
+    } catch (err) {
+      // A corrupt/non-database file throws on the first pragma. Release the
+      // file handle before rethrowing so callers (e.g. index-health rebuild)
+      // can delete the bad file — otherwise it stays locked on Windows.
+      try { this.db.close(); } catch { /* ignore */ }
+      throw err;
+    }
   }
 
   init(): void {
@@ -282,6 +291,25 @@ export class SqliteIndex {
     return task;
   }
 
+  /**
+   * Compute a stable SHA-1 hash of a task's markdown body.
+   * Used by the incremental reconciler to skip upserts when the body has not changed.
+   */
+  static hashBody(body: string): string {
+    return crypto.createHash('sha1').update(body).digest('hex');
+  }
+
+  /**
+   * Return the stored body_hash for the task with the given id, or null if
+   * the task is not in the index or has no hash recorded.
+   */
+  getBodyHash(id: string): string | null {
+    const row = this.db
+      .prepare<string>('SELECT body_hash FROM tasks WHERE id=?')
+      .get(id) as { body_hash: string | null } | undefined;
+    return row?.body_hash ?? null;
+  }
+
   upsertTask(task: Task): void {
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO tasks (
@@ -290,7 +318,7 @@ export class SqliteIndex {
         created, updated, last_activity,
         claimed_by, claimed_at, claim_ttl_hours,
         branch, pr_number, pr_url, pr_state, pr_title, pr_merged_at, pr_base_branch,
-        file_path, body, schema_version, spec_file,
+        file_path, body, body_hash, schema_version, spec_file,
         milestone, estimate_hours, plan_file, auto_captured,
         area, scheduled_for, agent_status, block_reason,
         triage_note, triage_confidence
@@ -300,7 +328,7 @@ export class SqliteIndex {
         @created, @updated, @last_activity,
         @claimed_by, @claimed_at, @claim_ttl_hours,
         @branch, @pr_number, @pr_url, @pr_state, @pr_title, @pr_merged_at, @pr_base_branch,
-        @file_path, @body, @schema_version, @spec_file,
+        @file_path, @body, @body_hash, @schema_version, @spec_file,
         @milestone, @estimate_hours, @plan_file, @auto_captured,
         @area, @scheduled_for, @agent_status, @block_reason,
         @triage_note, @triage_confidence
@@ -334,6 +362,7 @@ export class SqliteIndex {
         pr_base_branch: t.git.pr?.base_branch ?? null,
         file_path: t.file_path,
         body: t.body,
+        body_hash: SqliteIndex.hashBody(t.body ?? ''),
         schema_version: t.schema_version,
         spec_file: t.spec_file ?? null,
         milestone: t.milestone ?? null,
@@ -401,7 +430,20 @@ export class SqliteIndex {
   }
 
   deleteTask(id: string): void {
-    this.db.prepare('DELETE FROM tasks WHERE id=?').run(id);
+    // Belt-and-suspenders explicit cascade: delete all child rows BEFORE the
+    // task row, in addition to the FK CASCADE triggers already in schema.sql.
+    // This ensures no orphan rows survive even if FK enforcement was temporarily off.
+    const deleteCascade = this.db.transaction((taskId: string) => {
+      this.db.prepare('DELETE FROM subtasks WHERE parent_id=?').run(taskId);
+      this.db.prepare('DELETE FROM dependencies WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM tags WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM transitions WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM commits WHERE task_id=?').run(taskId);
+      this.db.prepare('DELETE FROM children WHERE parent_id=?').run(taskId);
+      this.db.prepare('DELETE FROM task_references WHERE from_id=?').run(taskId);
+      this.db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
+    });
+    deleteCascade(id);
   }
 
   getTask(id: string): Task | null {
@@ -738,6 +780,36 @@ export class SqliteIndex {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[sqlite-index] rebuildFts failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Run SQLite's built-in quick_check integrity verification.
+   * Returns true if the database passes ('ok'), false if corrupt.
+   * Never throws — failures are treated as corrupt.
+   */
+  quickCheck(): boolean {
+    if (!this.db.open) return false;
+    try {
+      const result = this.db.pragma('quick_check', { simple: true }) as string;
+      return result === 'ok';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Run VACUUM to reclaim free pages and compact the database file.
+   * Called after a forced rebuild to start with a minimal file size.
+   * Never throws — failures are logged to stderr.
+   */
+  vacuum(): void {
+    if (!this.db.open) return;
+    try {
+      this.db.exec('VACUUM');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] vacuum failed: ${msg}`);
     }
   }
 

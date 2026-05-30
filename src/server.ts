@@ -11,6 +11,7 @@ import { ManifestWriter } from './store/manifest-writer.js';
 import { StoreRegistry } from './store/store-registry.js';
 import { Reconciler } from './store/reconciler.js';
 import { FileWatcher } from './store/file-watcher.js';
+import { ensureHealthyIndex } from './store/index-health.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
 import type { ToolContext } from './tools/context.js';
@@ -89,8 +90,35 @@ async function main(): Promise<void> {
 
   const config = loadConfig();
 
-  // One shared SqliteIndex at global storageDir
+  // One shared SqliteIndex at global storageDir.
+  // Run startup health check BEFORE opening the real index so that a corrupt
+  // or oversized database is rebuilt from markdown before the server accepts
+  // any tool requests.
   const dbPath = path.join(config.storageDir, '.index.db');
+  const healthResult = ensureHealthyIndex(dbPath, {}, (freshIndex) => {
+    // Reconcile all configured projects into the fresh index during rebuild.
+    // Mirrors the resolveTasksDir logic in StoreRegistry.
+    const seen = new Set<string>();
+    for (const entry of config.projects) {
+      const tasksDir =
+        entry.storage === 'global'
+          ? config.storageDir
+          : path.join(entry.path, config.tasksDirName);
+      if (seen.has(tasksDir) || !fs.existsSync(tasksDir)) continue;
+      seen.add(tasksDir);
+      try {
+        const reconciler = new Reconciler(freshIndex, tasksDir, entry.prefix);
+        reconciler.reconcile();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`[index-health] rebuild reconcile failed for ${entry.prefix}: ${msg}\n`);
+      }
+    }
+  });
+  if (healthResult === 'rebuilt') {
+    process.stderr.write('[index-health] index was corrupt/oversized and has been rebuilt from markdown\n');
+  }
+
   const sqliteIndex = new SqliteIndex(dbPath);
   sqliteIndex.init();
 
@@ -187,6 +215,17 @@ async function main(): Promise<void> {
   // watchers declared here so shutdown() can stop them regardless of timing
   const watchers: FileWatcher[] = [];
 
+  // Log store errors instead of swallowing them silently. Corruption / disk-full
+  // are surfaced loudly so index degradation cannot go unnoticed (see MCPAT-049).
+  const logStoreError = (scope: string, err: unknown): void => {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/SQLITE_CORRUPT|SQLITE_FULL|SQLITE_IOERR/.test(msg)) {
+      process.stderr.write(`[agent-tasks] CRITICAL store error in ${scope}: ${msg}\n`);
+    } else {
+      process.stderr.write(`[agent-tasks] ${scope} skipped: ${msg}\n`);
+    }
+  };
+
   const startWatchers = (): void => {
     for (const tasksDir of registry.allTasksDirs()) {
       const watcher = new FileWatcher(
@@ -195,8 +234,8 @@ async function main(): Promise<void> {
           try {
             const task = markdownStore.read(filePath);
             sqliteIndex.upsertTask(task);
-          } catch {
-            // Skip unparseable files
+          } catch (err) {
+            logStoreError('watcher upsert', err);
           }
         },
         (filePath) => {
@@ -207,8 +246,8 @@ async function main(): Promise<void> {
           try {
             const task = markdownStore.read(filePath);
             sqliteIndex.upsertTask(task);
-          } catch {
-            // Skip unparseable files
+          } catch (err) {
+            logStoreError('watcher upsert', err);
           }
         },
       );
@@ -229,12 +268,18 @@ async function main(): Promise<void> {
       const tasksDir = registry.getTasksDirForPrefix(projectEntry.prefix);
       const reconciler = new Reconciler(sqliteIndex, tasksDir, projectEntry.prefix);
       reconciler.reconcile();
-    } catch {
-      // Skip projects whose tasksDir does not exist yet
+    } catch (err) {
+      logStoreError(`reconcile ${projectEntry.prefix}`, err);
     }
     setImmediate(() => reconcileNext(i + 1));
   };
-  setImmediate(() => reconcileNext(0));
+  // Skip initial reconcile if ensureHealthyIndex already rebuilt from markdown.
+  if (healthResult !== 'rebuilt') {
+    setImmediate(() => reconcileNext(0));
+  } else {
+    // Still need to start watchers even when we skipped reconcile.
+    setImmediate(() => startWatchers());
+  }
 
   // Watch config file for hot-reload
   let configDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -250,7 +295,7 @@ async function main(): Promise<void> {
             const dir = newRegistry.getTasksDirForPrefix(entry.prefix);
             const reconciler = new Reconciler(sqliteIndex, dir, entry.prefix);
             reconciler.reconcile();
-          } catch { /* skip missing dirs */ }
+          } catch (err) { logStoreError(`config reconcile ${entry.prefix}`, err); }
         }
 
         ctx.store = newRegistry;

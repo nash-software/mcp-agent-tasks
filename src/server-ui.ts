@@ -8,6 +8,7 @@ import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } fr
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
+import { AGENT_LOG_MAX } from './store/limits.js';
 import type { Priority, Area, Task } from './types/task.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -388,11 +389,31 @@ function readAgentLog(): AgentLog[] {
   return entries.reverse(); // newest-first
 }
 
-/** Append an agent-log entry. Exported for P2-06 action handlers to log runs/promotes. */
+/**
+ * Append an agent-log entry, capped at AGENT_LOG_MAX lines (MCPAT-049).
+ * agent-log.jsonl is pure append-only with no TTL, so it is trimmed to the
+ * newest AGENT_LOG_MAX records on each write via an atomic temp-rename.
+ * Exported for P2-06 action handlers to log runs/promotes.
+ */
 export function appendAgentLog(entry: AgentLog): void {
   const dir = hermesStoreDir();
   mkdirSync(dir, { recursive: true });
-  appendFileSync(agentLogJsonlPath(), JSON.stringify(entry) + '\n', 'utf-8');
+  const file = agentLogJsonlPath();
+  const line = JSON.stringify(entry);
+  try {
+    let lines: string[] = [];
+    if (existsSync(file)) {
+      lines = readFileSync(file, 'utf-8').split('\n').filter(l => l.trim() !== '');
+    }
+    lines.push(line);
+    if (lines.length > AGENT_LOG_MAX) lines = lines.slice(-AGENT_LOG_MAX);
+    const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+    writeFileSync(tmp, lines.join('\n') + '\n', 'utf-8');
+    renameSync(tmp, file); // atomic swap on NTFS + POSIX
+  } catch {
+    // Never let logging break the caller — fall back to a plain append.
+    try { appendFileSync(file, line + '\n', 'utf-8'); } catch { /* give up */ }
+  }
 }
 
 const MIME: Record<string, string> = {
