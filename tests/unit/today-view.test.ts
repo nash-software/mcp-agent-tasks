@@ -455,10 +455,11 @@ describe('EstimatePrompt.tsx — source structure (P4-04, AC 1–3)', () => {
     expect(readUiFile('components/EstimatePrompt.tsx')).toContain('onConfirm');
   });
 
-  it('validates that estimate is > 0 and ≤ 24h', () => {
+  it('validates that estimate is within MIN..MAX hours', () => {
     const src = readUiFile('components/EstimatePrompt.tsx');
     expect(src).toContain('MAX_ESTIMATE_HOURS');
-    expect(src).toContain('v <= 0');
+    expect(src).toContain('MIN_ESTIMATE_HOURS');
+    expect(src).toContain('v > MAX_ESTIMATE_HOURS');
   });
 
   it('has a dismiss path (Escape key or X button)', () => {
