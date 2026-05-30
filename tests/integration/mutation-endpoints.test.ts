@@ -303,6 +303,146 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
   });
 });
 
+// ── P4-07: PATCH milestone field ──────────────────────────────────────────────────────────────────
+
+describe('P4-07 — PATCH /api/tasks/:id milestone field (assign / clear / invalid)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-milestone-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    const configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'MS', path: tempDir, storage: 'local' }],
+    }), 'utf-8');
+
+    saved = {
+      MCP_TASKS_CONFIG: process.env['MCP_TASKS_CONFIG'],
+      MCP_TASKS_DB: process.env['MCP_TASKS_DB'],
+    };
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    delete process.env['MCP_TASKS_DB'];
+
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const dbPath = path.join(tasksDir, '.index.db');
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('MS');
+    const ts = new Date().toISOString();
+
+    // MS-001: task for milestone assignment tests
+    idx.upsertTask({
+      schema_version: 1, id: 'MS-001', title: 'Milestone task', type: 'feature',
+      status: 'todo', priority: 'medium', project: 'MS', tags: [], complexity: 1,
+      complexity_manual: false, why: 'milestone test', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MS-001.md',
+    });
+
+    // MS-002: task for milestone clear test
+    idx.upsertTask({
+      schema_version: 1, id: 'MS-002', title: 'Pre-linked task', type: 'chore',
+      status: 'todo', priority: 'low', project: 'MS', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MS-002.md',
+      milestone: 'MS-ms-existing',
+    });
+
+    idx.close();
+
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('AC-1: PATCH {milestone:"MS-ms-1"} sets the milestone field and returns 200', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MS-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: 'MS-ms-1' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as { id: string; milestone?: string };
+    expect(task.id).toBe('MS-001');
+    expect(task.milestone).toBe('MS-ms-1');
+  });
+
+  it('AC-1: Persistence confirmed — re-read via GET /api/tasks shows milestone set', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`);
+    const tasks = await res.json() as Array<{ id: string; milestone?: string }>;
+    const t = tasks.find(t => t.id === 'MS-001');
+    expect(t).toBeDefined();
+    expect(t!.milestone).toBe('MS-ms-1');
+  });
+
+  it('AC-1: PATCH {milestone:null} clears the milestone field', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MS-002`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: null }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as { id: string; milestone?: string };
+    expect(task.id).toBe('MS-002');
+    // milestone should be absent or null/undefined after clear
+    expect(task.milestone ?? null).toBeNull();
+  });
+
+  it('AC-1: Persistence confirmed — re-read shows milestone cleared on MS-002', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`);
+    const tasks = await res.json() as Array<{ id: string; milestone?: string | null }>;
+    const t = tasks.find(t => t.id === 'MS-002');
+    expect(t).toBeDefined();
+    expect(t!.milestone ?? null).toBeNull();
+  });
+
+  it('AC-2: PATCH {milestone:42} returns 400 INVALID_FIELD (non-string, non-null)', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MS-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: 42 }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-2: PATCH unknown task id returns 404 TASK_NOT_FOUND', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MS-999`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: 'MS-ms-1' }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('TASK_NOT_FOUND');
+  });
+});
+
 interface ClosedTaskShape { id: string; status: string; close_batch?: string; estimate_hours?: number }
 interface BatchResp { batch: string; closed: number; tasks: ClosedTaskShape[]; totalEstimateHours: number }
 
