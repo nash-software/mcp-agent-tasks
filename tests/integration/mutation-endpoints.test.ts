@@ -1,0 +1,304 @@
+/**
+ * P4-01 — Task mutation layer HTTP endpoints integration tests.
+ *
+ * Boots the serve-ui server on an ephemeral port with an isolated temp tasks dir.
+ *
+ * Covers:
+ *  - POST /api/tasks/:id/transition  →  200 in_progress, new transitions[] entry  (AC-1)
+ *  - POST /api/tasks/:id/transition  →  409 Done-on-Done                           (AC-2)
+ *  - POST /api/tasks/:id/transition  →  400 invalid to value                       (AC-2)
+ *  - POST /api/tasks/:id/transition  →  404 unknown id                              (AC-2)
+ *  - PATCH /api/tasks/:id            →  200 updated priority/title/estimate         (AC-3)
+ *  - PATCH /api/tasks/:id            →  400 status field rejected                   (AC-4)
+ *  - PATCH /api/tasks/:id            →  400 invalid priority value                  (AC-4)
+ *  - PATCH /api/tasks/:id            →  400 title too long                          (AC-4)
+ *  - PATCH /api/tasks/:id            →  404 unknown id                              (AC-4)
+ *  - Persistence confirmed via re-read of tasks list after transition/patch
+ */
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
+import { startUiServer, type UiServerHandle } from '../../src/server-ui.js';
+
+interface TaskShape {
+  id: string;
+  status: string;
+  priority: string;
+  title: string;
+  estimate_hours?: number;
+  transitions?: Array<{ from: string; to: string; at: string; reason?: string }>;
+}
+
+describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-mutation-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    const configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'MUT', path: tempDir, storage: 'local' }],
+    }), 'utf-8');
+
+    saved = {
+      MCP_TASKS_CONFIG: process.env['MCP_TASKS_CONFIG'],
+      MCP_TASKS_DB: process.env['MCP_TASKS_DB'],
+      MCP_TASKS_DIR: process.env['MCP_TASKS_DIR'],
+    };
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    delete process.env['MCP_TASKS_DB'];
+
+    // Seed tasks into the project index.
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const dbPath = path.join(tasksDir, '.index.db');
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('MUT');
+    const ts = new Date().toISOString();
+
+    // MUT-001: todo (for transition tests)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-001', title: 'Todo task', type: 'feature',
+      status: 'todo', priority: 'medium', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: 'transition test', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MUT-001.md',
+    });
+
+    // MUT-002: done (for Done-on-Done guard test)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-002', title: 'Already done task', type: 'chore',
+      status: 'done', priority: 'low', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [{ from: 'todo', to: 'done', at: ts }], files: [], body: '', file_path: 'MUT-002.md',
+    });
+
+    // MUT-003: todo (for PATCH tests)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-003', title: 'Patchable task', type: 'feature',
+      status: 'todo', priority: 'medium', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: 'original why', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MUT-003.md',
+    });
+
+    idx.close();
+
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // ── POST /api/tasks/:id/transition ───────────────────────────────────────
+
+  it('AC-1: POST /transition todo→in_progress returns 200 with new status and transitions entry', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'in_progress' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.id).toBe('MUT-001');
+    expect(task.status).toBe('in_progress');
+    expect(task.transitions).toBeDefined();
+    expect(task.transitions!.length).toBeGreaterThan(0);
+    const last = task.transitions![task.transitions!.length - 1];
+    expect(last.from).toBe('todo');
+    expect(last.to).toBe('in_progress');
+  });
+
+  it('AC-1: Persistence confirmed — re-read via GET /api/tasks shows in_progress', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`);
+    const tasks = await res.json() as TaskShape[];
+    const t = tasks.find(t => t.id === 'MUT-001');
+    expect(t).toBeDefined();
+    expect(t!.status).toBe('in_progress');
+  });
+
+  it('AC-2: Done-on-Done returns 409 INVALID_TRANSITION', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-002/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'done' }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('INVALID_TRANSITION');
+  });
+
+  it('AC-2: Invalid to value returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'bogus' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('AC-2: Missing to field returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('AC-2: Unknown task id returns 404 TASK_NOT_FOUND', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-999/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'in_progress' }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('TASK_NOT_FOUND');
+  });
+
+  it('AC-2: No path returns 200 on a rejected transition — guard is server-enforced', async () => {
+    // Done-on-Done must be 409, confirming server enforces the guard
+    const res1 = await fetch(`${baseUrl}/api/tasks/MUT-002/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'done' }),
+    });
+    expect(res1.status).not.toBe(200);
+
+    // archived is a terminal state — no transitions allowed
+    const res2 = await fetch(`${baseUrl}/api/tasks/MUT-002/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'todo' }),  // done→todo is invalid
+    });
+    expect(res2.status).not.toBe(200);
+  });
+
+  it('AC-1: Transition includes optional reason in transitions entry', async () => {
+    // MUT-001 is now in_progress; transition to blocked with a reason
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'blocked', reason: 'waiting for dependency' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.status).toBe('blocked');
+    const last = task.transitions![task.transitions!.length - 1];
+    expect(last.reason).toBe('waiting for dependency');
+  });
+
+  // ── PATCH /api/tasks/:id ─────────────────────────────────────────────────
+
+  it('AC-3: PATCH {priority:"high"} returns 200 with updated priority', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: 'high' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.id).toBe('MUT-003');
+    expect(task.priority).toBe('high');
+  });
+
+  it('AC-3: PATCH {title:"Updated title"} returns 200 with updated title', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Updated title' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.title).toBe('Updated title');
+  });
+
+  it('AC-3: PATCH {estimate_hours:2} returns 200 with estimate set', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estimate_hours: 2 }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.estimate_hours).toBe(2);
+  });
+
+  it('AC-3: Persistence confirmed — re-read via GET /api/tasks shows updated fields', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`);
+    const tasks = await res.json() as TaskShape[];
+    const t = tasks.find(t => t.id === 'MUT-003');
+    expect(t).toBeDefined();
+    expect(t!.priority).toBe('high');
+    expect(t!.title).toBe('Updated title');
+    expect(t!.estimate_hours).toBe(2);
+  });
+
+  it('AC-4: PATCH {status:"done"} returns 400 — status must use /transition', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'done' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-4: PATCH {priority:"urgent"} returns 400 INVALID_FIELD', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: 'urgent' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-4: PATCH {title: 201-char string} returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-003`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'x'.repeat(201) }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('AC-4: PATCH unknown id returns 404 TASK_NOT_FOUND', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-999`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priority: 'high' }),
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe('TASK_NOT_FOUND');
+  });
+});
