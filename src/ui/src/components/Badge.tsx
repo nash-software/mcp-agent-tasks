@@ -2,25 +2,31 @@ import React from 'react'
 import type { TaskType, TaskPriority, TaskStatus } from '../types'
 
 const TYPE_COLORS: Record<TaskType, string> = {
-  feature: 'bg-violet-900 text-violet-300',
-  bug:     'bg-red-900 text-red-300',
-  chore:   'bg-slate-700 text-slate-300',
-  spike:   'bg-amber-900 text-amber-300',
-  spec:    'bg-blue-900 text-blue-300',
+  feature:  'bg-violet-900 text-violet-300',
+  bug:      'bg-red-900 text-red-300',
+  chore:    'bg-slate-700 text-slate-300',
+  spike:    'bg-amber-900 text-amber-300',
+  spec:     'bg-blue-900 text-blue-300',
+  plan:     'bg-slate-700 text-slate-300',
+  refactor: 'bg-slate-700 text-slate-300',
 }
 
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
-  high:   'bg-red-900 text-red-300',
-  medium: 'bg-amber-900 text-amber-300',
-  low:    'bg-slate-700 text-slate-300',
-  normal: 'bg-slate-700 text-slate-300',
+  critical: 'bg-red-900 text-red-300',
+  high:     'bg-red-900 text-red-300',
+  medium:   'bg-amber-900 text-amber-300',
+  low:      'bg-slate-700 text-slate-300',
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  queued:      'bg-slate-700 text-slate-300',
+  todo:        'bg-slate-700 text-slate-300',
   in_progress: 'bg-blue-900 text-blue-300',
   blocked:     'bg-red-900 text-red-300',
   done:        'bg-green-900 text-green-300',
+  archived:    'bg-slate-700 text-slate-300',
+  draft:       'bg-slate-700 text-slate-300',
+  approved:    'bg-green-900 text-green-300',
+  closed:      'bg-slate-700 text-slate-300',
 }
 
 interface Props {

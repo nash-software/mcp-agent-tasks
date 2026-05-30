@@ -302,3 +302,82 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(body.error).toBe('TASK_NOT_FOUND');
   });
 });
+
+interface ClosedTaskShape { id: string; status: string; close_batch?: string; estimate_hours?: number }
+interface BatchResp { batch: string; closed: number; tasks: ClosedTaskShape[]; totalEstimateHours: number }
+
+describe('P4-02 — batch close (Complete all → Completed)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-closebatch-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    const configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1, storageDir: tasksDir, defaultStorage: 'local', enforcement: 'off',
+      autoCommit: false, claimTtlHours: 4, trackManifest: false, tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'CB', path: tempDir, storage: 'local' }],
+    }), 'utf-8');
+    saved = { MCP_TASKS_CONFIG: process.env['MCP_TASKS_CONFIG'], MCP_TASKS_DB: process.env['MCP_TASKS_DB'] };
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    delete process.env['MCP_TASKS_DB'];
+
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const idx = new SqliteIndex(path.join(tasksDir, '.index.db'));
+    idx.init();
+    idx.ensureProject('CB');
+    const ts = new Date().toISOString();
+    const base = {
+      schema_version: 1 as const, type: 'feature' as const, priority: 'medium' as const,
+      project: 'CB', tags: [], complexity: 1, complexity_manual: false, why: '',
+      created: ts, updated: ts, last_activity: ts, claimed_by: null, claimed_at: null,
+      claim_ttl_hours: 4, parent: null, children: [], dependencies: [], subtasks: [],
+      git: { commits: [] }, transitions: [], files: [], body: '',
+    };
+    idx.upsertTask({ ...base, id: 'CB-001', title: 'done a', status: 'done', estimate_hours: 2, file_path: 'CB-001.md' });
+    idx.upsertTask({ ...base, id: 'CB-002', title: 'done b', status: 'done', estimate_hours: 3, file_path: 'CB-002.md' });
+    idx.upsertTask({ ...base, id: 'CB-003', title: 'still todo', status: 'todo', file_path: 'CB-003.md' });
+    idx.close();
+
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('closes every done task into one batch and leaves non-done untouched', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/close-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as BatchResp;
+    expect(body.closed).toBe(2);
+    expect(body.batch).not.toBe('');
+    expect(body.totalEstimateHours).toBe(5);
+    // both done tasks share the same close_batch id
+    expect(new Set(body.tasks.map(t => t.close_batch)).size).toBe(1);
+    expect(body.tasks.every(t => t.status === 'closed')).toBe(true);
+  });
+
+  it('persists: done→closed, todo untouched', async () => {
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as ClosedTaskShape[];
+    expect(tasks.find(t => t.id === 'CB-001')?.status).toBe('closed');
+    expect(tasks.find(t => t.id === 'CB-002')?.status).toBe('closed');
+    expect(tasks.find(t => t.id === 'CB-003')?.status).toBe('todo');
+  });
+
+  it('is idempotent — a second close-batch with no done tasks is a 0-count no-op', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/close-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    expect(res.status).toBe(200);
+    const body = await res.json() as BatchResp;
+    expect(body.closed).toBe(0);
+  });
+});

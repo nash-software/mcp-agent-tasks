@@ -14,6 +14,7 @@ export const STATUS_DOT: Record<TaskStatus, string> = {
   archived:    'bg-ink-faint',     // #52525B — maps prototype 'cancelled' visually
   draft:       'bg-ink-faint',     // #52525B — unpublished/staging state
   approved:    'bg-status-green',  // #22C55E — ready/approved
+  closed:      'bg-ink-faint',     // #52525B — terminal sprint-closure state (P4-02)
 }
 
 export const PRIORITY_COLOR: Record<TaskPriority, string> = {

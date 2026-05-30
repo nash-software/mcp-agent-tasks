@@ -12,6 +12,7 @@ import { LiveFeedSection } from './components/LiveFeedSection'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
 import { HermesView } from './views/HermesView'
+import { CompletedView } from './views/CompletedView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
@@ -24,7 +25,7 @@ import { fetchProjects, type ProjectEntry } from './api'
 import { useQuery } from '@tanstack/react-query'
 import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
-const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
+const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
 
 // ─── Density types + persistence ────────────────────────────────────────────
 const VALID_DENSITIES: Density[] = ['compact', 'cozy', 'spacious']
@@ -512,6 +513,7 @@ export function App(): React.JSX.Element {
           {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
+          {view === 'completed' && <CompletedView />}
         </div>
       </main>
 

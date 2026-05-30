@@ -1,4 +1,4 @@
-export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved'
+export type TaskStatus = 'todo' | 'in_progress' | 'done' | 'blocked' | 'archived' | 'draft' | 'approved' | 'closed'
 export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spec' | 'plan'
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
 export type TaskArea = 'client' | 'personal' | 'outsource' | 'internal'
@@ -50,6 +50,9 @@ export interface Task {
   block_reason?: string  // epic §4 — shown when status==='blocked'
   tags?: string[]        // epic §4 alias for labels
   agent_status?: 'scheduled' | 'running' | 'done'  // P2-05: Hermes sign-off gate
+  // P4-02: sprint-closure fields
+  closed_at?: number        // epoch ms — when the batch close ran
+  close_batch?: string      // batch id stamped by POST /api/tasks/close-batch
 }
 
 export interface TodayCapacity {
@@ -126,7 +129,15 @@ export interface BrainSearchResponse {
   offline?: boolean
 }
 
-export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity'
+export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity' | 'completed'
+
+// P4-02: batch close response
+export interface BatchCloseResponse {
+  batch: string
+  closed: number
+  tasks: Task[]
+  totalEstimateHours: number
+}
 export interface PanelState { mode: 'peek' | 'detail'; taskId: string }
 
 // ── Phase 2 types ──────────────────────────────────────────────────────────

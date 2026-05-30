@@ -9,7 +9,7 @@ import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
-import type { Priority, Area, Task, TaskStatus } from './types/task.js';
+import type { Priority, Area, Task, TaskStatus, StatusTransition } from './types/task.js';
 import { isValidTransition } from './types/transitions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1453,6 +1453,102 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               return;
             }
             sendJson(res, 200, task);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: batch-close done tasks → closed (P4-02)
+      // POST /api/tasks/close-batch — idempotent; transitions every done→closed in one batch.
+      // Body: { project?: string } — optional scope (default: all projects).
+      // Returns: { batch: string; closed: number; tasks: Task[]; totalEstimateHours: number }
+      if (pathname === '/api/tasks/close-batch' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            let projectScope: string | undefined;
+            if (req.headers['content-length'] && Number(req.headers['content-length']) > 0) {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as { project?: unknown };
+              if (body.project !== undefined) {
+                if (typeof body.project !== 'string') {
+                  sendJson(res, 400, { error: 'INVALID_FIELD', message: 'project must be a string' });
+                  return;
+                }
+                projectScope = body.project;
+              }
+            }
+
+            // Validate scope if provided
+            if (projectScope !== undefined) {
+              const knownPrefixes = projectIndexes.map(p => p.prefix);
+              if (!knownPrefixes.includes(projectScope)) {
+                sendJson(res, 400, { error: 'UNKNOWN_PROJECT', message: `project '${projectScope}' not found; known: ${knownPrefixes.join(', ')}` });
+                return;
+              }
+            }
+
+            // Collect all done tasks in scope
+            const scopedIndexes = projectScope
+              ? projectIndexes.filter(p => p.prefix === projectScope)
+              : projectIndexes;
+
+            const doneTasks = scopedIndexes.flatMap(p => p.index.listTasks({ status: 'done' }));
+            if (doneTasks.length === 0) {
+              sendJson(res, 200, { batch: '', closed: 0, tasks: [], totalEstimateHours: 0 });
+              return;
+            }
+
+            // Generate one shared batch id + timestamp for this sprint closure
+            const closedAt = Date.now();
+            const batchId = `close-${new Date(closedAt).toISOString()}`;
+            const now = new Date(closedAt).toISOString();
+
+            const closedTasks: Task[] = [];
+            let totalEstimateHours = 0;
+
+            for (const pIdx of scopedIndexes) {
+              const pDoneTasks = pIdx.index.listTasks({ status: 'done' });
+              for (const task of pDoneTasks) {
+                if (task.status !== 'done') continue; // double-guard: only done→closed
+
+                const transition: StatusTransition = { from: task.status, to: 'closed', at: now, reason: 'Batch close' };
+                task.status = 'closed';
+                task.closed_at = closedAt;
+                task.close_batch = batchId;
+                task.transitions = [...task.transitions, transition].slice(-MAX_TRANSITIONS);
+                task.updated = now;
+                task.last_activity = now;
+
+                // Markdown-first, fail-closed (consistent with the P2-04 signoff path)
+                const persisted = persistTaskDurable(pIdx, task, (md) => {
+                  md.status = 'closed';
+                  md.closed_at = closedAt;
+                  md.close_batch = batchId;
+                  md.transitions = [...(md.transitions ?? []), transition].slice(-MAX_TRANSITIONS);
+                  md.updated = now;
+                  md.last_activity = now;
+                });
+                if (!persisted) {
+                  // Fail-closed: log and skip — do NOT report this task as closed
+                  console.error(`[close-batch] markdown write failed for ${task.id}, skipping`);
+                  continue;
+                }
+
+                closedTasks.push(task);
+                totalEstimateHours += typeof task.estimate_hours === 'number' ? task.estimate_hours : 0;
+              }
+            }
+
+            sendJson(res, 200, {
+              batch: batchId,
+              closed: closedTasks.length,
+              tasks: closedTasks,
+              totalEstimateHours,
+            });
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
