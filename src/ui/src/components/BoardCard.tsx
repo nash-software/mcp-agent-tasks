@@ -72,7 +72,7 @@ export function BoardCard({ task, onOpenPanel, isOverlay = false }: BoardCardPro
         'hover:bg-surface-2 transition-colors',
         'select-none',
         isOverlay
-          ? 'opacity-80 cursor-grabbing shadow-lg'
+          ? 'opacity-80 cursor-grabbing shadow-lg pointer-events-none'
           : isDragging
             ? 'opacity-40 cursor-grab'
             : 'cursor-pointer',
@@ -82,16 +82,18 @@ export function BoardCard({ task, onOpenPanel, isOverlay = false }: BoardCardPro
       data-task-id={task.id}
       aria-label={`Task: ${task.title}. Status: ${task.status}. Press Space to pick up and drag.`}
       {...attributes}
+      {...listeners}
     >
       {/* Card header: drag handle + PrefixBadge left, priority tag right */}
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5">
-          {/* Drag handle — only visible on hover / focus */}
+          {/* Drag handle — visual affordance only; the whole card is the draggable
+              (attributes + listeners on the focusable card root) so keyboard users
+              can focus the card and press Space to pick up (codex F2). */}
           <span
-            {...listeners}
+            aria-hidden="true"
             className="text-ink-muted/40 hover:text-ink-muted cursor-grab active:cursor-grabbing shrink-0
                        transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-            aria-label="Drag to move"
             tabIndex={-1}
           >
             <GripVertical size={14} />
