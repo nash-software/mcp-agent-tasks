@@ -189,4 +189,66 @@ describe('SqliteIndex — deleteTask leaves no orphan child rows', () => {
     ro.close();
     expect(tasksLeft).toBe(0);
   });
+
+  it('removes reverse-direction children + task_references rows (F2)', () => {
+    idx.upsertTask(makeTask('TEST-A'));
+    idx.upsertTask(makeTask('TEST-B'));
+    const raw = idx.getRawDb();
+    // TEST-A appears only as child_id / to_id (the reverse direction)
+    raw.prepare('INSERT INTO children (parent_id, child_id) VALUES (?,?)').run('TEST-B', 'TEST-A');
+    raw.prepare("INSERT INTO task_references (from_id, to_id, ref_type) VALUES (?,?,?)").run('TEST-B', 'TEST-A', 'related');
+
+    idx.deleteTask('TEST-A');
+
+    const ro = new Database(dbPath, { readonly: true });
+    const kids = (ro.prepare('SELECT count(*) c FROM children WHERE child_id=?').get('TEST-A') as { c: number }).c;
+    const refs = (ro.prepare('SELECT count(*) c FROM task_references WHERE to_id=?').get('TEST-A') as { c: number }).c;
+    ro.close();
+    expect(kids, 'reverse children row should be gone').toBe(0);
+    expect(refs, 'reverse task_reference row should be gone').toBe(0);
+  });
+});
+
+describe('SqliteIndex — body_hash column migration (existing DBs)', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    dbPath = path.join(tmpDir, 'tasks.db');
+  });
+  afterEach(() => {
+    rmDirSafe(tmpDir);
+  });
+
+  it('re-adds body_hash on init() for a DB that lacks the column', () => {
+    // Build a DB, then simulate a legacy DB by dropping body_hash.
+    let idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.getRawDb().exec('ALTER TABLE tasks DROP COLUMN body_hash');
+    // Sanity: column is gone.
+    const cols0 = (idx.getRawDb().prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
+    expect(cols0).not.toContain('body_hash');
+    idx.close();
+
+    // Re-open + init() must restore the column via addColumnIfNotExists.
+    idx = new SqliteIndex(dbPath);
+    idx.init();
+    void idx.nextId('TEST');
+    const cols1 = (idx.getRawDb().prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
+    expect(cols1, 'body_hash must be migrated back').toContain('body_hash');
+    // And upsert (which writes @body_hash) must not throw.
+    expect(() => idx.upsertTask(makeTask('TEST-1'))).not.toThrow();
+    idx.close();
+  });
+
+  it('setBodyHash overwrites the stored hash', () => {
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    void idx.nextId('TEST');
+    idx.upsertTask(makeTask('TEST-1', { body: 'body' }));
+    idx.setBodyHash('TEST-1', 'deadbeef');
+    expect(idx.getBodyHash('TEST-1')).toBe('deadbeef');
+    idx.close();
+  });
 });

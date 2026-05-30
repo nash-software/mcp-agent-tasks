@@ -56,16 +56,19 @@ export class Reconciler {
         const task = this.markdownStore.read(filePath);
         if (task.project !== this.project) continue;
 
-        // Incremental reconcile: skip upsert when the body hash is unchanged.
-        const newHash = SqliteIndex.hashBody(task.body ?? '');
+        // Incremental reconcile: skip upsert only when the ENTIRE markdown file
+        // is unchanged. Hashing the raw file (frontmatter + body) — not just the
+        // body — ensures frontmatter edits (status, priority, tags, deps, git
+        // metadata) are never falsely skipped (MCPAT-049 F1).
+        const fileHash = SqliteIndex.hashBody(fs.readFileSync(filePath, 'utf-8'));
         const storedHash = this.sqliteIndex.getBodyHash(task.id);
-        if (storedHash !== null && storedHash === newHash) {
-          // Body is identical — no need to rewrite SQLite rows.
+        if (storedHash !== null && storedHash === fileHash) {
           count++;
           continue;
         }
 
         this.sqliteIndex.upsertTask(task);
+        this.sqliteIndex.setBodyHash(task.id, fileHash);
         count++;
         changed++;
       } catch (err) {

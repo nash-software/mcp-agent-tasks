@@ -93,9 +93,11 @@ export function ensureHealthyIndex(
   const fresh = new SqliteIndex(dbPath);
   fresh.init();
 
+  let rebuildOk = true;
   try {
     rebuildFn(fresh);
   } catch (err) {
+    rebuildOk = false;
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[index-health] rebuildFn error: ${msg}`);
   }
@@ -106,5 +108,8 @@ export function ensureHealthyIndex(
   fresh.checkpoint();
   fresh.close();
 
-  return 'rebuilt';
+  // If the rebuild did not complete cleanly, return 'ok' so the caller runs its
+  // normal startup reconcile and re-populates the (now empty) index, rather than
+  // skipping it on the assumption the rebuild succeeded (MCPAT-049 F4).
+  return rebuildOk ? 'rebuilt' : 'ok';
 }

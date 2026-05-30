@@ -146,6 +146,7 @@ export class SqliteIndex {
       }
     };
 
+    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
     addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
@@ -310,6 +311,15 @@ export class SqliteIndex {
     return row?.body_hash ?? null;
   }
 
+  /**
+   * Overwrite the stored body_hash for a task. Used by the reconciler to record
+   * the hash of the full markdown file (frontmatter + body) so subsequent
+   * reconciles can skip unchanged files correctly (MCPAT-049 F1).
+   */
+  setBodyHash(id: string, hash: string): void {
+    this.db.prepare('UPDATE tasks SET body_hash=? WHERE id=?').run(hash, id);
+  }
+
   upsertTask(task: Task): void {
     const insert = this.db.prepare(`
       INSERT OR REPLACE INTO tasks (
@@ -439,8 +449,9 @@ export class SqliteIndex {
       this.db.prepare('DELETE FROM tags WHERE task_id=?').run(taskId);
       this.db.prepare('DELETE FROM transitions WHERE task_id=?').run(taskId);
       this.db.prepare('DELETE FROM commits WHERE task_id=?').run(taskId);
-      this.db.prepare('DELETE FROM children WHERE parent_id=?').run(taskId);
-      this.db.prepare('DELETE FROM task_references WHERE from_id=?').run(taskId);
+      // Both directions: the task may appear as parent OR child / from OR to.
+      this.db.prepare('DELETE FROM children WHERE parent_id=? OR child_id=?').run(taskId, taskId);
+      this.db.prepare('DELETE FROM task_references WHERE from_id=? OR to_id=?').run(taskId, taskId);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
     });
     deleteCascade(id);
