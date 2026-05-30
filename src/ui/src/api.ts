@@ -170,6 +170,17 @@ export function searchBrain(query: string): Promise<BrainSearchResponse> {
   return get<BrainSearchResponse>(`/api/brain/search?q=${encodeURIComponent(query)}`)
 }
 
+export interface BrainStatusResult {
+  online: boolean
+  latencyMs?: number
+  reason?: 'tls' | 'timeout' | 'shape' | 'error'
+}
+
+/** Probe Brain MCP server liveness — uses the dedicated /api/brain/status route, not brain_search. */
+export function fetchBrainStatus(): Promise<BrainStatusResult> {
+  return get<BrainStatusResult>('/api/brain/status')
+}
+
 export async function transitionTask(
   id: string,
   to: string,

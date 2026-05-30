@@ -52,20 +52,20 @@ export function Nav({
   const acrQ = useAcrStatus()
 
   const brainQ = useQuery({
-    queryKey: ['brain-ping'],
+    queryKey: ['brain-status'],
     queryFn: async () => {
       try {
-        const r = await fetch('/api/brain/search?q=status')
-        return r.ok ? (r.json() as Promise<{ offline?: boolean }>) : { offline: true }
+        const r = await fetch('/api/brain/status')
+        return r.ok ? (r.json() as Promise<{ online: boolean }>) : { online: false }
       } catch {
-        return { offline: true }
+        return { online: false }
       }
     },
     staleTime: 30_000,
   })
 
   const acrOffline = acrQ.data?.offline ?? true
-  const brainOffline = brainQ.data?.offline ?? true
+  const brainOffline = !(brainQ.data?.online ?? false)
 
   // Build a lookup from filterProjects for resolving area per pinned prefix.
   const projectByPrefix = React.useMemo(() => {

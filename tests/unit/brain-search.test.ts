@@ -1,8 +1,9 @@
 /**
- * Unit tests for GET /api/brain/search
+ * Unit tests for GET /api/brain/search and GET /api/brain/status
  * - online path: mock brain MCP fetch returns results
  * - offline path: ECONNREFUSED → returns { offline: true, results: [] }, HTTP 200
  * - validation: empty q → 400
+ * - brain/status: offline path returns { online: false } (never throws)
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import fs from 'node:fs';
@@ -212,5 +213,90 @@ describe('GET /api/brain/search — validation', () => {
   it('returns 400 when q param is empty', async () => {
     const res = await realFetch(`${baseUrl}/api/brain/search?q=`);
     expect(res.status).toBe(400);
+  });
+});
+
+// ─── GET /api/brain/status — offline path ────────────────────────────────────
+
+describe('GET /api/brain/status — offline path', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  const realFetch = globalThis.fetch.bind(globalThis);
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+    const env = makeTempEnv();
+    tempDir = env.tempDir;
+    ({ handle, baseUrl } = await startServer(env.configPath, env.dbPath));
+  });
+
+  afterAll(async () => {
+    vi.restoreAllMocks();
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns { online: false } with HTTP 200 when Brain is unreachable — never throws', async () => {
+    // Simulate network error (Brain unreachable in CI)
+    const connError = Object.assign(
+      new Error('connect ECONNREFUSED 127.0.0.1:8093'),
+      { code: 'ECONNREFUSED' },
+    );
+    stubBrainFetch(realFetch, () => Promise.reject(connError));
+
+    const res = await realFetch(`${baseUrl}/api/brain/status`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { online: boolean; reason?: string };
+    expect(body.online).toBe(false);
+    // Must never throw — reason is optional but must be a known string when present
+    if (body.reason !== undefined) {
+      expect(['tls', 'timeout', 'shape', 'error']).toContain(body.reason);
+    }
+  });
+
+  it('does not invoke brain_search for the liveness check', async () => {
+    // Verify the probe uses initialize/ping, not brain_search
+    let calledMethod: string | undefined;
+    stubBrainFetch(realFetch, (input, init) => {
+      const body = init?.body ? JSON.parse(init.body as string) as { method?: string } : {};
+      calledMethod = body.method;
+      return Promise.reject(new Error('offline'));
+    });
+
+    await realFetch(`${baseUrl}/api/brain/status`);
+    expect(calledMethod).toBe('initialize');
+  });
+
+  it('returns { online: true, latencyMs } when Brain responds to initialize', async () => {
+    stubBrainFetch(realFetch, () =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            result: { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'brain', version: '1' } },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/brain/status`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { online: boolean; latencyMs?: number };
+    expect(body.online).toBe(true);
+    expect(typeof body.latencyMs).toBe('number');
   });
 });
