@@ -1,18 +1,61 @@
-import React from 'react'
+import React, { useState, useCallback } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Task, TaskStatus, PanelState } from '../types'
 import { useTasks } from '../hooks/useTasks'
-import { closeBatch } from '../api'
+import { closeBatch, transitionTask } from '../api'
 import { BoardCard } from '../components/BoardCard'
 import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { BOARD_STATUSES, COLUMN_LABEL, isValidBoardTransition } from '../lib/transitions'
 
-const COLUMNS: { status: TaskStatus; label: string }[] = [
-  { status: 'todo',        label: 'Queued' },
-  { status: 'in_progress', label: 'In progress' },
-  { status: 'blocked',     label: 'Blocked' },
-  { status: 'done',        label: 'Done' },
-]
+// ── Droppable column wrapper ───────────────────────────────────────────────
+
+interface DroppableColumnProps {
+  status: TaskStatus
+  children: React.ReactNode
+  isValidTarget: boolean
+  activeStatus: TaskStatus | null
+}
+
+function DroppableColumn({ status, children, isValidTarget, activeStatus }: DroppableColumnProps): React.JSX.Element {
+  const { setNodeRef, isOver } = useDroppable({ id: status })
+
+  // Only show visual target feedback when a drag is active
+  const isDragActive = activeStatus !== null
+  const isInvalid = isDragActive && !isValidTarget && activeStatus !== status
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={[
+        'min-h-[80px] rounded-lg transition-colors duration-100',
+        isOver && isValidTarget
+          ? 'bg-accent/8 ring-1 ring-accent/40'
+          : isOver && !isValidTarget
+            ? 'bg-status-red/8 ring-1 ring-status-red/30'
+            : isDragActive && isInvalid
+              ? 'opacity-60'
+              : '',
+      ].join(' ')}
+    >
+      {children}
+    </div>
+  )
+}
+
+// ── Main BoardView ─────────────────────────────────────────────────────────
 
 interface Props {
   filter: Filter
@@ -24,8 +67,15 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   const { tasks: allTasks, isLoading, error } = useTasks()
   const tasks = allTasks.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
 
-  // "Complete all" — batch-close every done task into the Completed sprint-closure (P4-02)
+  // Track which task is being dragged (for DragOverlay rendering)
+  const [activeTask, setActiveTask] = useState<Task | null>(null)
+
+  // Error state for failed transitions (visible to user)
+  const [transitionError, setTransitionError] = useState<string | null>(null)
+
   const queryClient = useQueryClient()
+
+  // "Complete all" — batch-close every done task (P4-02)
   const completeAll = useMutation({
     mutationFn: () => closeBatch(),
     onSuccess: () => {
@@ -34,14 +84,95 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
     },
   })
 
+  // Transition mutation with optimistic update + rollback
+  const transition = useMutation({
+    mutationFn: ({ id, to }: { id: string; to: TaskStatus }) => transitionTask(id, to),
+    onMutate: async ({ id, to }) => {
+      // Cancel any in-flight refetches
+      await queryClient.cancelQueries({ queryKey: ['tasks'] })
+      // Snapshot for rollback
+      const snapshot = queryClient.getQueryData<Task[]>(['tasks'])
+      // Optimistic update
+      queryClient.setQueryData<Task[]>(['tasks'], old =>
+        old
+          ? old.map(t => (t.id === id ? { ...t, status: to } : t))
+          : old
+      )
+      return { snapshot }
+    },
+    onError: (err, _vars, ctx) => {
+      // Roll back to the snapshot
+      if (ctx?.snapshot !== undefined) {
+        queryClient.setQueryData(['tasks'], ctx.snapshot)
+      }
+      setTransitionError(err instanceof Error ? err.message : 'Transition failed')
+      // Auto-clear after 5 s
+      setTimeout(() => { setTransitionError(null) }, 5000)
+    },
+    onSuccess: () => {
+      setTransitionError(null)
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+
+  // Sensors: PointerSensor with 8px activation distance (so plain clicks still open the panel)
+  //          KeyboardSensor for a11y (Space/Enter picks up, arrows move, Space/Enter drops)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  const handleDragStart = useCallback((event: DragStartEvent): void => {
+    const task = event.active.data.current?.task as Task | undefined
+    if (task) {
+      setActiveTask(task)
+      setTransitionError(null)
+    }
+  }, [])
+
+  const handleDragEnd = useCallback((event: DragEndEvent): void => {
+    setActiveTask(null)
+
+    const { active, over } = event
+    if (!over) return // dropped outside any droppable
+
+    const taskData = active.data.current?.task as Task | undefined
+    if (!taskData) return
+
+    const toStatus = over.id as TaskStatus
+    if (!BOARD_STATUSES.includes(toStatus)) return // dropped outside a column
+
+    // No-op: same column
+    if (taskData.status === toStatus) return
+
+    // Client-side validity check — gives immediate feedback before server round-trip
+    // The server validates too; a 409 triggers rollback.
+    if (!isValidBoardTransition(taskData.status, toStatus)) {
+      setTransitionError(
+        `Cannot move from "${taskData.status}" to "${COLUMN_LABEL[toStatus] ?? toStatus}" — invalid transition`,
+      )
+      setTimeout(() => { setTransitionError(null) }, 5000)
+      return
+    }
+
+    transition.mutate({ id: taskData.id, to: toStatus })
+  }, [transition])
+
+  // ── Loading skeleton ─────────────────────────────────────────────────────
+
   if (isLoading) {
     return (
       <div
         className="grid gap-4"
         style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
       >
-        {COLUMNS.map(col => (
-          <div key={col.status} className="space-y-3">
+        {BOARD_STATUSES.map(status => (
+          <div key={status} className="space-y-3">
             <div className="h-4 bg-surface-2 rounded w-24 animate-pulse" />
             {[1, 2, 3].map(i => (
               <div key={i} className="h-10 bg-surface-2 rounded animate-pulse" />
@@ -60,64 +191,145 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
     )
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div className="flex flex-col gap-4">
       <ViewHeader title="Board" subtitle="All tasks across every project" />
-      <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+
+      {/* Transition error banner */}
+      {transitionError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg
+                     bg-status-red/10 border border-status-red/30 text-status-red text-sm"
+        >
+          <span className="shrink-0">⚠</span>
+          <span>{transitionError}</span>
+          <button
+            type="button"
+            onClick={() => { setTransitionError(null) }}
+            className="ml-auto text-status-red/60 hover:text-status-red transition-colors"
+            aria-label="Dismiss error"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      <DndContext
+        sensors={sensors}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        accessibility={{
+          announcements: {
+            onDragStart({ active }) {
+              const t = active.data.current?.task as Task | undefined
+              return `Picked up task: ${t?.title ?? active.id}. Use arrow keys to move between columns, Space or Enter to drop.`
+            },
+            onDragOver({ active, over }) {
+              const t = active.data.current?.task as Task | undefined
+              if (!over) return `Task ${t?.title ?? active.id} is not over a column.`
+              const colLabel = COLUMN_LABEL[over.id as TaskStatus] ?? String(over.id)
+              const valid = isValidBoardTransition(
+                t?.status ?? 'todo',
+                over.id as TaskStatus,
+              )
+              return valid
+                ? `Task over column "${colLabel}". Drop to move.`
+                : `Column "${colLabel}" is not a valid target for this task.`
+            },
+            onDragEnd({ active, over }) {
+              const t = active.data.current?.task as Task | undefined
+              if (!over) return `Task ${t?.title ?? active.id} dropped — no column.`
+              const colLabel = COLUMN_LABEL[over.id as TaskStatus] ?? String(over.id)
+              return `Task dropped onto column "${colLabel}".`
+            },
+            onDragCancel({ active }) {
+              const t = active.data.current?.task as Task | undefined
+              return `Drag cancelled — task "${t?.title ?? active.id}" returned to original position.`
+            },
+          },
+        }}
       >
-      {COLUMNS.map(col => {
-        const colTasks = tasks.filter((t: Task) => t.status === col.status)
-        return (
-          <div key={col.status} className="space-y-2">
-            {/* Column header — 11px/600/muted/uppercase */}
-            <div className="flex items-center justify-between">
-              <h2
-                className="font-semibold text-ink-muted uppercase tracking-wider"
-                style={{ fontSize: 11 }}
-              >
-                {col.label}{' '}
-                <span className="text-ink-faint font-mono tabular-nums">
-                  ({colTasks.length})
-                </span>
-              </h2>
-              {/* Complete all — closes every done task into the Completed tab (P4-02) */}
-              {col.status === 'done' && colTasks.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Confirm — this closes every Done task (across all projects) into Completed
-                    if (window.confirm('Complete all Done tasks? They move to the Completed tab.')) {
-                      completeAll.mutate()
-                    }
-                  }}
-                  disabled={completeAll.isPending}
-                  className="text-[10px] font-medium text-accent hover:underline disabled:opacity-50"
-                  title="Move all done tasks to Completed"
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+        >
+          {BOARD_STATUSES.map(status => {
+            const colTasks = tasks.filter((t: Task) => t.status === status)
+            const isValidTarget = activeTask !== null
+              ? isValidBoardTransition(activeTask.status, status)
+              : true
+
+            return (
+              <div key={status} className="space-y-2">
+                {/* Column header */}
+                <div className="flex items-center justify-between">
+                  <h2
+                    className="font-semibold text-ink-muted uppercase tracking-wider"
+                    style={{ fontSize: 11 }}
+                  >
+                    {COLUMN_LABEL[status]}{' '}
+                    <span className="text-ink-faint font-mono tabular-nums">
+                      ({colTasks.length})
+                    </span>
+                  </h2>
+
+                  {/* Complete all — closes every done task into the Completed tab (P4-02) */}
+                  {status === 'done' && colTasks.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (window.confirm('Complete all Done tasks? They move to the Completed tab.')) {
+                          completeAll.mutate()
+                        }
+                      }}
+                      disabled={completeAll.isPending}
+                      className="text-[10px] font-medium text-accent hover:underline disabled:opacity-50"
+                      title="Move all done tasks to Completed"
+                    >
+                      {completeAll.isPending ? 'Completing…' : 'Complete all'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Droppable column area */}
+                <DroppableColumn
+                  status={status}
+                  isValidTarget={isValidTarget}
+                  activeStatus={activeTask?.status ?? null}
                 >
-                  {completeAll.isPending ? 'Completing…' : 'Complete all'}
-                </button>
-              )}
-            </div>
+                  <div className="space-y-2">
+                    {colTasks.map((task: Task) => (
+                      <BoardCard
+                        key={task.id}
+                        task={task}
+                        onOpenPanel={onOpenPanel}
+                      />
+                    ))}
 
-            {/* Cards */}
-            {colTasks.map((task: Task) => (
-              <BoardCard
-                key={task.id}
-                task={task}
-                onOpenPanel={onOpenPanel}
-              />
-            ))}
+                    {colTasks.length === 0 && (
+                      <p className="text-xs text-ink-muted italic px-3 py-2">No tasks</p>
+                    )}
+                  </div>
+                </DroppableColumn>
+              </div>
+            )
+          })}
+        </div>
 
-            {/* Empty placeholder */}
-            {colTasks.length === 0 && (
-              <p className="text-xs text-ink-muted italic px-3 py-2">No tasks</p>
-            )}
-          </div>
-        )
-      })}
-      </div>
+        {/* DragOverlay — renders the card being dragged, floating above everything */}
+        <DragOverlay>
+          {activeTask !== null && (
+            <BoardCard
+              task={activeTask}
+              onOpenPanel={onOpenPanel}
+              isOverlay
+            />
+          )}
+        </DragOverlay>
+      </DndContext>
     </div>
   )
 }

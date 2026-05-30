@@ -1,0 +1,39 @@
+/**
+ * Client-side transition validity map — mirrors src/types/transitions.ts.
+ * Used by BoardView to provide immediate visual feedback before hitting the server.
+ * The server is the ultimate source of truth; a 409 from the transition endpoint
+ * triggers rollback regardless of what this map says.
+ */
+import type { TaskStatus } from '../types'
+
+export const BOARD_STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'blocked', 'done'] as const
+
+/** Column label displayed in the board header */
+export const COLUMN_LABEL: Record<(typeof BOARD_STATUSES)[number], string> = {
+  todo:        'Queued',
+  in_progress: 'In progress',
+  blocked:     'Blocked',
+  done:        'Done',
+}
+
+/** Valid transitions — mirrors server src/types/transitions.ts */
+const VALID_TRANSITIONS: Readonly<Partial<Record<TaskStatus, readonly TaskStatus[]>>> = {
+  todo:        ['in_progress', 'blocked'],
+  in_progress: ['done', 'blocked', 'todo', 'approved'],
+  blocked:     ['in_progress', 'todo'],
+  done:        ['in_progress', 'closed'],
+  archived:    [],
+  draft:       ['approved', 'blocked'],
+  approved:    ['in_progress', 'draft', 'blocked'],
+  closed:      [],
+}
+
+/**
+ * Returns true when the server's state machine would accept this transition.
+ * Dropping from status A to the same status A is a no-op (not an error).
+ */
+export function isValidBoardTransition(from: TaskStatus, to: TaskStatus): boolean {
+  if (from === to) return false // same column — no-op
+  const allowed = VALID_TRANSITIONS[from] ?? []
+  return (allowed as readonly string[]).includes(to)
+}
