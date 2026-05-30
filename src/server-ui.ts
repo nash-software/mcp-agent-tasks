@@ -114,29 +114,26 @@ export interface BrainStatusResponse {
 }
 
 /**
- * Probe Brain MCP server liveness via a lightweight MCP initialize/ping request.
+ * Probe Brain MCP server liveness via a lightweight MCP `initialize` request
+ * (not the heavy `brain_search`).
  *
- * TLS decision (flagged — open question from spec §Open Q 1):
- *   The Tailscale :8093 endpoint uses a self-signed / Tailscale-issued cert that Node does
- *   not trust by default. Options: (i) ship the Tailscale CA, (ii) scoped https.Agent with
- *   rejectUnauthorized:false for this host only, (iii) require a valid cert.
- *   We use option (ii) — a Brain-host-scoped https.Agent — because this is a single-user
- *   local-network service and a process-wide NODE_TLS_REJECT_UNAUTHORIZED=0 would be a
- *   security hole. The Agent scope is limited to this one probe function.
- *
- * // TODO(TLS): revisit if the Brain server gets a proper cert (Let's Encrypt via Tailscale
- *   HTTPS or a trusted CA) — at that point, remove the custom agent.
+ * TLS decision (spec §Open Q 1 — resolved as option iii, "require a valid cert"):
+ *   Tailscale `.ts.net` HTTPS endpoints serve publicly-trusted Let's Encrypt certs (via
+ *   `tailscale serve`), so default verification succeeds with no custom agent. We do NOT
+ *   bypass verification — neither a scoped `rejectUnauthorized:false` agent nor a global
+ *   `NODE_TLS_REJECT_UNAUTHORIZED=0`. An untrusted/self-signed cert yields
+ *   `{ online:false, reason:'tls' }`; the operator should provision a trusted cert.
  */
 async function fetchBrainStatus(): Promise<BrainStatusResponse> {
   const brainUrl = getBrainMcpUrl();
-  // TLS note (flagged — spec §Open Q 1): Node's built-in fetch does not accept a per-request
-  // https.Agent, so we cannot scope TLS trust to this host alone via that API. Instead we
-  // catch TLS errors and return { online: false, reason: 'tls' } so the dashboard degrades
-  // gracefully. A process-wide NODE_TLS_REJECT_UNAUTHORIZED=0 is explicitly NOT set here —
-  // that would be a security hole. If the Brain server gets a proper cert, TLS errors stop
-  // occurring and this probe returns { online: true } naturally.
-  // TODO(TLS): once Brain has a trusted cert (Tailscale HTTPS or Let's Encrypt), remove this note.
-
+  // TLS posture (codex F1/F2 — resolved as option iii "require a valid cert"):
+  //   Tailscale `.ts.net` HTTPS endpoints serve PUBLICLY-TRUSTED Let's Encrypt certs (via
+  //   `tailscale serve`/cert), so Node's default verification succeeds with no custom agent.
+  //   We deliberately do NOT bypass verification — no scoped `rejectUnauthorized:false`
+  //   agent and no process-wide `NODE_TLS_REJECT_UNAUTHORIZED=0`. If the Brain host presents
+  //   an untrusted/self-signed cert, the probe reports `{ online:false, reason:'tls' }` and
+  //   the operator should provision a trusted cert (`tailscale serve`). Reporting offline on
+  //   an untrusted cert is the correct fail-safe; silently trusting it would be the hole.
   const t0 = Date.now();
   try {
     const res = await fetch(`${brainUrl}/mcp`, {
@@ -1684,9 +1681,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const text = body.text.trim();
             // Optional context prefix: dashboard passes the active project so routing is biased
             // toward it (P4-06d — prevents the COND misfire from a context-free LLM call).
-            const contextPrefix = typeof body.context === 'string' && body.context.trim().length > 0
-              ? body.context.trim().toUpperCase()
-              : undefined;
+            // SECURITY (codex F4): validate strictly against known prefixes before it reaches
+            // the routing prompt — ignore any value that isn't an existing project prefix, so
+            // free-form `context` can't manipulate routing.
+            const rawContext = typeof body.context === 'string' ? body.context.trim().toUpperCase() : '';
+            const contextPrefix = projectIndexes.some(p => p.prefix === rawContext) ? rawContext : undefined;
 
             // Resolve the GEN project index (always store to GEN inbox)
             const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
