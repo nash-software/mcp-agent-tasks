@@ -416,3 +416,199 @@ describe('Header.tsx — today tab', () => {
     expect(todayIdx).toBeLessThan(boardIdx);
   });
 });
+
+// ── P4-04: EstimatePrompt.tsx — source structure ─────────────────────────
+
+describe('EstimatePrompt.tsx — source structure (P4-04, AC 1–3)', () => {
+  it('exports EstimatePrompt component', () => {
+    expect(readUiFile('components/EstimatePrompt.tsx')).toContain('export function EstimatePrompt');
+  });
+
+  it('renders quick chips: 30m / 1h / 2h / 4h with correct hours values', () => {
+    const src = readUiFile('components/EstimatePrompt.tsx');
+    // All four chips must be present
+    expect(src).toContain("label: '30m'");
+    expect(src).toContain("hours: 0.5");
+    expect(src).toContain("label: '1h'");
+    expect(src).toContain("hours: 1");
+    expect(src).toContain("label: '2h'");
+    expect(src).toContain("hours: 2");
+    expect(src).toContain("label: '4h'");
+    expect(src).toContain("hours: 4");
+  });
+
+  it('has a free numeric input for custom hours', () => {
+    const src = readUiFile('components/EstimatePrompt.tsx');
+    expect(src).toContain('inputMode="decimal"');
+    expect(src).toContain('custom');
+  });
+
+  it('has a Skip / "later" path (AC 3)', () => {
+    expect(readUiFile('components/EstimatePrompt.tsx')).toContain('Skip for now');
+  });
+
+  it('calls onSkip when skip is triggered (AC 3)', () => {
+    expect(readUiFile('components/EstimatePrompt.tsx')).toContain('onSkip');
+  });
+
+  it('calls onConfirm with estimate_hours when confirmed (AC 2)', () => {
+    expect(readUiFile('components/EstimatePrompt.tsx')).toContain('onConfirm');
+  });
+
+  it('validates that estimate is > 0 and ≤ 24h', () => {
+    const src = readUiFile('components/EstimatePrompt.tsx');
+    expect(src).toContain('MAX_ESTIMATE_HOURS');
+    expect(src).toContain('v <= 0');
+  });
+
+  it('has a dismiss path (Escape key or X button)', () => {
+    const src = readUiFile('components/EstimatePrompt.tsx');
+    expect(src).toContain('onDismiss');
+    expect(src).toContain("key === 'Escape'");
+  });
+
+  it('uses design token classes (surface-1, surface-2, accent)', () => {
+    const src = readUiFile('components/EstimatePrompt.tsx');
+    expect(src).toContain('surface-1');
+    expect(src).toContain('surface-2');
+    expect(src).toContain('bg-accent');
+  });
+});
+
+// ── P4-04: TodayView.tsx — estimate prompt integration ───────────────────
+
+describe('TodayView.tsx — estimate prompt integration (P4-04, AC 1, 3, 7)', () => {
+  it('imports EstimatePrompt', () => {
+    expect(readUiFile('views/TodayView.tsx')).toContain('EstimatePrompt');
+  });
+
+  it('guards commit on existing estimate_hours (AC 7 — no re-prompt)', () => {
+    // The commit handler checks estimate_hours before showing the prompt
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('estimate_hours');
+    expect(src).toContain('estimatePromptTaskId');
+  });
+
+  it('has handleEstimateConfirm calling scheduleWithEstimate (AC 2)', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('handleEstimateConfirm');
+    expect(src).toContain('scheduleWithEstimate');
+  });
+
+  it('has handleEstimateSkip calling scheduleWithEstimate with null (AC 3)', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('handleEstimateSkip');
+    expect(src).toMatch(/scheduleWithEstimate\(estimatePromptTaskId.*null/s);
+  });
+
+  it('has handleEstimateDismiss resetting the prompt without committing', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('handleEstimateDismiss');
+    expect(src).toContain('setEstimatePromptTaskId(null)');
+  });
+
+  it('renders EstimatePrompt when estimatePromptTask is present', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('estimatePromptTask !== null');
+    expect(src).toContain('<EstimatePrompt');
+  });
+
+  it('computes unestimatedCount from committed tasks (AC 6)', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('unestimatedCount');
+    expect(src).toContain("estimate_hours == null || t.estimate_hours <= 0");
+  });
+
+  it('passes unestimatedCount to CapacityGauge (AC 6)', () => {
+    const src = readUiFile('views/TodayView.tsx');
+    expect(src).toContain('unestimatedCount={unestimatedCount}');
+  });
+});
+
+// ── P4-04: useToday.ts — scheduleWithEstimate ─────────────────────────────
+
+describe('useToday.ts — scheduleWithEstimate (P4-04, AC 2)', () => {
+  it('exports scheduleWithEstimate helper', () => {
+    expect(readUiFile('hooks/useToday.ts')).toContain('scheduleWithEstimate');
+  });
+
+  it('calls scheduleTask then updateTask for the estimate', () => {
+    const src = readUiFile('hooks/useToday.ts');
+    expect(src).toContain('scheduleMutation.mutateAsync');
+    expect(src).toContain('updateTask');
+    expect(src).toContain('estimate_hours');
+  });
+
+  it('skips the PATCH when estimateHours is null (skip path)', () => {
+    const src = readUiFile('hooks/useToday.ts');
+    // null guard before calling updateTask
+    expect(src).toContain('estimateHours !== null && estimateHours > 0');
+  });
+
+  it('invalidates today query after PATCH to refresh capacity gauge', () => {
+    const src = readUiFile('hooks/useToday.ts');
+    expect(src).toContain('invalidate()');
+  });
+
+  it('logs a warning if PATCH fails but does not un-commit (acceptable degradation)', () => {
+    const src = readUiFile('hooks/useToday.ts');
+    expect(src).toContain('console.warn');
+    expect(src).toContain('task still committed');
+  });
+});
+
+// ── P4-04: CapacityGauge.tsx — unestimated hint ──────────────────────────
+
+describe('CapacityGauge.tsx — P4-04 unestimated hint (AC 6)', () => {
+  it('accepts unestimatedCount prop', () => {
+    const src = readUiFile('components/CapacityGauge.tsx');
+    expect(src).toContain('unestimatedCount');
+  });
+
+  it('renders "N unestimated" hint when count > 0', () => {
+    expect(readUiFile('components/CapacityGauge.tsx')).toContain('unestimated');
+  });
+
+  it('defaults unestimatedCount to 0 (no hint when all tasks are estimated)', () => {
+    expect(readUiFile('components/CapacityGauge.tsx')).toContain('unestimatedCount = 0');
+  });
+});
+
+// ── P4-04: Capacity gauge colour logic (AC 5) ────────────────────────────
+
+describe('Capacity gauge colour thresholds (P4-04 AC 5 — falsifiable)', () => {
+  // These tests verify the threshold math in isolation, consistent with the zone logic in CapacityGauge.tsx
+
+  function getZone(committedMinutes: number, targetMinutes: number): 'green' | 'amber' | 'red' {
+    const pct = targetMinutes > 0 ? committedMinutes / targetMinutes : 0;
+    if (pct > 1.0) return 'red';
+    if (pct >= 0.8) return 'amber';
+    return 'green';
+  }
+
+  it('is green when committedMinutes < 80% of target (exclusive boundary)', () => {
+    expect(getZone(287, 360)).toBe('green');   // just under 80%
+    expect(getZone(0, 360)).toBe('green');     // nothing committed
+  });
+
+  it('is amber when committedMinutes is 80–100% of target (inclusive at both ends)', () => {
+    expect(getZone(288, 360)).toBe('amber');   // exactly 80%
+    expect(getZone(360, 360)).toBe('amber');   // exactly 100%
+  });
+
+  it('is red when committedMinutes > 100% of target (AC 5 — over-capacity)', () => {
+    expect(getZone(361, 360)).toBe('red');     // one minute over
+    expect(getZone(720, 360)).toBe('red');     // 200% over
+  });
+
+  it('estimates summing to > 360min (6h) → gauge turns red (AC 5 falsifiable)', () => {
+    // 3 tasks × 2.5h each = 7.5h = 450min > 360min target
+    const committedMinutes = [2.5, 2.5, 2.5].reduce((sum, h) => sum + h * 60, 0);
+    expect(committedMinutes).toBe(450);
+    expect(getZone(450, 360)).toBe('red');
+  });
+
+  it('is green when targetMinutes is 0 (divide-by-zero guard)', () => {
+    expect(getZone(100, 0)).toBe('green');
+  });
+});

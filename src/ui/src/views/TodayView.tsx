@@ -12,6 +12,7 @@ import { useToday } from '../hooks/useToday'
 import { HeroTask } from '../components/HeroTask'
 import { CapacityGauge } from '../components/CapacityGauge'
 import { TaskCard } from '../components/TaskCard'
+import { EstimatePrompt } from '../components/EstimatePrompt'
 import { AreaChip } from '../components/atoms'
 import { ViewHeader } from '../components/ViewHeader'
 import { Minimize2, Maximize2 } from 'lucide-react'
@@ -84,12 +85,15 @@ export function TodayView({
   const [targetMinutes, setTargetMinutes] = useState<number>(readTargetMinutes)
   const [candidatesOpen, setCandidatesOpen] = useState(true)
   const [needsCallOpen, setNeedsCallOpen] = useState(false)
+  /** P4-04: task id for which the estimate prompt is open, or null */
+  const [estimatePromptTaskId, setEstimatePromptTaskId] = useState<string | null>(null)
 
   const {
     data,
     isLoading,
     error,
     scheduleForToday,
+    scheduleWithEstimate,
     removeFromToday,
     markDone,
     pauseTask,
@@ -132,6 +136,21 @@ export function TodayView({
   const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   const candidatesByArea = groupByArea(filteredCandidates)
 
+  // P4-04: Count committed (non-done/cancelled/in_progress) tasks with no estimate
+  // Used for the capacity gauge "N unestimated" hint (AC 6)
+  const unestimatedCount = committed.filter(
+    t => t.status !== 'done' && t.status !== 'cancelled'
+      && (t.estimate_hours == null || t.estimate_hours <= 0)
+  ).length
+
+  // P4-04: Task for which the estimate prompt is open (both committed candidates + draft tasks)
+  const estimatePromptTask: Task | null =
+    estimatePromptTaskId
+      ? (candidates.find(t => t.id === estimatePromptTaskId)
+          ?? draftTasks.find(t => t.id === estimatePromptTaskId)
+          ?? null)
+      : null
+
   // Flatten visible IDs for keyboard navigation (hero first, then committed, then candidates)
   const visibleIds: string[] = [
     ...(heroTask ? [heroTask.id] : []),
@@ -172,9 +191,39 @@ export function TodayView({
 
   // ── Task row handlers ─────────────────────────────────────────────────
 
+  /**
+   * P4-04: Commit task to Today.
+   * - If the task already has estimate_hours → schedule immediately (no prompt, AC 7).
+   * - If the task has no estimate_hours → open the estimate prompt (AC 1).
+   */
   const handleCommit = useCallback((task: Task): void => {
-    void scheduleForToday(task.id)
+    if (task.estimate_hours != null && task.estimate_hours > 0) {
+      // Already estimated — schedule directly, no prompt (AC 7)
+      void scheduleForToday(task.id)
+    } else {
+      // No estimate — open prompt
+      setEstimatePromptTaskId(task.id)
+    }
   }, [scheduleForToday])
+
+  /** P4-04: User confirmed an estimate in the prompt. */
+  const handleEstimateConfirm = useCallback((estimateHours: number): void => {
+    if (!estimatePromptTaskId) return
+    void scheduleWithEstimate(estimatePromptTaskId, estimateHours)
+    setEstimatePromptTaskId(null)
+  }, [estimatePromptTaskId, scheduleWithEstimate])
+
+  /** P4-04: User skipped the estimate — still commit the task. */
+  const handleEstimateSkip = useCallback((): void => {
+    if (!estimatePromptTaskId) return
+    void scheduleWithEstimate(estimatePromptTaskId, null)
+    setEstimatePromptTaskId(null)
+  }, [estimatePromptTaskId, scheduleWithEstimate])
+
+  /** P4-04: User dismissed the prompt without committing. */
+  const handleEstimateDismiss = useCallback((): void => {
+    setEstimatePromptTaskId(null)
+  }, [])
 
   const handleRemove = useCallback((task: Task): void => {
     void removeFromToday(task.id)
@@ -251,6 +300,7 @@ export function TodayView({
         committedMinutes={capacity.committedMinutes}
         targetMinutes={targetMinutes}
         onTargetChange={handleTargetChange}
+        unestimatedCount={unestimatedCount}
       />
 
       {/* Committed list */}
@@ -285,6 +335,16 @@ export function TodayView({
           </div>
         )}
       </section>
+
+      {/* P4-04: Estimate prompt — shown inline when committing an unestimated task (AC 1) */}
+      {estimatePromptTask !== null && (
+        <EstimatePrompt
+          taskTitle={estimatePromptTask.title}
+          onConfirm={handleEstimateConfirm}
+          onSkip={handleEstimateSkip}
+          onDismiss={handleEstimateDismiss}
+        />
+      )}
 
       {/* Needs your call (P2-04b stub) — hidden when empty */}
       {draftTasks.length > 0 && (

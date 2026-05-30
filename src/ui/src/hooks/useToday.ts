@@ -4,6 +4,7 @@ import {
   scheduleTask,
   transitionTask,
   updateTaskPriority,
+  updateTask,
   fetchTasks,
 } from '../api'
 import type { TodayResponse, Task, TaskPriority } from '../types'
@@ -22,6 +23,14 @@ export interface UseTodayReturn {
   error: Error | null
   draftTasks: Task[]
   scheduleForToday: (taskId: string) => Promise<void>
+  /**
+   * Schedule a task to Today AND set its estimate_hours in one compound action.
+   * Used by the EstimatePrompt flow (P4-04).
+   * - estimateHours: the chosen estimate (> 0). If null/undefined, schedules only (skip path).
+   * - The schedule always happens; the PATCH happens only when estimateHours is provided.
+   * - If the PATCH fails, the task still lands in Today (acceptable degradation per spec).
+   */
+  scheduleWithEstimate: (taskId: string, estimateHours: number | null) => Promise<void>
   removeFromToday: (taskId: string) => Promise<void>
   markDone: (taskId: string) => Promise<void>
   pauseTask: (taskId: string) => Promise<void>
@@ -228,6 +237,27 @@ export function useToday(targetMinutes?: number): UseTodayReturn {
     await scheduleMutation.mutateAsync({ id: taskId, date: today })
   }
 
+  /**
+   * P4-04: Schedule to Today AND optionally set estimate_hours.
+   * Optimistic update for the schedule; PATCH for estimate fires in parallel.
+   * PATCH failure is surfaced via console.warn but does not un-commit the task.
+   */
+  async function scheduleWithEstimate(taskId: string, estimateHours: number | null): Promise<void> {
+    // Always schedule first (optimistic update, rollback on failure)
+    await scheduleMutation.mutateAsync({ id: taskId, date: today })
+
+    // If an estimate was provided, patch it (best-effort — failure is acceptable)
+    if (estimateHours !== null && estimateHours > 0) {
+      try {
+        await updateTask(taskId, { estimate_hours: estimateHours })
+        // Refresh today so capacity gauge reflects the new estimate
+        void invalidate()
+      } catch (patchErr) {
+        console.warn('[useToday] estimate PATCH failed (task still committed):', patchErr)
+      }
+    }
+  }
+
   async function removeFromToday(taskId: string): Promise<void> {
     await scheduleMutation.mutateAsync({ id: taskId, date: null })
   }
@@ -257,6 +287,7 @@ export function useToday(targetMinutes?: number): UseTodayReturn {
     error: error as Error | null,
     draftTasks,
     scheduleForToday,
+    scheduleWithEstimate,
     removeFromToday,
     markDone,
     pauseTask,
