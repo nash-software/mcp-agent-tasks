@@ -143,15 +143,16 @@ describe('TaskPanel.tsx — structure', () => {
       expect(src).toContain('Remove today');
     });
 
-    it('footer has Hermes stub button (disabled)', () => {
+    it('footer has Hermes sign-off button (P4-06a: wired, conditionally disabled)', () => {
       expect(src).toContain('Hermes');
-      // Must be disabled
-      expect(src).toMatch(/disabled[\s\S]{0,200}Hermes|Hermes[\s\S]{0,200}disabled/);
+      // Button is gated on agent_status === 'scheduled' — wired in P4-06a
+      expect(src).toContain('handleSignOff');
+      expect(src).toContain('agent_status');
     });
 
-    it('footer has ACR stub button (disabled)', () => {
+    it('footer has ACR dispatch button (P4-06a: wired)', () => {
       expect(src).toContain('ACR');
-      expect(src).toMatch(/disabled[\s\S]{0,200}ACR|ACR[\s\S]{0,200}disabled/);
+      expect(src).toContain('handleDispatchAcr');
     });
 
     it('peek footer hint shows full detail · Esc close', () => {

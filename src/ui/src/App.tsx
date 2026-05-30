@@ -21,8 +21,8 @@ import { useGlobalKeyboard } from './hooks/useGlobalKeyboard'
 import { NAV } from './lib/nav'
 import type { ViewId, PanelState, Task, TaskPriority, TaskArea, Density } from './types'
 import { localToday } from './lib/format'
-import { fetchProjects, type ProjectEntry } from './api'
-import { useQuery } from '@tanstack/react-query'
+import { fetchProjects, type ProjectEntry, signoffTask, dispatchToAcr } from './api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
@@ -207,6 +207,24 @@ export function App(): React.JSX.Element {
   })
   const today = useRef(localToday())
   const todayHook = useToday(targetMinutes)
+  const qc = useQueryClient()
+
+  // ─── Hermes sign-off mutation (P4-06a) ───────────────────────────────────
+  const signoffMut = useMutation({
+    mutationFn: (taskId: string) => signoffTask(taskId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['tasks'] })
+      void qc.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+
+  // ─── ACR dispatch mutation (P4-06a) ──────────────────────────────────────
+  const acrDispatchMut = useMutation({
+    mutationFn: (taskId: string) => dispatchToAcr(taskId, { source: 'hermes' }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['acr', 'status'] })
+    },
+  })
 
   const panelTask = panel ? (allTasks.find(t => t.id === panel.taskId) ?? null) : null
 
@@ -304,23 +322,22 @@ export function App(): React.JSX.Element {
           }
         },
       })
+      // Sign off to Hermes: only available when task is not already signed off (agent_status absent)
       cmds.push({
         id: 'sel-sign-off',
         cat: 'Selected task',
         label: 'Sign off to Hermes',
         sub: selectedTask.id,
-        disabled: true,
-        disabledHint: 'Coming in Phase 2',
-        run: () => { /* Phase 2 stub */ },
+        disabled: selectedTask.agent_status === 'scheduled',
+        disabledHint: selectedTask.agent_status === 'scheduled' ? 'Already signed off' : undefined,
+        run: () => { signoffMut.mutate(selectedTask.id) },
       })
       cmds.push({
         id: 'sel-dispatch-acr',
         cat: 'Selected task',
         label: 'Dispatch to ACR',
         sub: selectedTask.id,
-        disabled: true,
-        disabledHint: 'Coming in Phase 2',
-        run: () => { /* Phase 2 stub */ },
+        run: () => { acrDispatchMut.mutate(selectedTask.id) },
       })
       cmds.push({
         id: 'sel-open-detail',

@@ -20,7 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Task, PanelState, TaskStatus, TaskPriority } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
-import { scheduleTask, transitionTask, updateTask } from '../api'
+import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr } from '../api'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -179,6 +179,32 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     try {
       await scheduleTask(task.id, isScheduledToday ? null : today)
       await invalidateCaches()
+    } catch (err) {
+      surfaceError(err)
+    }
+  }
+
+  // "Sign off to Hermes" — P4-06a: gates on agent_status !== 'scheduled' (epic §9)
+  async function handleSignOff(): Promise<void> {
+    if (!task) return
+    if (task.agent_status === 'scheduled') return // gate: cannot re-sign
+    try {
+      await signoffTask(task.id)
+      await invalidateCaches()
+      void queryClient.invalidateQueries({ queryKey: ['hermes'] })
+      setErrorMsg(null)
+    } catch (err) {
+      surfaceError(err)
+    }
+  }
+
+  // "Dispatch to ACR" — P4-06a: fire-and-forget with error surface
+  async function handleDispatchAcr(): Promise<void> {
+    if (!task) return
+    try {
+      await dispatchToAcr(task.id, { source: 'hermes' })
+      void queryClient.invalidateQueries({ queryKey: ['acr', 'status'] })
+      setErrorMsg(null)
     } catch (err) {
       surfaceError(err)
     }
@@ -582,19 +608,25 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
           >
             {commitLabel}
           </button>
-          {/* Hermes stub — Phase 2 (P2-05) */}
+          {/* Sign off to Hermes — gated: cannot re-sign an already-signed task (epic §9) */}
           <button
-            disabled
-            className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-faint opacity-50 cursor-not-allowed"
-            title="Hermes — Phase 2"
+            onClick={() => void handleSignOff()}
+            disabled={task?.agent_status === 'scheduled'}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors duration-100 ${
+              task?.agent_status === 'scheduled'
+                ? 'bg-surface-2 text-ink-faint opacity-50 cursor-not-allowed'
+                : 'bg-surface-2 text-ink-2 hover:bg-surface-3'
+            }`}
+            title={task?.agent_status === 'scheduled' ? 'Already signed off' : 'Sign off to Hermes'}
+            aria-label="Sign off task to Hermes"
           >
             Hermes
           </button>
-          {/* ACR stub — Phase 2 (P2-06) */}
+          {/* Dispatch to ACR */}
           <button
-            disabled
-            className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-faint opacity-50 cursor-not-allowed"
-            title="ACR — Phase 2"
+            onClick={() => void handleDispatchAcr()}
+            className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
+            aria-label="Dispatch task to ACR"
           >
             ACR
           </button>

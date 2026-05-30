@@ -76,26 +76,31 @@ export function Nav({
 
   return (
     <nav className="nav flex flex-col h-full bg-bg border-r border-surface-3 py-3">
-      {/* Nav items */}
-      <div className="flex flex-col gap-0.5 px-2">
-        {NAV.map(item => (
-          <button
-            key={item.id}
-            onClick={() => onViewChange(item.id)}
-            title={item.label}
-            className={`flex items-center gap-3 w-full px-3 py-2 rounded text-sm transition-colors ${
-              view === item.id
-                ? 'bg-surface-2 text-ink'
-                : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
-            }`}
-          >
-            <item.icon size={16} />
-            <span className="overflow-hidden whitespace-nowrap">{item.label}</span>
-            <span className="ml-auto text-xs text-ink-faint overflow-hidden whitespace-nowrap">
-              {item.kbd}
-            </span>
-          </button>
-        ))}
+      {/* Workspace group — labelled to mirror Favourites header (P4-06b) */}
+      <div className="mt-2">
+        <div className="px-3 py-1 text-ink-faint text-xs uppercase tracking-wide overflow-hidden whitespace-nowrap">
+          Workspace
+        </div>
+        <div className="flex flex-col gap-0.5 px-2 mt-0.5">
+          {NAV.map(item => (
+            <button
+              key={item.id}
+              onClick={() => onViewChange(item.id)}
+              title={item.label}
+              className={`flex items-center gap-3 w-full px-3 py-2 rounded text-sm transition-colors ${
+                view === item.id
+                  ? 'bg-surface-2 text-ink'
+                  : 'text-ink-muted hover:bg-surface-2 hover:text-ink'
+              }`}
+            >
+              <item.icon size={16} />
+              <span className="overflow-hidden whitespace-nowrap">{item.label}</span>
+              <span className="ml-auto text-xs text-ink-faint overflow-hidden whitespace-nowrap">
+                {item.kbd}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Favourites group — only rendered when at least one project is pinned */}
