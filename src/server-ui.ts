@@ -1388,6 +1388,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               return;
             }
 
+            // Require at least one patchable field (empty PATCH is a no-op error)
+            if (Object.keys(body).length === 0) {
+              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours) is required');
+              return;
+            }
+
             const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours']);
             for (const key of Object.keys(body)) {
               if (!VALID_PATCH_FIELDS.has(key)) {

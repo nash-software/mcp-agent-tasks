@@ -131,7 +131,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   // ── PATCH helpers ────────────────────────────────────────────────────────
 
-  const commitField = useCallback(async (fields: { title?: string; why?: string; priority?: string; estimate_hours?: number }): Promise<void> => {
+  const commitField = useCallback(async (fields: { title?: string; why?: string; priority?: TaskPriority; estimate_hours?: number }): Promise<void> => {
     if (!task) return
     try {
       await updateTask(task.id, fields)
@@ -240,8 +240,8 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const statusDotClass = task ? (STATUS_DOT[task.status] ?? 'bg-ink-muted') : 'bg-ink-muted'
   const areaDotClass   = (task?.area ? AREA_DOT[task.area] : undefined) ?? 'bg-ink-muted'
 
-  // Show "Start" when task is actionable but not yet running
-  const canStart = task && (task.status === 'todo' || task.status === 'blocked' || task.status === 'approved')
+  // Show "Start" for todo/blocked tasks (per P4-01 AC)
+  const canStart = task && (task.status === 'todo' || task.status === 'blocked')
   const canDone  = task && task.status !== 'done' && task.status !== 'archived'
 
   return (
@@ -551,7 +551,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
       <div className="flex-shrink-0 border-t border-surface-3 px-4 py-3 space-y-2">
         {/* Action buttons row */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Start — P4-01: shown for todo/blocked/approved tasks */}
+          {/* Start — P4-01: shown for todo/blocked tasks */}
           {canStart && (
             <button
               onClick={() => void handleStart()}

@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
+import type { Task, TaskPriority, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -190,7 +190,7 @@ export async function transitionTask(
 export interface TaskUpdateFields {
   title?: string
   why?: string
-  priority?: string
+  priority?: TaskPriority
   estimate_hours?: number
 }
 
@@ -211,7 +211,7 @@ export async function updateTask(
 }
 
 /** Thin wrapper for existing callers that only update priority. */
-export function updateTaskPriority(id: string, priority: string): Promise<Task> {
+export function updateTaskPriority(id: string, priority: TaskPriority): Promise<Task> {
   return updateTask(id, { priority })
 }
 
