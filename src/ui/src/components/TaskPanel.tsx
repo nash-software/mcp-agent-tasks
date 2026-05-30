@@ -1,5 +1,5 @@
 /**
- * TaskPanel — peek & detail slide-in panel for task inspection.
+ * TaskPanel — peek & detail slide-in panel for task inspection and editing.
  *
  * Positioning: absolute inside .main — NOT fixed, NOT a modal.
  * The list remains visible and interactive beside a peek.
@@ -10,13 +10,17 @@
  * (epic §3 anti-pattern §9). Hidden state is reached by translating offscreen only.
  *
  * Width: 380px (peek) | 440px (detail), animates with the same spring ease.
+ *
+ * P4-01: Fields are now editable (title, why, priority, estimate_hours).
+ *        Start button added for todo/blocked tasks → in_progress.
+ *        Done button re-pointed to /transition (was /promote).
  */
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { Task, PanelState, TaskStatus } from '../types'
+import type { Task, PanelState, TaskStatus, TaskPriority } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
-import { scheduleTask } from '../api'
+import { scheduleTask, transitionTask, updateTask } from '../api'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +55,8 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   approved:    'approved',
 }
 
+const PRIORITIES: TaskPriority[] = ['critical', 'high', 'medium', 'low']
+
 // ─── props ────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -72,6 +78,24 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const isPeek   = mode === 'peek'
   const panelW   = isPeek ? 380 : 440
 
+  // Inline error message for surfacing mutation rejections
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // Edit state — local draft values committed on blur
+  const [editTitle, setEditTitle]             = useState<string | null>(null)
+  const [editWhy, setEditWhy]                 = useState<string | null>(null)
+  const [editPriority, setEditPriority]       = useState<TaskPriority | null>(null)
+  const [editEstimate, setEditEstimate]       = useState<string | null>(null)
+
+  // Reset edit state when the task changes
+  useEffect(() => {
+    setEditTitle(null)
+    setEditWhy(null)
+    setEditPriority(null)
+    setEditEstimate(null)
+    setErrorMsg(null)
+  }, [taskId])
+
   // Reset scroll when the taskId changes (not on mode promotion — keep position)
   useEffect(() => {
     if (scrollRef.current) {
@@ -89,23 +113,63 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   if (!isOpen) return null
 
+  // ── helpers ─────────────────────────────────────────────────────────────
+
+  function invalidateCaches(): Promise<unknown[]> {
+    return Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+      queryClient.invalidateQueries({ queryKey: ['today'] }),
+    ])
+  }
+
+  function surfaceError(err: unknown): void {
+    const msg = err instanceof Error ? err.message : String(err)
+    setErrorMsg(msg)
+    // Auto-clear after 5 seconds
+    setTimeout(() => setErrorMsg(null), 5000)
+  }
+
+  // ── PATCH helpers ────────────────────────────────────────────────────────
+
+  const commitField = useCallback(async (fields: { title?: string; why?: string; priority?: TaskPriority; estimate_hours?: number }): Promise<void> => {
+    if (!task) return
+    try {
+      await updateTask(task.id, fields)
+      await invalidateCaches()
+      setErrorMsg(null)
+    } catch (err) {
+      surfaceError(err)
+    }
+  }, [task])  // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── action handlers ─────────────────────────────────────────────────────
 
   const today = new Date().toISOString().slice(0, 10)
   const isScheduledToday = task?.scheduled_for === today
   const commitLabel = isScheduledToday ? 'Remove today' : 'Commit today'
 
+  // "Done" — P4-01: now calls /transition (was /promote)
   async function handleDone(): Promise<void> {
     if (!task) return
     try {
-      const res = await fetch(`/api/tasks/${task.id}/promote`, { method: 'POST' })
-      if (res.ok) {
-        await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-        await queryClient.invalidateQueries({ queryKey: ['today'] })
-        onClose()
-      }
-    } catch {
-      // swallow; optimistic rollback handled by shared query cache
+      await transitionTask(task.id, 'done')
+      await invalidateCaches()
+      setErrorMsg(null)
+      onClose()
+    } catch (err) {
+      surfaceError(err)
+    }
+  }
+
+  // "Start" — P4-01: new affordance for todo/blocked tasks
+  async function handleStart(): Promise<void> {
+    if (!task) return
+    try {
+      await transitionTask(task.id, 'in_progress')
+      await invalidateCaches()
+      setErrorMsg(null)
+    } catch (err) {
+      surfaceError(err)
     }
   }
 
@@ -113,17 +177,74 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     if (!task) return
     try {
       await scheduleTask(task.id, isScheduledToday ? null : today)
-      await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      await queryClient.invalidateQueries({ queryKey: ['today'] })
-    } catch {
-      // swallow
+      await invalidateCaches()
+    } catch (err) {
+      surfaceError(err)
     }
+  }
+
+  // Title blur commit
+  async function handleTitleBlur(): Promise<void> {
+    if (editTitle === null || !task) return
+    const trimmed = editTitle.trim()
+    if (trimmed === task.title || trimmed.length === 0) {
+      setEditTitle(null)
+      return
+    }
+    setEditTitle(null)
+    await commitField({ title: trimmed })
+  }
+
+  // Why blur commit
+  async function handleWhyBlur(): Promise<void> {
+    if (editWhy === null || !task) return
+    const trimmed = editWhy.trim()
+    if (trimmed === (task.why ?? '')) {
+      setEditWhy(null)
+      return
+    }
+    setEditWhy(null)
+    await commitField({ why: trimmed })
+  }
+
+  // Priority select commit
+  async function handlePriorityChange(p: TaskPriority): Promise<void> {
+    if (!task) return
+    setEditPriority(null)
+    if (p === task.priority) return
+    await commitField({ priority: p })
+  }
+
+  // Estimate blur commit
+  async function handleEstimateBlur(): Promise<void> {
+    if (editEstimate === null || !task) return
+    const raw = editEstimate.trim()
+    setEditEstimate(null)
+    if (raw === '') {
+      // Clear estimate
+      await commitField({ estimate_hours: 0 })
+      return
+    }
+    const num = parseFloat(raw)
+    if (isNaN(num) || num < 0) {
+      setErrorMsg('estimate_hours must be a positive number')
+      setTimeout(() => setErrorMsg(null), 5000)
+      return
+    }
+    if (num === (task.estimate_hours ?? 0)) return
+    await commitField({ estimate_hours: num })
   }
 
   // ── render ──────────────────────────────────────────────────────────────
 
   const statusDotClass = task ? (STATUS_DOT[task.status] ?? 'bg-ink-muted') : 'bg-ink-muted'
   const areaDotClass   = (task?.area ? AREA_DOT[task.area] : undefined) ?? 'bg-ink-muted'
+
+  // Show "Start" for todo/blocked tasks (per P4-01 AC)
+  const canStart = task && (task.status === 'todo' || task.status === 'blocked')
+  // Done is only a valid transition from in_progress (per the state machine) —
+  // showing it elsewhere produces guaranteed 409s (codex F5).
+  const canDone  = task && task.status === 'in_progress'
 
   return (
     /*
@@ -164,15 +285,55 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
         </button>
       </div>
 
+      {/* ── Inline error banner ─────────────────────────────────────── */}
+      {errorMsg && (
+        <div
+          role="alert"
+          className="mx-4 mt-2 px-3 py-2 rounded text-xs text-status-red bg-status-red/10 border border-status-red/20 flex items-start gap-2"
+        >
+          <span className="flex-1 leading-relaxed">{errorMsg}</span>
+          <button
+            onClick={() => setErrorMsg(null)}
+            className="text-status-red/70 hover:text-status-red flex-shrink-0 leading-none"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* ── Scrollable body ─────────────────────────────────────────── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
 
         {task && (
           <>
-            {/* Title */}
-            <h2 className="text-sm font-semibold text-ink leading-snug">{task.title}</h2>
+            {/* Title — editable on click */}
+            {editTitle !== null ? (
+              <input
+                autoFocus
+                type="text"
+                value={editTitle}
+                maxLength={200}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={() => { void handleTitleBlur() }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') { setEditTitle(null) }
+                }}
+                className="w-full text-sm font-semibold text-ink leading-snug bg-surface-2 border border-surface-3 rounded px-2 py-1 outline-none focus:border-accent"
+                aria-label="Edit task title"
+              />
+            ) : (
+              <h2
+                className="text-sm font-semibold text-ink leading-snug cursor-text hover:bg-surface-2 rounded px-1 -mx-1 py-0.5 transition-colors duration-100"
+                title="Click to edit"
+                onClick={() => setEditTitle(task.title)}
+              >
+                {task.title}
+              </h2>
+            )}
 
-            {/* Area chip + priority badge + status badge + estimate */}
+            {/* Area chip + priority (editable) + status badge + estimate (editable) */}
             <div className="flex flex-wrap items-center gap-2">
               {task.area && (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-surface-2 text-ink-2">
@@ -180,22 +341,65 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                   {task.area}
                 </span>
               )}
-              <span
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-2"
-                style={{ color: 'inherit' }}
-              >
-                <span className={`${PRIORITY_COLOR[task.priority] ?? 'text-ink-muted'} font-medium`}>
-                  {task.priority}
-                </span>
-              </span>
+
+              {/* Priority — click cycles through options */}
+              {editPriority !== null ? (
+                <select
+                  autoFocus
+                  value={editPriority}
+                  onChange={(e) => { void handlePriorityChange(e.target.value as TaskPriority) }}
+                  onBlur={() => setEditPriority(null)}
+                  className="text-xs bg-surface-2 border border-surface-3 rounded px-1 py-0.5 outline-none focus:border-accent"
+                  aria-label="Select priority"
+                >
+                  {PRIORITIES.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  onClick={() => setEditPriority(task.priority)}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-surface-2 hover:bg-surface-3 transition-colors duration-100 cursor-pointer"
+                  title="Click to change priority"
+                  aria-label={`Priority: ${task.priority} — click to edit`}
+                >
+                  <span className={`${PRIORITY_COLOR[task.priority] ?? 'text-ink-muted'} font-medium`}>
+                    {task.priority}
+                  </span>
+                </button>
+              )}
+
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-2">
                 <span className={`w-1.5 h-1.5 rounded-full ${statusDotClass}`} />
                 {STATUS_LABEL[task.status] ?? task.status}
               </span>
-              {task.estimate_hours != null && (
-                <span className="text-xs font-mono text-ink-faint tabular-nums">
-                  {task.estimate_hours}h
-                </span>
+
+              {/* Estimate — click to edit */}
+              {editEstimate !== null ? (
+                <input
+                  autoFocus
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={editEstimate}
+                  onChange={(e) => setEditEstimate(e.target.value)}
+                  onBlur={() => { void handleEstimateBlur() }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                    if (e.key === 'Escape') { setEditEstimate(null) }
+                  }}
+                  className="w-16 text-xs font-mono text-ink-faint tabular-nums bg-surface-2 border border-surface-3 rounded px-1.5 py-0.5 outline-none focus:border-accent"
+                  aria-label="Edit estimate hours"
+                />
+              ) : (
+                <button
+                  onClick={() => setEditEstimate(String(task.estimate_hours ?? ''))}
+                  className="text-xs font-mono text-ink-faint tabular-nums hover:bg-surface-2 rounded px-1 py-0.5 transition-colors duration-100"
+                  title="Click to edit estimate"
+                  aria-label={task.estimate_hours != null ? `Estimate: ${task.estimate_hours}h — click to edit` : 'Add estimate — click to edit'}
+                >
+                  {task.estimate_hours != null ? `${task.estimate_hours}h` : '+ est'}
+                </button>
               )}
             </div>
 
@@ -206,10 +410,32 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
               </div>
             )}
 
-            {/* Why / description — omit when blocked (block_reason shown above instead) */}
-            {task.why && task.status !== 'blocked' && (
+            {/* Why / description — editable; omit when blocked (block_reason shown above instead) */}
+            {task.status !== 'blocked' && (
               <Section title="Why">
-                <p className="text-sm text-ink-2 leading-relaxed">{task.why}</p>
+                {editWhy !== null ? (
+                  <textarea
+                    autoFocus
+                    value={editWhy}
+                    maxLength={1000}
+                    rows={4}
+                    onChange={(e) => setEditWhy(e.target.value)}
+                    onBlur={() => { void handleWhyBlur() }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { setEditWhy(null) }
+                    }}
+                    className="w-full text-sm text-ink-2 leading-relaxed bg-surface-2 border border-surface-3 rounded px-2 py-1.5 outline-none focus:border-accent resize-none"
+                    aria-label="Edit task description"
+                  />
+                ) : (
+                  <p
+                    className="text-sm text-ink-2 leading-relaxed cursor-text hover:bg-surface-2 rounded px-1 -mx-1 py-0.5 transition-colors duration-100 min-h-[1.5rem]"
+                    title="Click to edit"
+                    onClick={() => setEditWhy(task.why ?? '')}
+                  >
+                    {task.why || <span className="text-ink-faint italic">Add a description…</span>}
+                  </p>
+                )}
               </Section>
             )}
 
@@ -326,13 +552,29 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 border-t border-surface-3 px-4 py-3 space-y-2">
         {/* Action buttons row */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void handleDone()}
-            className="px-3 py-1.5 rounded text-xs font-medium bg-status-green/20 text-status-green hover:bg-status-green/30 transition-colors duration-100"
-          >
-            Done
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Start — P4-01: shown for todo/blocked tasks */}
+          {canStart && (
+            <button
+              onClick={() => void handleStart()}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-status-blue/20 text-status-blue hover:bg-status-blue/30 transition-colors duration-100"
+              aria-label="Start task — transition to in progress"
+            >
+              Start
+            </button>
+          )}
+
+          {/* Done — P4-01: now calls /transition (not /promote) */}
+          {canDone && (
+            <button
+              onClick={() => void handleDone()}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-status-green/20 text-status-green hover:bg-status-green/30 transition-colors duration-100"
+              aria-label="Mark task done"
+            >
+              Done
+            </button>
+          )}
+
           <button
             onClick={() => void handleScheduleToggle()}
             className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"

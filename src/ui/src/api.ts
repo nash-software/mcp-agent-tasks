@@ -1,4 +1,4 @@
-import type { Task, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
+import type { Task, TaskPriority, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -187,20 +187,32 @@ export async function transitionTask(
   return res.json() as Promise<Task>
 }
 
-export async function updateTaskPriority(
+export interface TaskUpdateFields {
+  title?: string
+  why?: string
+  priority?: TaskPriority
+  estimate_hours?: number
+}
+
+export async function updateTask(
   id: string,
-  priority: string,
+  fields: TaskUpdateFields,
 ): Promise<Task> {
   const res = await fetch(`/api/tasks/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ priority }),
+    body: JSON.stringify(fields),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
     throw new Error(err.error ?? `Update failed: ${res.status}`)
   }
   return res.json() as Promise<Task>
+}
+
+/** Thin wrapper for existing callers that only update priority. */
+export function updateTaskPriority(id: string, priority: TaskPriority): Promise<Task> {
+  return updateTask(id, { priority })
 }
 
 export interface ProjectEntry {

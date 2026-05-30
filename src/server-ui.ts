@@ -8,8 +8,9 @@ import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } fr
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
-import { AGENT_LOG_MAX } from './store/limits.js';
-import type { Priority, Area, Task } from './types/task.js';
+import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
+import type { Priority, Area, Task, TaskStatus } from './types/task.js';
+import { isValidTransition } from './types/transitions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1303,6 +1304,160 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         }
         pIdx!.index.upsertTask(task); // index update only after markdown is durable
         sendJson(res, 200, task);
+        return;
+      }
+
+      // API: transition task status — POST /api/tasks/:id/transition (P4-01)
+      const transitionMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/transition$/);
+      if (transitionMatch && req.method === 'POST') {
+        const taskId = transitionMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { to?: unknown; reason?: unknown };
+            const VALID_TRANSITION_TARGETS = new Set<string>(['todo', 'in_progress', 'done', 'blocked']);
+            if (!body.to || typeof body.to !== 'string') {
+              sendError(res, 400, 'INVALID_FIELD: to is required');
+              return;
+            }
+            if (!VALID_TRANSITION_TARGETS.has(body.to)) {
+              sendError(res, 400, `INVALID_FIELD: to must be one of: ${[...VALID_TRANSITION_TARGETS].join(', ')}`);
+              return;
+            }
+            const to = body.to as TaskStatus;
+            const reason = typeof body.reason === 'string' ? body.reason : undefined;
+
+            if (!isValidTransition(task.status, to)) {
+              sendJson(res, 409, { error: 'INVALID_TRANSITION', message: `Cannot transition ${taskId} from '${task.status}' to '${to}'` });
+              return;
+            }
+
+            const now = new Date().toISOString();
+            const transition = { from: task.status, to, at: now, ...(reason ? { reason } : {}) };
+            task.status = to;
+            task.transitions = [...task.transitions, transition].slice(-MAX_TRANSITIONS);
+            task.updated = now;
+            task.last_activity = now;
+
+            // Markdown-first, fail-closed (consistent with the P2-04 signoff path)
+            const persisted = persistTaskDurable(pIdx!, task, (md) => {
+              md.status = to;
+              md.transitions = [...(md.transitions ?? []), transition].slice(-MAX_TRANSITIONS);
+              md.updated = now;
+              md.last_activity = now;
+            });
+            if (!persisted) {
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist transition' });
+              return;
+            }
+            sendJson(res, 200, task);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: update task fields — PATCH /api/tasks/:id (P4-01)
+      const taskPatchMatch = pathname.match(/^\/api\/tasks\/([^/]+)$/);
+      if (taskPatchMatch && req.method === 'PATCH') {
+        const taskId = taskPatchMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+
+            // Reject status changes — must use /transition
+            if ('status' in body) {
+              sendError(res, 400, 'INVALID_FIELD: status changes must use POST /api/tasks/:id/transition');
+              return;
+            }
+
+            // Require at least one patchable field (empty PATCH is a no-op error)
+            if (Object.keys(body).length === 0) {
+              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours) is required');
+              return;
+            }
+
+            const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours']);
+            for (const key of Object.keys(body)) {
+              if (!VALID_PATCH_FIELDS.has(key)) {
+                sendError(res, 400, `INVALID_FIELD: field '${key}' is not patchable; allowed: title, why, priority, estimate_hours`);
+                return;
+              }
+            }
+
+            // Validate individual field values
+            const VALID_PRIORITIES = new Set<string>(['critical', 'high', 'medium', 'low']);
+            if ('priority' in body) {
+              if (typeof body['priority'] !== 'string' || !VALID_PRIORITIES.has(body['priority'])) {
+                sendError(res, 400, `INVALID_FIELD: priority must be one of: ${[...VALID_PRIORITIES].join(', ')}`);
+                return;
+              }
+            }
+            if ('title' in body) {
+              if (typeof body['title'] !== 'string' || body['title'].length === 0 || body['title'].length > 200) {
+                sendError(res, 400, 'INVALID_FIELD: title must be a non-empty string up to 200 characters');
+                return;
+              }
+            }
+            if ('why' in body) {
+              if (typeof body['why'] !== 'string' || body['why'].length > 1000) {
+                sendError(res, 400, 'INVALID_FIELD: why must be a string up to 1000 characters');
+                return;
+              }
+            }
+            if ('estimate_hours' in body) {
+              const eh = body['estimate_hours'];
+              if (typeof eh !== 'number' || eh < 0) {
+                sendError(res, 400, 'INVALID_FIELD: estimate_hours must be a non-negative number');
+                return;
+              }
+            }
+
+            // Apply allowed fields
+            const now = new Date().toISOString();
+            if ('title' in body) task.title = body['title'] as string;
+            if ('why' in body) task.why = body['why'] as string;
+            if ('priority' in body) task.priority = body['priority'] as Priority;
+            if ('estimate_hours' in body) task.estimate_hours = body['estimate_hours'] as number;
+            task.updated = now;
+            task.last_activity = now;
+
+            // Markdown-first, fail-closed
+            const persisted = persistTaskDurable(pIdx!, task, (md) => {
+              if ('title' in body) md.title = body['title'] as string;
+              if ('why' in body) md.why = body['why'] as string;
+              if ('priority' in body) md.priority = body['priority'] as Priority;
+              if ('estimate_hours' in body) md.estimate_hours = body['estimate_hours'] as number;
+              md.updated = now;
+              md.last_activity = now;
+            });
+            if (!persisted) {
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist update' });
+              return;
+            }
+            sendJson(res, 200, task);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
         return;
       }
 
