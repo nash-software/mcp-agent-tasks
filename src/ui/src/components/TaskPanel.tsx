@@ -522,9 +522,9 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
             {/* Status history — detail mode only */}
             {!isPeek && task.transitions && task.transitions.length > 0 && (
               <Section title="Status history">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {[...task.transitions].reverse().slice(0, 8).map((t, i) => (
-                    <div key={i} className="flex items-start gap-2 text-xs">
+                    <div key={i} className="flex items-start gap-2 text-sm">
                       <div className="flex items-center gap-1 flex-shrink-0 mt-0.5 font-mono">
                         <span className={STATUS_DOT[t.from as TaskStatus] ? `text-ink-2` : 'text-ink-muted'}>
                           {t.from}

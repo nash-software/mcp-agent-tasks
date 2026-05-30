@@ -1,6 +1,7 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { NAV } from '../lib/nav'
+import { MOD } from '../lib/platform'
 import { useAcrStatus } from '../hooks/useAcrStatus'
 import { AreaDot } from './atoms'
 import type { ViewId, TaskArea } from '../types'
@@ -188,7 +189,7 @@ export function Nav({
           onClick={onPaletteOpen}
           className="bg-surface-2 text-ink-muted text-xs px-3 py-1.5 rounded hover:text-ink transition-colors overflow-hidden whitespace-nowrap"
         >
-          Search ⌘K
+          Search {MOD}K
         </button>
       </div>
     </nav>

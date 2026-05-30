@@ -487,7 +487,7 @@ export function App(): React.JSX.Element {
             onClear={clearFilter}
           />
         )}
-        <div className="main-inner" data-width={FULL_WIDTH_VIEWS.has(view) ? 'full' : undefined}>
+        <div className="main-inner" data-width={(FULL_WIDTH_VIEWS.has(view) || (focusMode && view === 'today')) ? 'full' : undefined}>
           {view === 'today'     && (
             <TodayView
               filter={filter}

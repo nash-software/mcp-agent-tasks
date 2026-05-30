@@ -15,7 +15,8 @@
  *   onOpenDetail — from … menu / button
  *   animClass   — optional animation class (e.g. "animate-fade-in") for commit animation
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Task } from '../types'
 import { StatusDot, AreaDot, AreaChip, PrefixBadge } from './atoms'
 import { fmtEst } from '../lib/format'
@@ -59,6 +60,8 @@ export function TaskCard({
 }: TaskCardProps): React.JSX.Element {
   const [hoverArea, setHoverArea] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Ref to the trigger button — used to position the portalled menu
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
 
   const priorityBar = PRIORITY_BAR[task.priority] ?? ''
   const priorityTag = PRIORITY_TAG[task.priority]
@@ -77,6 +80,40 @@ export function TaskCard({
       setMenuOpen(m => !m)
     }
   }
+
+  // Outside-click + Escape dismiss — clean up listeners on unmount/close
+  useEffect(() => {
+    if (!menuOpen) return
+
+    const handleDocClick = (e: MouseEvent): void => {
+      // Close when clicking outside the trigger button and outside the menu
+      if (menuBtnRef.current && menuBtnRef.current.contains(e.target as Node)) return
+      setMenuOpen(false)
+    }
+
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', handleDocClick)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handleDocClick)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [menuOpen])
+
+  // Compute portalled menu position from the trigger button's bounding rect
+  const menuRect = menuBtnRef.current?.getBoundingClientRect()
+  const menuStyle: React.CSSProperties = menuRect
+    ? {
+        position: 'fixed',
+        top: menuRect.bottom + 4,
+        right: window.innerWidth - menuRect.right,
+        zIndex: 9999,
+      }
+    : { position: 'fixed', top: 0, right: 0, zIndex: 9999 }
 
   return (
     <div className={`group relative flex items-center gap-2 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
@@ -150,8 +187,9 @@ export function TaskCard({
             +
           </button>
         ) : (
-          <div className="relative">
+          <>
             <button
+              ref={menuBtnRef}
               className="w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
               title="Actions"
               onClick={handleMenuClick}
@@ -159,10 +197,12 @@ export function TaskCard({
             >
               <span className="text-xs leading-none">•••</span>
             </button>
-            {menuOpen && !onMenu && (
+            {/* Portalled menu — renders in document.body so it escapes overflow:hidden ancestors */}
+            {menuOpen && !onMenu && typeof document !== 'undefined' && createPortal(
               <div
-                className="absolute right-0 top-7 z-50 w-44 bg-surface-1 border border-surface-3 rounded-card shadow-lg py-1"
-                onClick={e => e.stopPropagation()}
+                style={menuStyle}
+                className="w-44 bg-surface-1 border border-surface-3 rounded-card shadow-lg py-1"
+                onMouseDown={e => e.stopPropagation()}
               >
                 <MenuButton
                   label="Mark done"
@@ -175,9 +215,10 @@ export function TaskCard({
                 {/* P2 stubs — present but disabled */}
                 <MenuButton label="Sign off to Hermes" disabled />
                 <MenuButton label="Dispatch to ACR" disabled />
-              </div>
+              </div>,
+              document.body
             )}
-          </div>
+          </>
         )}
       </div>
     </div>

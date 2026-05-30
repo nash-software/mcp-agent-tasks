@@ -320,14 +320,17 @@ export function TodayView({
             Nothing committed yet — commit something from below.
           </div>
         ) : (
-          <div className="group">
+          <div className="space-y-2">
             {committedList.map(task => (
               <TaskCard
                 key={task.id}
                 task={task}
                 mode="committed"
                 selected={selectedTaskId === task.id}
-                onClick={() => onSelectTask?.(task.id)}
+                onClick={() => {
+                  onSelectTask?.(task.id)
+                  handleOpenDetail(task)
+                }}
                 onMarkDone={() => handleMarkDone(task)}
                 onOpenDetail={() => handleOpenDetail(task)}
               />
