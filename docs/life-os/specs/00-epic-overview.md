@@ -307,3 +307,70 @@ P2-04 (backend) can start in parallel with Phase 1. P2-05/P2-06 need P2-04 + Pha
   See P1-02 (delete tab), P1-03 (sub-section), P2-04b (triage backend). *(User confirmed 2026-05-29.)*
 - **Triage location:** keep `lib/triage.ts` client-side heuristic, or call `/api/agent/triage`?
   Default: client heuristic in P2-05, endpoint optional in P2-04. Resolve when starting P2-05.
+
+---
+
+## 12. Phase 4 — Make the read-only UI usable (Epic MCPAT-041)
+
+Post-Phase-3 review (`docs/life-os/audit/2026-05-30-functional-audit.md`) found the dashboard is a
+faithful **read-only shell**: Phases 1–3 delivered the reskin + display layer, but the
+**mutation/interaction layer was never built**. The client defines `transitionTask()` /
+`updateTaskPriority()` that target HTTP routes absent from `server-ui.ts`, and errors are swallowed by
+`if (res.ok)` guards. Phase 4 makes the UI actually usable: a real mutation layer, lifecycle/closure,
+board DnD, estimate-on-commit, the discrete UI-bug batch, an enablement/infra sweep, and roadmap task
+linking.
+
+> **Epic: MCPAT-041.** Sub-specs reference the shared tokens (§3), data shapes (§4), and client
+> conventions (§5) above — they are **not** restated per-spec. Each Phase-4 spec is single-builder-sized.
+
+### Phase 4 sub-spec index & build order
+
+| Task | Spec | Title | Depends on | Size |
+|---|---|---|---|---|
+| MCPAT-042 | **P4-01** | Task mutation layer + editable panel (`PATCH` + `/transition`) | — (foundational) | L |
+| MCPAT-043 | **P4-02** | Done → Complete → Completed sprint-closure tab | P4-01 (P4-03 coord) | L |
+| MCPAT-044 | **P4-03** | Board drag-and-drop (`@dnd-kit`) → transition | P4-01 (P4-02 coord) | M |
+| MCPAT-045 | **P4-04** | Commit-to-Today estimate prompt + capacity gauge | P4-01 | S |
+| MCPAT-046 | **P4-05** | UI bug batch (B1–B5: platform key, width/focus, menu portal, peek-on-click, spacing) | — (P4-03 coord on B4) | M |
+| MCPAT-047 | **P4-06** | Enablement & infra (Hermes/ACR un-stub, Workspace label, Brain status probe, capture routing, artifacts hook) | — | L |
+| MCPAT-048 | **P4-07** | Roadmap task linking (assign tasks → milestones) | P4-01 (soft-reuses P4-03) | M |
+
+### Build-order DAG
+
+```
+                P4-01 (MCPAT-042) — KEYSTONE: PATCH + /transition
+                  │      (everything that mutates depends on this)
+        ┌─────────┼───────────────┬───────────────┐
+        ▼         ▼               ▼               ▼
+   P4-02       P4-03           P4-04           P4-07
+ (closure)  (board DnD)   (estimate prompt)  (roadmap link)
+   043         044             045              048
+     ▲          │                               ▲
+     └──coord───┘ (Done-column "Complete all")  │
+                  └──── soft-reuse (drag) ───────┘  (P4-07 buildable w/o P4-03)
+
+   P4-05 (UI bug batch, 046) ── independent ── (B4 coord w/ P4-03 drag-vs-click)
+   P4-06 (enablement/infra, 047) ── independent (uses existing endpoints)
+```
+
+**Critical path:** **P4-01 first** (it unblocks P4-02, P4-03, P4-04, P4-07). After P4-01, the four
+dependents parallelize. **P4-05 and P4-06 are independent** of P4-01 and can run in parallel from the
+start. **User-elevated priority within Phase 4:** P4-07 (roadmap linking — every milestone reads 0/0
+today) and P4-02 (lifecycle) after the P4-01 keystone.
+
+**Coordination edges (not hard deps):**
+- P4-02 ↔ P4-03 own the **Done-column "Complete all"** chrome jointly — whichever lands first builds it.
+- P4-05 (B4 peek-on-click) ↔ P4-03 (drag activation) must coexist on the same rows (dnd-kit
+  `activationConstraint`).
+- P4-07 soft-reuses P4-03's `@dnd-kit` for drag-to-assign but ships a non-drag picker as the baseline.
+
+### Phase 4 flagged decisions (carry into the named spec)
+
+- **Closed vs archived (P4-02):** model the terminal "completed" state as a **`closed` status**
+  (recommended — single queryable terminal state) vs an orthogonal **`archived` flag** (rejected — the
+  §9 duplicate-state anti-pattern). Default = `closed` status; settle in P4-02 build step 1.
+- **TLS for Tailscale `:8093` (P4-06c):** **never** a global `NODE_TLS_REJECT_UNAUTHORIZED=0`. Default =
+  a scoped `https.Agent` for the Brain host only; settle in P4-06.
+- **Estimate require vs prompt (P4-04):** default = prompt-but-skippable; hard-require is an Open Q.
+- **Project/area re-assignment (P4-01):** deferred — `task_update` excludes `project`; re-routing is a
+  separate "move task" affordance.
