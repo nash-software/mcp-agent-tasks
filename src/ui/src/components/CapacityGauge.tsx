@@ -17,6 +17,11 @@ interface CapacityGaugeProps {
   targetMinutes: number
   /** Called when user changes the target — persist to localStorage + update state */
   onTargetChange: (newTargetMinutes: number) => void
+  /**
+   * P4-04: Number of committed (non-done/cancelled) tasks with no estimate_hours.
+   * When > 0, shows an "N unestimated" hint so the user knows the gauge undercounts.
+   */
+  unestimatedCount?: number
 }
 
 type Zone = 'green' | 'amber' | 'red'
@@ -43,6 +48,7 @@ export function CapacityGauge({
   committedMinutes,
   targetMinutes,
   onTargetChange,
+  unestimatedCount = 0,
 }: CapacityGaugeProps): React.JSX.Element {
   const pct = targetMinutes > 0 ? committedMinutes / targetMinutes : 0
   const clamped = Math.min(pct, 1)
@@ -126,6 +132,14 @@ export function CapacityGauge({
       {pct > 1 && (
         <p className="text-xs text-status-red">
           Over target by {fmtHM(deltaMinutes / 60)} — consider deferring something.
+        </p>
+      )}
+
+      {/* P4-04: Unestimated hint — shown when committed tasks lack estimate_hours */}
+      {unestimatedCount > 0 && (
+        <p className="text-xs text-ink-muted">
+          {unestimatedCount} unestimated
+          <span className="text-ink-faint"> — gauge may undercount</span>
         </p>
       )}
     </div>
