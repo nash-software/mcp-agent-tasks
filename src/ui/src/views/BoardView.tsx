@@ -28,7 +28,10 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   const queryClient = useQueryClient()
   const completeAll = useMutation({
     mutationFn: () => closeBatch(),
-    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ['tasks'] }) },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['today'] })
+    },
   })
 
   if (isLoading) {
@@ -83,7 +86,12 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
               {col.status === 'done' && colTasks.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => completeAll.mutate()}
+                  onClick={() => {
+                    // Confirm — this closes every Done task (across all projects) into Completed
+                    if (window.confirm('Complete all Done tasks? They move to the Completed tab.')) {
+                      completeAll.mutate()
+                    }
+                  }}
                   disabled={completeAll.isPending}
                   className="text-[10px] font-medium text-accent hover:underline disabled:opacity-50"
                   title="Move all done tasks to Completed"

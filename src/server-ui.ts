@@ -1471,8 +1471,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         req.on('end', () => {
           try {
             let projectScope: string | undefined;
-            if (req.headers['content-length'] && Number(req.headers['content-length']) > 0) {
-              const body = JSON.parse(Buffer.concat(chunks).toString()) as { project?: unknown };
+            // Parse based on the actual buffered body, not the content-length header
+            // (chunked POSTs have no content-length).
+            const raw = Buffer.concat(chunks).toString().trim();
+            if (raw.length > 0) {
+              const body = JSON.parse(raw) as { project?: unknown };
               if (body.project !== undefined) {
                 if (typeof body.project !== 'string') {
                   sendJson(res, 400, { error: 'INVALID_FIELD', message: 'project must be a string' });
@@ -1482,11 +1485,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               }
             }
 
-            // Validate scope if provided
+            // Validate scope if provided (generic error — don't enumerate prefixes)
             if (projectScope !== undefined) {
               const knownPrefixes = projectIndexes.map(p => p.prefix);
               if (!knownPrefixes.includes(projectScope)) {
-                sendJson(res, 400, { error: 'UNKNOWN_PROJECT', message: `project '${projectScope}' not found; known: ${knownPrefixes.join(', ')}` });
+                console.error(`[close-batch] unknown project '${projectScope}'; known: ${knownPrefixes.join(', ')}`);
+                sendJson(res, 400, { error: 'UNKNOWN_PROJECT', message: 'project not found' });
                 return;
               }
             }
