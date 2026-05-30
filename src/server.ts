@@ -310,8 +310,17 @@ async function main(): Promise<void> {
     }, 500);
   });
 
+  // Periodically truncate the WAL so it cannot grow unbounded during a long
+  // session. Windows hard-kills (Job Object teardown) skip the shutdown handler,
+  // so close()'s checkpoint alone is not enough (MCPAT-049). unref() so the
+  // timer never keeps the process alive.
+  const CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000;
+  const checkpointTimer = setInterval(() => sqliteIndex.checkpoint(), CHECKPOINT_INTERVAL_MS);
+  checkpointTimer.unref();
+
   // Cleanup on exit
   const shutdown = (): void => {
+    clearInterval(checkpointTimer);
     configWatcher.close();
     for (const watcher of watchers) {
       watcher.stop();
