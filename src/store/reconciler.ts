@@ -67,6 +67,12 @@ export class Reconciler {
       }
     }
 
+    // After processing tasks, reset FTS5 shadow tables to prevent orphaned rows
+    // from leaking across reconcile runs and inflating the database.
+    if (count >= 1) {
+      this.sqliteIndex.rebuildFts();
+    }
+
     return count;
   }
 

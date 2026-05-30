@@ -3,6 +3,7 @@ import type { GitLink } from '../types/task.js';
 import type { TaskUpdateInput } from '../types/tools.js';
 import type { ToolContext, ToolOutput } from './context.js';
 import { ok } from './context.js';
+import { MAX_COMMITS } from '../store/limits.js';
 
 export const name = 'task_link_commit';
 
@@ -60,6 +61,8 @@ export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<
 
   const updatedGit: GitLink = {
     ...task.git,
+    // Cap to last MAX_COMMITS before persisting — prevents the feedback loop
+    // where reading from SQLite returns a growing array and upsert compounds it.
     commits: [
       ...task.git.commits,
       {
@@ -67,7 +70,7 @@ export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<
         message: input.message,
         authored_at: input.authored_at ?? new Date().toISOString(),
       },
-    ],
+    ].slice(-MAX_COMMITS),
   };
 
   const updatePayload: UpdateWithGit = {
