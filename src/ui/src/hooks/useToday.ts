@@ -254,6 +254,9 @@ export function useToday(targetMinutes?: number): UseTodayReturn {
         void invalidate()
       } catch (patchErr) {
         console.warn('[useToday] estimate PATCH failed (task still committed):', patchErr)
+        // Surface passively: refetch so the task shows WITHOUT an estimate and the
+        // capacity gauge counts it as unestimated, making the failure visible (codex F2).
+        void invalidate()
       }
     }
   }

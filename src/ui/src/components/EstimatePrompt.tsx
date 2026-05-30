@@ -34,12 +34,13 @@ const CHIPS: Chip[] = [
   { label: '4h',  hours: 4   },
 ]
 
-/** Maximum sensible estimate (24h per day) */
+/** Accepted estimate range (matches the validation copy shown to the user) */
+const MIN_ESTIMATE_HOURS = 0.1
 const MAX_ESTIMATE_HOURS = 24
 
 function parseHours(raw: string): number | null {
   const v = parseFloat(raw)
-  if (!isFinite(v) || v <= 0 || v > MAX_ESTIMATE_HOURS) return null
+  if (!isFinite(v) || v < MIN_ESTIMATE_HOURS || v > MAX_ESTIMATE_HOURS) return null
   return v
 }
 
