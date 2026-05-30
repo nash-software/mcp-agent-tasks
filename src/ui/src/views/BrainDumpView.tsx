@@ -3,6 +3,7 @@ import { useBrainDump } from '../hooks/useBrainDump'
 import { CandidateCard } from '../components/CandidateCard'
 import { useAcrStatus } from '../hooks/useAcrStatus'
 import { ViewHeader } from '../components/ViewHeader'
+import { MOD } from '../lib/platform'
 import type { BrainDumpCandidate } from '../hooks/useBrainDump'
 
 // Abort timeout in milliseconds for the parse request
@@ -357,7 +358,7 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
               className="w-full bg-surface-1 border border-surface-3 rounded-card px-4 py-3 pr-14 text-sm text-ink
                 placeholder-ink-faint focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30
                 resize-y disabled:opacity-60 transition-colors"
-              placeholder="Write anything. Tasks, ideas, worries, plans. ⌘+Enter to process."
+              placeholder={`Write anything. Tasks, ideas, worries, plans. ${MOD}+Enter to process.`}
               disabled={parseMutation.isPending}
             />
             {/* Mic button — top right, absolute inside wrapper */}
@@ -395,7 +396,7 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
               type="button"
             >
               Process
-              <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-sans leading-none">⌘↵</kbd>
+              <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded font-sans leading-none">{MOD}↵</kbd>
             </button>
           </div>
         </div>
