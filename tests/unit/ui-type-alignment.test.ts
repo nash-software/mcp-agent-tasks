@@ -107,12 +107,21 @@ describe('UI type alignment with backend', () => {
 
   it('BoardView COLUMNS use todo not queued for initial status', () => {
     const root = process.cwd();
+    // The column status definitions were moved to lib/transitions.ts (P4-03 DnD refactor).
+    // Check both the transitions file (source of truth) and BoardView for the absence of 'queued'.
+    const transitionsSource = fs.readFileSync(
+      path.join(root, 'src', 'ui', 'src', 'lib', 'transitions.ts'),
+      'utf-8',
+    );
     const boardSource = fs.readFileSync(
       path.join(root, 'src', 'ui', 'src', 'views', 'BoardView.tsx'),
       'utf-8',
     );
 
-    expect(boardSource).toContain("status: 'todo'");
+    // transitions.ts must declare 'todo' as a board status
+    expect(transitionsSource).toContain("'todo'");
+    // neither file may use the old 'queued' alias
+    expect(transitionsSource).not.toContain("'queued'");
     expect(boardSource).not.toContain("status: 'queued'");
   });
 });

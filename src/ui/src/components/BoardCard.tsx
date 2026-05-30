@@ -7,9 +7,16 @@
  * Title: line-clamp-3 (never truncated to a few chars).
  * Footer: StatusDot · AreaDot · estimate · "today" badge · agent badge.
  * Click → onOpenPanel (existing detail panel pattern).
+ *
+ * Drag behaviour:
+ * - `useDraggable` is used when BoardView passes `isDragging` / drag props.
+ * - When `draggableProps` is provided the card acts as a drag handle.
+ * - Activation constraint (distance 8px) separates drag from click so the
+ *   existing click-to-open-panel path is preserved.
  */
 import React from 'react'
-import { Bot } from 'lucide-react'
+import { useDraggable } from '@dnd-kit/core'
+import { Bot, GripVertical } from 'lucide-react'
 import type { Task, PanelState } from '../types'
 import { StatusDot, AreaDot, PrefixBadge } from './atoms'
 import { fmtEst } from '../lib/format'
@@ -29,9 +36,11 @@ const PRIORITY_LABEL: Partial<Record<string, string>> = {
 interface BoardCardProps {
   task: Task
   onOpenPanel: (panel: PanelState) => void
+  /** When true the card renders as a DragOverlay ghost (no pointer events, slightly transparent) */
+  isOverlay?: boolean
 }
 
-export function BoardCard({ task, onOpenPanel }: BoardCardProps): React.JSX.Element {
+export function BoardCard({ task, onOpenPanel, isOverlay = false }: BoardCardProps): React.JSX.Element {
   const estStr    = fmtEst(task.estimate_hours)
   const todayStr  = localToday()
   const isToday   = task.scheduled_for === todayStr
@@ -39,21 +48,58 @@ export function BoardCard({ task, onOpenPanel }: BoardCardProps): React.JSX.Elem
   const priTag    = PRIORITY_TAG_CLASS[task.priority]
   const priLabel  = PRIORITY_LABEL[task.priority]
 
-  const handleClick = (): void => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: task.id,
+    data: { task },
+    disabled: isOverlay,
+  })
+
+  const handleClick = (e: React.MouseEvent): void => {
+    // Only open the panel if this was a genuine click (no drag movement).
+    // dnd-kit's PointerSensor activation constraint (distance 8px) ensures
+    // a drag has started only after 8px movement, so click events reach here
+    // only when the user didn't drag.
+    if (isDragging) return
+    e.stopPropagation()
     onOpenPanel({ mode: 'detail', taskId: task.id })
   }
 
   return (
     <div
-      className="bg-surface-1 border border-surface-3 rounded-card cursor-pointer
-                 hover:bg-surface-2 transition-colors"
+      ref={setNodeRef}
+      className={[
+        'bg-surface-1 border border-surface-3 rounded-card',
+        'hover:bg-surface-2 transition-colors',
+        'select-none',
+        isOverlay
+          ? 'opacity-80 cursor-grabbing shadow-lg pointer-events-none'
+          : isDragging
+            ? 'opacity-40 cursor-grab'
+            : 'cursor-pointer',
+      ].join(' ')}
       style={{ padding: 'var(--card-pad, 12px)' }}
       onClick={handleClick}
       data-task-id={task.id}
+      aria-label={`Task: ${task.title}. Status: ${task.status}. Press Space to pick up and drag.`}
+      {...attributes}
+      {...listeners}
     >
-      {/* Card header: PrefixBadge left, priority tag right */}
+      {/* Card header: drag handle + PrefixBadge left, priority tag right */}
       <div className="flex items-center justify-between gap-2 mb-2">
-        <PrefixBadge project={task.project} />
+        <div className="flex items-center gap-1.5">
+          {/* Drag handle — visual affordance only; the whole card is the draggable
+              (attributes + listeners on the focusable card root) so keyboard users
+              can focus the card and press Space to pick up (codex F2). */}
+          <span
+            aria-hidden="true"
+            className="text-ink-muted/40 hover:text-ink-muted cursor-grab active:cursor-grabbing shrink-0
+                       transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            tabIndex={-1}
+          >
+            <GripVertical size={14} />
+          </span>
+          <PrefixBadge project={task.project} />
+        </div>
         {priTag && priLabel && (
           <span className={`text-xs font-medium shrink-0 ${priTag}`}>
             {priLabel}
