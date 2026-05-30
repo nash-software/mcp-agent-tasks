@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- Existing DBs cannot have their CHECK constraint altered (SQLite limitation).
   -- Users upgrading must run: rm <tasksDir>/.index.db && agent-tasks rebuild-index <PREFIX>
   type TEXT NOT NULL CHECK(type IN ('feature','bug','chore','spike','refactor','spec','plan')),
-  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved')),
+  status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved','closed')),
   priority TEXT NOT NULL CHECK(priority IN ('critical','high','medium','low')),
   project TEXT NOT NULL REFERENCES projects(prefix),
   complexity INTEGER CHECK(complexity BETWEEN 1 AND 10),
@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL),
   scheduled_for TEXT,
   agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL),
-  block_reason TEXT
+  block_reason TEXT,
+  closed_at INTEGER,
+  close_batch TEXT
 );
 
 CREATE TABLE IF NOT EXISTS subtasks (

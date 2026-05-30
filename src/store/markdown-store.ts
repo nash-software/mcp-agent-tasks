@@ -87,6 +87,8 @@ export class MarkdownStore {
       block_reason?: string;
       triage_note?: string;
       triage_confidence?: number;
+      closed_at?: number;
+      close_batch?: string;
     };
 
     if (fm.schema_version !== SCHEMA_VERSION) {
@@ -158,6 +160,8 @@ export class MarkdownStore {
       ...(fm.block_reason !== undefined ? { block_reason: fm.block_reason } : {}),
       ...(fm.triage_note !== undefined ? { triage_note: fm.triage_note } : {}),
       ...(fm.triage_confidence !== undefined ? { triage_confidence: fm.triage_confidence } : {}),
+      ...(fm.closed_at !== undefined ? { closed_at: fm.closed_at } : {}),
+      ...(fm.close_batch !== undefined ? { close_batch: fm.close_batch } : {}),
     };
 
     // Parse and validate references
