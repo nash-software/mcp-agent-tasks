@@ -69,7 +69,7 @@ interface Props {
 
 // ─── component ───────────────────────────────────────────────────────────────
 
-export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX.Element | null {
+export function TaskPanel({ panel, task, onClose }: Props): React.JSX.Element | null {
   const scrollRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
 

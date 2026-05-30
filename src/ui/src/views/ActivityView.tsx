@@ -1,5 +1,5 @@
 import React from 'react'
-import type { TaskStatus, PanelState } from '../types'
+import type { PanelState } from '../types'
 import { ViewHeader } from '../components/ViewHeader'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
@@ -10,22 +10,6 @@ interface Props {
   filter: Filter
   areaMap?: Record<string, Area>
   onOpenPanel: (panel: PanelState) => void
-}
-
-/**
- * Map canonical status → node background class.
- * Keyed on `todo` (real store) — never `queued` (prototype alias).
- * Falls back to bg-ink-faint so unknown statuses are still visible.
- */
-const STATUS_NODE: Record<TaskStatus, string> = {
-  todo:        'bg-ink-muted',
-  in_progress: 'bg-status-blue',
-  done:        'bg-status-green',
-  blocked:     'bg-status-red',
-  archived:    'bg-ink-faint',
-  draft:       'bg-ink-faint',
-  approved:    'bg-status-green',
-  closed:      'bg-ink-faint',
 }
 
 /** Human-readable status label. */

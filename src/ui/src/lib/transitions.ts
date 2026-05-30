@@ -6,14 +6,18 @@
  */
 import type { TaskStatus } from '../types'
 
-export const BOARD_STATUSES: readonly TaskStatus[] = ['todo', 'in_progress', 'blocked', 'done'] as const
+export const BOARD_STATUSES = ['todo', 'in_progress', 'blocked', 'done'] as const satisfies readonly TaskStatus[]
 
-/** Column label displayed in the board header */
-export const COLUMN_LABEL: Record<(typeof BOARD_STATUSES)[number], string> = {
+/** Human label for every status (board columns + the rest, for a11y/announcements). */
+export const COLUMN_LABEL: Record<TaskStatus, string> = {
   todo:        'Queued',
   in_progress: 'In progress',
   blocked:     'Blocked',
   done:        'Done',
+  closed:      'Completed',
+  draft:       'Draft',
+  approved:    'Approved',
+  archived:    'Archived',
 }
 
 /** Valid transitions — mirrors server src/types/transitions.ts */

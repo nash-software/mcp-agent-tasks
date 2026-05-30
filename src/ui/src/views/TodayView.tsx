@@ -19,7 +19,7 @@ import { Minimize2, Maximize2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
-import { PRI_RANK, localToday } from '../lib/format'
+import { PRI_RANK } from '../lib/format'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────
@@ -94,11 +94,9 @@ export function TodayView({
     error,
     scheduleForToday,
     scheduleWithEstimate,
-    removeFromToday,
     markDone,
     pauseTask,
     blockTask,
-    cyclePriority,
   } = useToday(targetMinutes)
 
   // "Needs your call" — draft tasks (P2-04b stub)
@@ -108,7 +106,6 @@ export function TodayView({
     staleTime: 60000,
   })
 
-  const today = localToday()
 
   // ── Derived lists (filtering-ready structure) ─────────────────────────
 
@@ -125,10 +122,10 @@ export function TodayView({
 
   // AC3: filtering narrows the committed list + candidate queue ONLY — never the hero or
   // capacity gauge (hero is the single current focus; capacity is the whole day's load).
-  // Committed list: all scheduled today excluding the hero and cancelled, then matchFilter.
+  // Committed list: all scheduled today excluding the hero, then matchFilter.
   const committedList = sortCommitted(
     committed
-      .filter(t => t.status !== 'in_progress' && t.status !== 'cancelled')
+      .filter(t => t.status !== 'in_progress')
       .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
@@ -136,10 +133,10 @@ export function TodayView({
   const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   const candidatesByArea = groupByArea(filteredCandidates)
 
-  // P4-04: Count committed (non-done/cancelled/in_progress) tasks with no estimate
+  // P4-04: Count committed (non-done) tasks with no estimate
   // Used for the capacity gauge "N unestimated" hint (AC 6)
   const unestimatedCount = committed.filter(
-    t => t.status !== 'done' && t.status !== 'cancelled'
+    t => t.status !== 'done'
       && (t.estimate_hours == null || t.estimate_hours <= 0)
   ).length
 
@@ -224,14 +221,6 @@ export function TodayView({
   const handleEstimateDismiss = useCallback((): void => {
     setEstimatePromptTaskId(null)
   }, [])
-
-  const handleRemove = useCallback((task: Task): void => {
-    void removeFromToday(task.id)
-  }, [removeFromToday])
-
-  const handleCyclePriority = useCallback((task: Task): void => {
-    void cyclePriority(task.id, task.priority as TaskPriority)
-  }, [cyclePriority])
 
   // ── Loading / error states ────────────────────────────────────────────
 

@@ -64,7 +64,7 @@ dist/             — Built output (ESM + CJS, not committed)
 - Atomic writes via temp-file rename (POSIX + NTFS safe)
 - Task IDs use per-project prefixes (e.g., `HBOOK-001`). See global MEMORY for prefix registry.
 - `SKIP_TASK_GATE=1` env var bypasses the Claude Code enforcement hook (for orchestrators)
-- Task state machine: `queued` -> `in_progress` -> `done` | `blocked` | `cancelled`
+- Task statuses (src/types/task.ts): `draft`, `approved`, `todo`, `in_progress`, `blocked`, `done`, `closed`, `archived`. Core flow: `todo` -> `in_progress` -> `done` -> `closed`; `blocked` from todo/in_progress; transitions enforced by `src/types/transitions.ts`
 - Max 10 subtasks per task; max 100 transitions; max 50 commits in git.commits[]
 
 ## Handbook Navigation

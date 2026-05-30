@@ -4,7 +4,7 @@
  */
 import React from 'react'
 import type { TaskStatus, TaskArea } from '../types'
-import { STATUS_DOT, AREA_DOT } from '../lib/tokens'
+import { STATUS_DOT } from '../lib/tokens'
 
 // ── Area color hex map (for inline styles when we need actual hex) ────────
 const AREA_HEX: Record<TaskArea, string> = {
@@ -49,7 +49,6 @@ interface AreaDotProps {
 }
 
 export function AreaDot({ area, title }: AreaDotProps): React.JSX.Element {
-  const _colorClass = AREA_DOT[area]
   return (
     <span
       className="rounded-full shrink-0"
