@@ -18,9 +18,11 @@ const uiSrc = path.join(process.cwd(), 'src', 'ui', 'src')
 const read = (rel: string): string => fs.readFileSync(path.join(uiSrc, rel), 'utf-8')
 
 describe('P3-01 — Board cards', () => {
-  it('BoardCard component exists and is multi-line (line-clamp, not truncate)', () => {
+  it('BoardCard component exists and clamps the title to 3 lines (not single-char truncate)', () => {
     const src = read('components/BoardCard.tsx')
-    expect(src).toMatch(/line-clamp-3/)
+    // Title is line-clamped to 3 lines via WebkitLineClamp (the real mechanism), never `truncate`.
+    expect(src).toMatch(/WebkitLineClamp:\s*3/)
+    expect(src).not.toMatch(/className="[^"]*\btruncate\b/)
   })
   it('BoardView renders BoardCard', () => {
     expect(read('views/BoardView.tsx')).toContain('BoardCard')

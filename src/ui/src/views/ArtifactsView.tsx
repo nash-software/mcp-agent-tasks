@@ -224,7 +224,7 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
   const unvisited = sorted.filter(a => a.last_opened_at === null).length
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-6">
+    <div className="px-6 py-6">
       {/* Header */}
       <ViewHeader
         title="Artifacts"

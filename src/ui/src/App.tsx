@@ -18,7 +18,7 @@ import { useArtifacts } from './hooks/useArtifacts'
 import { useCaptureOverlay } from './hooks/useCaptureOverlay'
 import { useGlobalKeyboard } from './hooks/useGlobalKeyboard'
 import { NAV } from './lib/nav'
-import type { ViewId, PanelState, Task, TaskPriority, TaskArea } from './types'
+import type { ViewId, PanelState, Task, TaskPriority, TaskArea, Density } from './types'
 import { localToday } from './lib/format'
 import { fetchProjects, type ProjectEntry } from './api'
 import { useQuery } from '@tanstack/react-query'
@@ -27,7 +27,6 @@ import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity']
 
 // ─── Density types + persistence ────────────────────────────────────────────
-export type Density = 'compact' | 'cozy' | 'spacious'
 const VALID_DENSITIES: Density[] = ['compact', 'cozy', 'spacious']
 
 function readStoredDensity(): Density {

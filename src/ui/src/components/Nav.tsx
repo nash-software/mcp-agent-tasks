@@ -5,7 +5,7 @@ import { useAcrStatus } from '../hooks/useAcrStatus'
 import { AreaDot } from './atoms'
 import type { ViewId, TaskArea } from '../types'
 import type { FilterBarProject } from './FilterBar'
-import type { Density } from '../App'
+import type { Density } from '../types'
 
 interface NavProps {
   view: ViewId

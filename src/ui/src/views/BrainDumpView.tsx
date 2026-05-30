@@ -310,7 +310,7 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
   if (phase === 'done') {
     const n = createdCount ?? 0
     return (
-      <div className="p-6 max-w-3xl">
+      <div className="p-6">
         <div className="rounded-card bg-surface-1 border border-surface-3 p-8 flex flex-col items-center gap-4 text-center">
           <div className="w-12 h-12 rounded-full bg-status-green/15 flex items-center justify-center">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-status-green">
@@ -336,7 +336,7 @@ export function BrainDumpView({ projects, initialText, seedNonce, onSeedConsumed
   }
 
   return (
-    <div className="p-6 space-y-5 max-w-3xl">
+    <div className="p-6 space-y-5">
       {/* Header */}
       <ViewHeader
         title="Brain dump"

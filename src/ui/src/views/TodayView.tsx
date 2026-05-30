@@ -206,7 +206,8 @@ export function TodayView({
   // ── Main render ───────────────────────────────────────────────────────
 
   const weekday = new Date().toLocaleDateString(undefined, { weekday: 'long' })
-  const isoDate = new Date().toISOString().slice(0, 10)
+  // Local YYYY-MM-DD so the date matches the (local) weekday around timezone boundaries.
+  const isoDate = new Date().toLocaleDateString('en-CA')
 
   return (
     <div className="p-6" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap, 24px)' }}>
