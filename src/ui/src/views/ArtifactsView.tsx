@@ -259,8 +259,12 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
           ) : (
             <>
               <p className="text-ink-2 font-medium text-sm mb-1">No artifacts yet</p>
-              <p className="text-ink-muted text-sm max-w-xs">
-                They'll appear here automatically whenever Claude creates or edits files for you.
+              <p className="text-ink-muted text-sm max-w-xs mb-2">
+                Artifacts appear here automatically as agents write or edit files during a session.
+              </p>
+              <p className="text-ink-faint text-xs max-w-xs">
+                The passive-capture hook must be installed to record artifacts.
+                Run <code className="font-mono bg-surface-2 px-1 rounded">agent-tasks install-claude-hooks</code> to enable it.
               </p>
             </>
           )}

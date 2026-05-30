@@ -44,6 +44,8 @@ export interface TaskCardProps {
   onMenu?: (task: Task, e: React.MouseEvent) => void
   onMarkDone?: (task: Task) => void
   onOpenDetail?: (task: Task) => void
+  onSignOff?: (task: Task) => void
+  onDispatchAcr?: (task: Task) => void
   animClass?: string
 }
 
@@ -56,6 +58,8 @@ export function TaskCard({
   onMenu,
   onMarkDone,
   onOpenDetail,
+  onSignOff,
+  onDispatchAcr,
   animClass,
 }: TaskCardProps): React.JSX.Element {
   const [hoverArea, setHoverArea] = useState(false)
@@ -212,9 +216,16 @@ export function TaskCard({
                   label="Open detail"
                   onClick={() => { setMenuOpen(false); onOpenDetail?.(task) }}
                 />
-                {/* P2 stubs — present but disabled */}
-                <MenuButton label="Sign off to Hermes" disabled />
-                <MenuButton label="Dispatch to ACR" disabled />
+                {/* Hermes sign-off: gated — cannot re-sign an already-signed task (epic §9) */}
+                <MenuButton
+                  label="Sign off to Hermes"
+                  disabled={task.agent_status === 'scheduled'}
+                  onClick={() => { setMenuOpen(false); onSignOff?.(task) }}
+                />
+                <MenuButton
+                  label="Dispatch to ACR"
+                  onClick={() => { setMenuOpen(false); onDispatchAcr?.(task) }}
+                />
               </div>,
               document.body
             )}

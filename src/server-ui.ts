@@ -107,6 +107,68 @@ async function fetchBrainSearch(q: string): Promise<BrainSearchResponse> {
   }
 }
 
+export interface BrainStatusResponse {
+  online: boolean;
+  latencyMs?: number;
+  reason?: 'tls' | 'timeout' | 'shape' | 'error';
+}
+
+/**
+ * Probe Brain MCP server liveness via a lightweight MCP `initialize` request
+ * (not the heavy `brain_search`).
+ *
+ * TLS decision (spec §Open Q 1 — resolved as option iii, "require a valid cert"):
+ *   Tailscale `.ts.net` HTTPS endpoints serve publicly-trusted Let's Encrypt certs (via
+ *   `tailscale serve`), so default verification succeeds with no custom agent. We do NOT
+ *   bypass verification — neither a scoped `rejectUnauthorized:false` agent nor a global
+ *   `NODE_TLS_REJECT_UNAUTHORIZED=0`. An untrusted/self-signed cert yields
+ *   `{ online:false, reason:'tls' }`; the operator should provision a trusted cert.
+ */
+async function fetchBrainStatus(): Promise<BrainStatusResponse> {
+  const brainUrl = getBrainMcpUrl();
+  // TLS posture (codex F1/F2 — resolved as option iii "require a valid cert"):
+  //   Tailscale `.ts.net` HTTPS endpoints serve PUBLICLY-TRUSTED Let's Encrypt certs (via
+  //   `tailscale serve`/cert), so Node's default verification succeeds with no custom agent.
+  //   We deliberately do NOT bypass verification — no scoped `rejectUnauthorized:false`
+  //   agent and no process-wide `NODE_TLS_REJECT_UNAUTHORIZED=0`. If the Brain host presents
+  //   an untrusted/self-signed cert, the probe reports `{ online:false, reason:'tls' }` and
+  //   the operator should provision a trusted cert (`tailscale serve`). Reporting offline on
+  //   an untrusted cert is the correct fail-safe; silently trusting it would be the hole.
+  const t0 = Date.now();
+  try {
+    const res = await fetch(`${brainUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'health-probe', version: '1' } },
+        id: 1,
+      }),
+      signal: AbortSignal.timeout(5000),
+    });
+    const latencyMs = Date.now() - t0;
+    if (!res.ok) {
+      return { online: false, reason: 'shape' };
+    }
+    const data = await res.json() as { result?: unknown; error?: unknown };
+    if (data.error !== undefined && data.result === undefined) {
+      return { online: false, reason: 'shape' };
+    }
+    return { online: true, latencyMs };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const name = err instanceof Error ? err.name : '';
+    if (name === 'TimeoutError' || msg.includes('timed out') || msg.includes('TimeoutError')) {
+      return { online: false, reason: 'timeout' };
+    }
+    if (msg.includes('certificate') || msg.includes('CERT_') || msg.includes('ERR_TLS')) {
+      return { online: false, reason: 'tls' };
+    }
+    return { online: false, reason: 'error' };
+  }
+}
+
 /** Reset the ACR cache — for testing only. */
 export function resetAcrCache(): void {
   acrCache = null;
@@ -546,13 +608,27 @@ function rerouteTask(taskId: string, targetPrefix: string, projectIndexes: Proje
   sourceIdx.index.deleteTask(taskId);
 }
 
+/**
+ * Background LLM routing for quick-captured tasks.
+ *
+ * @param text        - The captured task text.
+ * @param taskId      - The GEN task id already written to genIdx.
+ * @param projectIndexes - All known project indexes.
+ * @param genIdx      - The GEN inbox project index.
+ * @param contextPrefix - Optional dashboard-context prefix bias (e.g. the project the user
+ *   is currently working in). When provided, the LLM prompt is biased toward it. If the LLM
+ *   returns anything other than an exact prefix match (i.e. low confidence), the task stays
+ *   in GEN rather than being silently rerouted to a wrong project (the COND misfire fix,
+ *   P4-06d).
+ */
 function spawnBackgroundRouting(
   text: string,
   taskId: string,
   projectIndexes: ProjectIndex[],
   genIdx: ProjectIndex,
+  contextPrefix?: string,
 ): void {
-  // Explicit #prefix routing — skip LLM entirely
+  // Explicit #PREFIX routing — high-confidence, skip LLM entirely
   const prefixMatch = text.match(/^#([A-Za-z]+)\s+/);
   if (prefixMatch) {
     const candidate = prefixMatch[1].toUpperCase();
@@ -563,9 +639,16 @@ function spawnBackgroundRouting(
     return;
   }
 
-  // LLM routing via claude CLI
+  // LLM routing via claude CLI.
+  // Confidence rule: we treat the LLM response as HIGH-confidence only when it returns an
+  // exact match to a known prefix. Any ambiguous or GEN response keeps the task in GEN.
+  // If a contextPrefix is supplied, bias the prompt toward it so that tasks captured while
+  // working on a specific project default to that project rather than guessing.
   const prefixList = projectIndexes.map(p => p.prefix).join(', ');
-  const prompt = `Given this task: '${text}', which project prefix from [${prefixList}] best fits? Reply with ONLY the prefix or GEN.`;
+  const contextHint = contextPrefix && contextPrefix !== genIdx.prefix
+    ? ` The user is currently working on project ${contextPrefix} — prefer that project if the task is plausibly related.`
+    : '';
+  const prompt = `Given this task: '${text}', which project prefix from [${prefixList}] best fits?${contextHint} Reply with ONLY the prefix or GEN. If you are not confident, reply GEN.`;
 
   let finished = false;
   let stdout = '';
@@ -592,11 +675,14 @@ function spawnBackgroundRouting(
       if (finished) return;
       finished = true;
       const resolved = stdout.trim().toUpperCase().replace(/[^A-Z]/g, '');
+      // Low-confidence guard: only reroute when the response is an exact known prefix
+      // (not GEN, not empty, not an unknown string). Ambiguous results stay in GEN.
       if (resolved && resolved !== genIdx.prefix) {
         const target = projectIndexes.find(p => p.prefix === resolved);
         if (target) {
           rerouteTask(taskId, resolved, projectIndexes);
         }
+        // If target is undefined (unknown prefix), task stays in GEN — low-confidence fallback
       }
     });
 
@@ -1583,7 +1669,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         req.on('data', (c: Buffer) => chunks.push(c));
         req.on('end', () => {
           try {
-            const body = JSON.parse(Buffer.concat(chunks).toString()) as { text?: unknown };
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { text?: unknown; context?: unknown };
             if (!body.text || typeof body.text !== 'string' || body.text.trim().length === 0) {
               sendJson(res, 400, { error: 'EMPTY_TEXT', message: 'text is required and must not be empty' });
               return;
@@ -1593,6 +1679,13 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               return;
             }
             const text = body.text.trim();
+            // Optional context prefix: dashboard passes the active project so routing is biased
+            // toward it (P4-06d — prevents the COND misfire from a context-free LLM call).
+            // SECURITY (codex F4): validate strictly against known prefixes before it reaches
+            // the routing prompt — ignore any value that isn't an existing project prefix, so
+            // free-form `context` can't manipulate routing.
+            const rawContext = typeof body.context === 'string' ? body.context.trim().toUpperCase() : '';
+            const contextPrefix = projectIndexes.some(p => p.prefix === rawContext) ? rawContext : undefined;
 
             // Resolve the GEN project index (always store to GEN inbox)
             const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
@@ -1638,8 +1731,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             // Respond immediately — background routing is fire-and-forget
             sendJson(res, 200, { taskId, project: genIdx.prefix });
 
-            // Background routing: #prefix explicit, or LLM
-            spawnBackgroundRouting(text, taskId, projectIndexes, genIdx);
+            // Background routing: #prefix explicit, or LLM with context bias
+            spawnBackgroundRouting(text, taskId, projectIndexes, genIdx, contextPrefix);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
@@ -1875,6 +1968,16 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
+        });
+        return;
+      }
+
+      // API: brain status — lightweight liveness probe (not brain_search; see fetchBrainStatus above)
+      if (pathname === '/api/brain/status' && req.method === 'GET') {
+        void fetchBrainStatus().then(result => {
+          sendJson(res, 200, result);
+        }).catch(() => {
+          sendJson(res, 200, { online: false, reason: 'error' } satisfies BrainStatusResponse);
         });
         return;
       }
