@@ -25,7 +25,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   if (isLoading) {
     return (
       <div
-        className="grid gap-4 p-6"
+        className="grid gap-4"
         style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
       >
         {COLUMNS.map(col => (
@@ -42,14 +42,14 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
 
   if (error) {
     return (
-      <div className="p-6 text-status-red text-sm">
+      <div className="text-status-red text-sm">
         Failed to load tasks: {error.message}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
+    <div className="flex flex-col gap-4">
       <ViewHeader title="Board" subtitle="All tasks across every project" />
       <div
         className="grid gap-4"

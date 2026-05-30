@@ -92,7 +92,7 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
   )
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="space-y-4">
       {/* Header */}
       <ViewHeader
         title="Roadmap"

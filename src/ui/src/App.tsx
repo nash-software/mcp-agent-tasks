@@ -491,6 +491,8 @@ export function App(): React.JSX.Element {
               onSelectTask={setSel}
               onOpenDetail={(task) => setPanel({ mode: 'detail', taskId: task.id })}
               onVisibleIdsChange={setVisibleIds}
+              focusMode={focusMode}
+              onToggleFocus={() => setFocusMode(f => !f)}
             />
           )}
           {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}

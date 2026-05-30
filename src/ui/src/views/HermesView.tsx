@@ -474,7 +474,7 @@ export function HermesView({ onOpenPanel }: HermesViewProps): React.JSX.Element 
     : 'Done for today'
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6">
       {/* View header */}
       <ViewHeader
         title="Hermes"

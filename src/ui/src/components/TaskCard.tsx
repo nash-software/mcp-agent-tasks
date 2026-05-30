@@ -79,7 +79,7 @@ export function TaskCard({
   }
 
   return (
-    <div className={`relative flex items-center gap-2 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
+    <div className={`group relative flex items-center gap-2 rounded transition-colors cursor-pointer ${bgClass} ${animClass ?? ''} ${isDone ? 'opacity-60' : ''}`}
       style={{
         height: 'var(--row-h, 40px)',
         minHeight: 'var(--row-h, 40px)',

@@ -14,6 +14,7 @@ import { CapacityGauge } from '../components/CapacityGauge'
 import { TaskCard } from '../components/TaskCard'
 import { AreaChip } from '../components/atoms'
 import { ViewHeader } from '../components/ViewHeader'
+import { Minimize2, Maximize2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
@@ -64,6 +65,8 @@ interface TodayViewProps {
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
   onVisibleIdsChange?: (ids: string[]) => void
+  focusMode?: boolean
+  onToggleFocus?: () => void
 }
 
 // ── Component ────────────────────────────────────────────────────────────
@@ -75,6 +78,8 @@ export function TodayView({
   onSelectTask,
   onOpenDetail,
   onVisibleIdsChange,
+  focusMode = false,
+  onToggleFocus,
 }: TodayViewProps): React.JSX.Element {
   const [targetMinutes, setTargetMinutes] = useState<number>(readTargetMinutes)
   const [candidatesOpen, setCandidatesOpen] = useState(true)
@@ -210,14 +215,25 @@ export function TodayView({
   const isoDate = new Date().toLocaleDateString('en-CA')
 
   return (
-    <div className="p-6" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap, 24px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--section-gap, 24px)' }}>
 
       {/* View header */}
       <ViewHeader
         title="Today"
         subtitle={weekday}
         right={
-          <span className="font-mono text-xs text-ink-muted tabular-nums">{isoDate}</span>
+          <>
+            <span className="font-mono text-xs text-ink-muted tabular-nums">{isoDate}</span>
+            <button
+              type="button"
+              onClick={onToggleFocus}
+              title={focusMode ? 'Exit focus mode (.)' : 'Focus mode (.)'}
+              aria-pressed={focusMode}
+              className="ml-1 w-6 h-6 flex items-center justify-center rounded text-ink-muted hover:text-ink hover:bg-surface-2 transition-colors"
+            >
+              {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+          </>
         }
       />
 

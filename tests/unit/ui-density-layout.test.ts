@@ -87,3 +87,38 @@ describe('P3-01 — FilterBar visual classes', () => {
     expect(fb).toMatch(/filter-btn/)
   })
 })
+
+describe('P3-01 — Today focus toggle + row action discoverability', () => {
+  it('App passes focusMode + onToggleFocus to TodayView', () => {
+    const app = read('App.tsx')
+    expect(app).toMatch(/onToggleFocus=\{/)
+    expect(app).toMatch(/focusMode=\{focusMode\}/)
+  })
+  it('TodayView renders a focus toggle wired to onToggleFocus', () => {
+    const tv = read('views/TodayView.tsx')
+    expect(tv).toMatch(/onToggleFocus/)
+    expect(tv).toMatch(/Maximize2|Minimize2/)
+  })
+  it('TaskCard row carries the group class so the … menu shows on hover', () => {
+    const tc = read('components/TaskCard.tsx')
+    expect(tc).toMatch(/`group relative flex/)
+    expect(tc).toMatch(/group-hover:opacity-100/)
+  })
+})
+
+describe('P3-01 — page padding is density-owned (no double-pad)', () => {
+  it('.main-inner padding uses var(--page-pad)', () => {
+    expect(read('index.css')).toMatch(/\.main-inner\s*\{[^}]*var\(--page-pad/)
+  })
+  const viewsNoPagePad = ['TodayView', 'BoardView', 'HermesView', 'BrainDumpView', 'ArtifactsView', 'RoadmapView', 'ActivityView']
+  for (const v of viewsNoPagePad) {
+    it(`${v} main render does not double-pad with p-6`, () => {
+      // Loading/error sub-states may keep p-6; the primary return wrapper must not.
+      const src = read(`views/${v}.tsx`)
+      // crude but effective: the LAST top-level return wrapper shouldn't open with p-6
+      const lastReturn = src.lastIndexOf('return (')
+      const after = src.slice(lastReturn, lastReturn + 200)
+      expect(after).not.toMatch(/className="[^"]*\bp-6\b/)
+    })
+  }
+})
