@@ -62,6 +62,40 @@ export async function createDraftTask(data: {
   return res.json() as Promise<{ id: string; title: string; status: string; project: string }>
 }
 
+export interface NewTaskFields {
+  title: string
+  project: string
+  priority?: TaskPriority
+  area?: TaskArea
+  estimate_hours?: number
+  why?: string
+}
+
+/** Full-field create for the New-task modal (P5-04). Surfaces the server's `{ error }` on failure. */
+export async function createTask(
+  fields: NewTaskFields,
+): Promise<{ id: string; title: string; status: string; project: string }> {
+  const res = await fetch('/api/tasks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; message?: string }
+    throw new Error(err.message ?? err.error ?? `Create failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ id: string; title: string; status: string; project: string }>
+}
+
+/** Delete a task (P5-04). Throws on non-2xx so an optimistic mutation rolls back. */
+export async function deleteTask(id: string): Promise<void> {
+  const res = await fetch(`/api/tasks/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string }
+    throw new Error(err.error ?? `Delete failed: ${res.status}`)
+  }
+}
+
 export function fetchToday(targetMinutes?: number): Promise<TodayResponse> {
   const params = targetMinutes !== undefined ? `?target=${targetMinutes}` : ''
   return get<TodayResponse>(`/api/today${params}`)
