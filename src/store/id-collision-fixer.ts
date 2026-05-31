@@ -102,7 +102,12 @@ function canonicalFirst(a: FileInfo, b: FileInfo): number {
   return (a.created || '~').localeCompare(b.created || '~');
 }
 
-export function planCollisionFixes(stores: StoreRef[]): CollisionPlan[] {
+/**
+ * @param indexMaxByPrefix optional map of prefix → highest id number already in that project's index.
+ *   New ids are allocated above `max(disk max, index max)` so the migration never mints an id that the
+ *   authoritative `SqliteIndex.nextId` (which folds in the index watermark) could later collide with.
+ */
+export function planCollisionFixes(stores: StoreRef[], indexMaxByPrefix: Record<string, number> = {}): CollisionPlan[] {
   const plans: CollisionPlan[] = [];
   for (const store of stores) {
     const infos = scanStore(store);
@@ -112,7 +117,7 @@ export function planCollisionFixes(stores: StoreRef[]): CollisionPlan[] {
       if (g) g.push(i);
       else byId.set(i.id, [i]);
     }
-    let nextNum = maxIdNum(infos, store.prefix);
+    let nextNum = Math.max(maxIdNum(infos, store.prefix), indexMaxByPrefix[store.prefix] ?? 0);
     for (const [id, group] of byId) {
       if (group.length < 2) continue;
       const sorted = [...group].sort(canonicalFirst);
@@ -167,6 +172,7 @@ export function applyCollisionFixes(plans: CollisionPlan[]): { reassigned: numbe
  */
 export function findReferences(stores: StoreRef[], ids: string[]): Array<{ id: string; file: string }> {
   const idSet = new Set(ids);
+  const seen = new Set<string>();
   const hits: Array<{ id: string; file: string }> = [];
   for (const store of stores) {
     if (!fs.existsSync(store.tasksDir)) continue;
@@ -182,7 +188,12 @@ export function findReferences(stores: StoreRef[], ids: string[]): Array<{ id: s
         const matches = txt.match(re) ?? [];
         const ownIdLine = new RegExp(`^id:\\s*["']?${esc}["']?\\s*$`, 'm').test(txt);
         const threshold = ownIdLine ? 1 : 0;
-        if (matches.length > threshold) hits.push({ id, file });
+        // Dedupe by (id, file): an id mentioned many times in one file is one referencing file.
+        const key = `${id}::${file}`;
+        if (matches.length > threshold && !seen.has(key)) {
+          seen.add(key);
+          hits.push({ id, file });
+        }
       }
     }
   }

@@ -143,4 +143,22 @@ describe('P5-10 — ID-collision integrity', () => {
     // the colliding files' own `id:` lines do not count as external references
     expect(refs.some(r => r.file === 'TEST-001.md')).toBe(false);
   });
+
+  // codex F2 — multiple mentions of an id in one file produce a single (id, file) hit
+  it('findReferences dedupes multiple mentions in one file', () => {
+    fs.writeFileSync(path.join(tasksDir, 'TEST-001.md'), md('TEST-001', 'Masked', 'todo'));
+    fs.writeFileSync(path.join(tasksDir, 'TEST-060.md'), md('TEST-060', 'Refers twice', 'todo', 'TEST-001 and again TEST-001'));
+    const refs = findReferences([{ prefix: 'TEST', tasksDir }], ['TEST-001']);
+    expect(refs.filter(r => r.file === 'TEST-060.md')).toHaveLength(1);
+  });
+
+  // codex F1 — migration seeds new ids above the index watermark, not just the on-disk max
+  it('planCollisionFixes seeds new ids above the index max', () => {
+    fs.writeFileSync(path.join(tasksDir, 'TEST-001-real.md'), md('TEST-001', 'Real', 'in_progress', 'body'));
+    fs.writeFileSync(path.join(tasksDir, 'TEST-001.md'), md('TEST-001', 'Masked', 'todo'));
+    // index watermark is higher than the on-disk max (e.g. files for higher ids were deleted)
+    const plans = planCollisionFixes([{ prefix: 'TEST', tasksDir }], { TEST: 500 });
+    const newNum = parseInt(plans[0].reassign[0].newId.split('-')[1], 10);
+    expect(newNum).toBeGreaterThan(500);
+  });
 });

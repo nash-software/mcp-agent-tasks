@@ -485,7 +485,18 @@ program
     const genDir = path.join(os.homedir(), '.mcp-tasks', 'tasks', 'gen', dirName);
     if (fs.existsSync(genDir)) stores.push({ prefix: 'GEN', tasksDir: genDir });
 
-    const plans = planCollisionFixes(stores);
+    // Seed new-id allocation from each project's index watermark too (not just disk), so re-IDed tasks
+    // never land on a number the authoritative nextId could later reuse (MCPAT-060 codex F1).
+    const indexMaxByPrefix: Record<string, number> = {};
+    for (const s of stores) {
+      try {
+        const { sqliteIndex } = buildStore(s.tasksDir, s.prefix, config);
+        indexMaxByPrefix[s.prefix] = sqliteIndex.maxIdNumberForProject(s.prefix);
+        sqliteIndex.close();
+      } catch { /* index unavailable — fall back to disk max */ }
+    }
+
+    const plans = planCollisionFixes(stores, indexMaxByPrefix);
     if (plans.length === 0) {
       console.log('✓ No (id, project) collisions found.');
       return;
