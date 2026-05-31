@@ -603,8 +603,9 @@ function migrateTaskId(opts: {
   fromProject: ProjectIndex;
   toProject: ProjectIndex;
   task: Task;
+  allProjects: ProjectIndex[];
 }): Task {
-  const { oldId, newId, fromProject, toProject, task } = opts;
+  const { oldId, newId, fromProject, toProject, task, allProjects } = opts;
   const now = new Date().toISOString();
 
   // Canonical absolute write/index path — MarkdownStore.write targets file_path directly,
@@ -637,23 +638,21 @@ function migrateTaskId(opts: {
     // Step 2: Remove the old markdown file (after new file is safely written).
     unlinkSync(oldMdPath);
 
-    // Step 3: Rewrite cross-task references in all project indexes.
-    // Query the source index for tasks that reference oldId (cheap reverse-ref lookup).
-    const refRows = fromProject.index.getRawDb()
-      .prepare<string>('SELECT DISTINCT from_id FROM task_references WHERE to_id=?')
-      .all(oldId) as Array<{ from_id: string }>;
-
-    // Also check the target index (in case cross-project references exist there).
-    const targetRefRows = toProject.index !== fromProject.index
-      ? (toProject.index.getRawDb()
-          .prepare<string>('SELECT DISTINCT from_id FROM task_references WHERE to_id=?')
-          .all(oldId) as Array<{ from_id: string }>)
-      : [];
-
-    const referencing: Array<{ idx: ProjectIndex; taskId: string }> = [
-      ...refRows.map(r => ({ idx: fromProject, taskId: r.from_id })),
-      ...targetRefRows.map(r => ({ idx: toProject, taskId: r.from_id })),
-    ];
+    // Step 3: Rewrite cross-task references. A reference to oldId can live in ANY project,
+    // not just source/target, so scan every project index (codex F2). Dedup by project+task.
+    const referencing: Array<{ idx: ProjectIndex; taskId: string }> = [];
+    const seenRef = new Set<string>();
+    for (const proj of allProjects) {
+      const rows = proj.index.getRawDb()
+        .prepare<string>('SELECT DISTINCT from_id FROM task_references WHERE to_id=?')
+        .all(oldId) as Array<{ from_id: string }>;
+      for (const r of rows) {
+        const key = `${proj.prefix}:${r.from_id}`;
+        if (seenRef.has(key)) continue;
+        seenRef.add(key);
+        referencing.push({ idx: proj, taskId: r.from_id });
+      }
+    }
 
     for (const { idx, taskId: refId } of referencing) {
       const refTask = idx.index.getTask(refId);
@@ -665,7 +664,8 @@ function migrateTaskId(opts: {
       refTask.updated = now;
       refTask.last_activity = now;
 
-      // Persist markdown-first if file exists
+      // Persist markdown-first: the index is updated ONLY after the markdown is durable,
+      // so a markdown write failure can't create markdown/index divergence (codex F3).
       const refMdPath = join(idx.tasksDir, refTask.file_path);
       if (existsSync(refMdPath)) {
         try {
@@ -675,11 +675,21 @@ function migrateTaskId(opts: {
           refMd.updated = now;
           refMd.last_activity = now;
           refMdStore.write(refMd);
+          idx.index.upsertTask(refTask);
         } catch (err) {
-          console.error(`[migrateTaskId] ref rewrite failed for ${refId}:`, err instanceof Error ? err.message : err);
+          console.error(`[migrateTaskId] ref rewrite failed for ${refId} — index left unchanged to avoid divergence:`, err instanceof Error ? err.message : err);
         }
+      } else {
+        idx.index.upsertTask(refTask); // no markdown for this task — index-only is the source
       }
-      idx.index.upsertTask(refTask);
+    }
+  } else {
+    // No source markdown (a SQLite-only record) — materialize markdown for the new id
+    // BEFORE the index move so the migrated task is durable / survives reconcile (codex F4).
+    try {
+      new MarkdownStore().write(migrated);
+    } catch (err) {
+      console.error(`[migrateTaskId] failed to materialize markdown for ${newId}:`, err instanceof Error ? err.message : err);
     }
   }
 
@@ -710,6 +720,7 @@ function rerouteTask(taskId: string, targetPrefix: string, projectIndexes: Proje
     fromProject: sourceIdx,
     toProject: targetIdx,
     task,
+    allProjects: projectIndexes,
   });
 }
 
