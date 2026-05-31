@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   KeyboardSensor,
   useSensor,
@@ -117,12 +117,13 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
     },
   })
 
-  // Sensors: PointerSensor with 8px activation distance (so plain clicks still open the panel)
-  //          TouchSensor with a 200ms long-press delay (P5-07) so a short touch scrolls the board and a
-  //          press-and-hold starts a drag — the two coexist on phones; a tap still opens the peek.
+  // Sensors split by modality (P5-07): MouseSensor for desktop (8px distance so plain clicks still open
+  // the panel) and TouchSensor with a 200ms long-press delay so on phones a short touch scrolls the board
+  // and press-and-hold starts a drag. NOTE: PointerSensor is deliberately NOT used — pointer events fire
+  // for touch too, so its distance activation would race the TouchSensor delay and hijack scroll.
   //          KeyboardSensor for a11y (Space/Enter picks up, arrows move, Space/Enter drops)
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
     }),
     useSensor(TouchSensor, {

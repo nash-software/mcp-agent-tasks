@@ -13,11 +13,13 @@ const board = fs.readFileSync(
 );
 
 describe('P5-07 — mobile board', () => {
-  it('AC1: TouchSensor is registered with a delay activation constraint, alongside PointerSensor', () => {
+  it('AC1: sensors are split by modality — TouchSensor (delay) + MouseSensor, not PointerSensor', () => {
     expect(board).toContain('TouchSensor');
     expect(board).toMatch(/useSensor\(TouchSensor,\s*\{\s*activationConstraint:\s*\{\s*delay:/);
-    // PointerSensor (desktop + peek-on-click) is retained
-    expect(board).toMatch(/useSensor\(PointerSensor/);
+    // MouseSensor handles desktop; PointerSensor is intentionally NOT used (it also fires for touch,
+    // which would race the TouchSensor delay and hijack scroll).
+    expect(board).toMatch(/useSensor\(MouseSensor/);
+    expect(board).not.toMatch(/useSensor\(PointerSensor/);
   });
 
   it('AC4: the inline 4-column grid is replaced by a responsive Tailwind class', () => {
