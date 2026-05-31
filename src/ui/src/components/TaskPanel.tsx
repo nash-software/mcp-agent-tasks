@@ -22,6 +22,7 @@ import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
 import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr } from '../api'
 import { useMilestones } from '../hooks/useMilestones'
+import { milestoneProject } from '../lib/milestone'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -552,9 +553,13 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                   aria-label="Select milestone"
                 >
                   <option value="">(none)</option>
-                  {milestones.map(m => (
-                    <option key={m.id} value={m.id}>{m.title}</option>
-                  ))}
+                  {/* Scope options to the task's own project — milestones live in a per-project
+                      store keyed by ID prefix; a task can only belong to a same-project milestone. */}
+                  {milestones
+                    .filter(m => milestoneProject(m) === (task.project ?? task.id.split('-')[0]))
+                    .map(m => (
+                      <option key={m.id} value={m.id}>{m.title}</option>
+                    ))}
                 </select>
               ) : (
                 <button
