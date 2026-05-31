@@ -41,3 +41,8 @@ export function isValidBoardTransition(from: TaskStatus, to: TaskStatus): boolea
   const allowed = VALID_TRANSITIONS[from] ?? []
   return (allowed as readonly string[]).includes(to)
 }
+
+/** All statuses this status may legally transition to (empty when terminal). */
+export function validTargets(from: TaskStatus): readonly TaskStatus[] {
+  return VALID_TRANSITIONS[from] ?? []
+}

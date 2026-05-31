@@ -133,8 +133,12 @@ describe('TaskPanel.tsx — structure', () => {
       expect(src).toContain('×');
     });
 
-    it('footer has Done button', () => {
-      expect(src).toContain('Done');
+    it('footer has an engine-driven primary status button (MCPAT-061)', () => {
+      // The discrete Start/Done/Reopen buttons were replaced by a single primary button whose label is
+      // computed from the status-action engine — assert the wiring, not a hard-coded label.
+      expect(src).toContain('primaryTarget');
+      expect(src).toContain('transitionLabel(task.status, primary)');
+      expect(src).toContain('handleTransition(primary)');
     });
 
     it('footer has schedule toggle button (Commit/Remove today)', () => {
@@ -250,6 +254,46 @@ describe('TaskPanel.tsx — structure', () => {
       expect(src).toContain('scrollRef');
       expect(src).toContain('scrollTop = 0');
     });
+  });
+});
+
+// ── MCPAT-061: Bundle B — Block + Promote + grouped footer ────────────────────
+describe('TaskPanel.tsx — MCPAT-061 status-action footer', () => {
+  it('imports the pure status-action engine', () => {
+    expect(src).toMatch(/from '\.\.\/lib\/task-actions'/);
+    for (const fn of ['primaryTarget', 'secondaryTargets', 'transitionLabel', 'requiresReason', 'targetTone']) {
+      expect(src).toContain(fn);
+    }
+  });
+
+  it('renders a "Move to…" menu of the secondary targets', () => {
+    expect(src).toContain('Move to');
+    expect(src).toContain('secondary.length > 0');
+    expect(src).toContain('role="menu"');
+    expect(src).toContain('secondary.map');
+  });
+
+  it('Block opens an inline reason input rather than firing blind', () => {
+    expect(src).toContain('requiresReason(to)');
+    expect(src).toContain('blockDraft');
+    expect(src).toContain('Why is this blocked?');
+    expect(src).toContain('handleBlock');
+  });
+
+  it('generic optimistic transition handler with rollback (mirrors handleReopen template)', () => {
+    expect(src).toContain('handleTransition');
+    expect(src).toContain('getQueriesData');
+    expect(src).toContain('setQueryData'); // rollback
+  });
+
+  it('command actions (Hermes/ACR) survive as icon buttons with accessible labels', () => {
+    expect(src).toContain('aria-label="Sign off task to Hermes"');
+    expect(src).toContain('aria-label="Dispatch task to ACR"');
+  });
+
+  it('menu closes on outside click via mousedown (not keydown — Enter/Esc stay App-global)', () => {
+    expect(src).toContain("addEventListener('mousedown'");
+    expect(src).not.toContain("addEventListener('keydown'");
   });
 });
 
