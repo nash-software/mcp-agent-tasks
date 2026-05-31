@@ -27,6 +27,7 @@ interface TaskShape {
   priority: string;
   title: string;
   estimate_hours?: number;
+  block_reason?: string;
   transitions?: Array<{ from: string; to: string; at: string; reason?: string }>;
 }
 
@@ -108,6 +109,16 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
       claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
       children: [], dependencies: [], subtasks: [], git: { commits: [] },
       transitions: [{ from: 'done', to: 'closed', at: ts }], files: [], body: '', file_path: 'MUT-004.md',
+    });
+
+    // MUT-005: draft (MCPAT-061 — Promote draft→approved)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-005', title: 'Draft task', type: 'feature',
+      status: 'draft', priority: 'medium', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MUT-005.md',
     });
 
     idx.close();
@@ -247,6 +258,47 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(task.status).toBe('blocked');
     const last = task.transitions![task.transitions!.length - 1];
     expect(last.reason).toBe('waiting for dependency');
+  });
+
+  // ── MCPAT-061: Block persists reason→block_reason; Promote; clear-on-leave ──
+
+  it('MCPAT-061: blocking with a reason persists it to block_reason (200 body + re-read)', async () => {
+    // MUT-001 was blocked with 'waiting for dependency' in the test above.
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'in_progress' }), // make a clean round: resume first
+    });
+    expect(res.status).toBe(200);
+    // now block again with a fresh reason and assert block_reason
+    const blocked = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'blocked', reason: 'blocked on review' }),
+    });
+    expect(blocked.status).toBe(200);
+    expect((await blocked.json() as TaskShape).block_reason).toBe('blocked on review');
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    expect(tasks.find(t => t.id === 'MUT-001')?.block_reason).toBe('blocked on review');
+  });
+
+  it('MCPAT-061: leaving blocked clears block_reason (200 body + re-read)', async () => {
+    // MUT-001 is blocked with 'blocked on review' from the previous test.
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'in_progress' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as TaskShape).block_reason).toBeUndefined();
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    expect(tasks.find(t => t.id === 'MUT-001')?.block_reason).toBeUndefined();
+  });
+
+  it('MCPAT-061: Promote draft→approved is accepted (200, not 400)', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-005/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'approved' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as TaskShape).status).toBe('approved');
   });
 
   // ── PATCH /api/tasks/:id ─────────────────────────────────────────────────

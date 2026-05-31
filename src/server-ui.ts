@@ -1568,7 +1568,10 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         req.on('end', () => {
           try {
             const body = JSON.parse(Buffer.concat(chunks).toString()) as { to?: unknown; reason?: unknown };
-            const VALID_TRANSITION_TARGETS = new Set<string>(['todo', 'in_progress', 'done', 'blocked']);
+            // Outer allow-list of status values the route will accept. isValidTransition (below) still
+            // enforces which edges are legal per current status; this only bounds the accepted vocabulary.
+            // MCPAT-061: added 'approved'/'draft' so draft→approved (Promote) and approved→draft are reachable.
+            const VALID_TRANSITION_TARGETS = new Set<string>(['todo', 'in_progress', 'done', 'blocked', 'approved', 'draft']);
             if (!body.to || typeof body.to !== 'string') {
               sendError(res, 400, 'INVALID_FIELD: to is required');
               return;
@@ -1591,6 +1594,13 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             task.transitions = [...task.transitions, transition].slice(-MAX_TRANSITIONS);
             task.updated = now;
             task.last_activity = now;
+            // MCPAT-061: a Block reason lands in block_reason (the panel renders block_reason ?? why).
+            // Leaving blocked clears the stale reason so a resumed task doesn't carry it.
+            if (to === 'blocked') {
+              if (reason) task.block_reason = reason;
+            } else {
+              delete task.block_reason;
+            }
 
             // Markdown-first, fail-closed (consistent with the P2-04 signoff path)
             const persisted = persistTaskDurable(pIdx!, task, (md) => {
@@ -1598,6 +1608,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               md.transitions = [...(md.transitions ?? []), transition].slice(-MAX_TRANSITIONS);
               md.updated = now;
               md.last_activity = now;
+              if (to === 'blocked') {
+                if (reason) md.block_reason = reason;
+              } else {
+                delete md.block_reason;
+              }
             });
             if (!persisted) {
               sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist transition' });
