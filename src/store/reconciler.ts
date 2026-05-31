@@ -17,9 +17,16 @@ interface MilestonesYaml {
  * Used after manual edits to task files or after a fresh init to rebuild
  * the index from the canonical markdown source.
  */
+export interface IdCollision {
+  id: string;
+  files: string[];
+}
+
 export class Reconciler {
   private markdownStore = new MarkdownStore();
   private milestoneRepo: MilestoneRepository;
+  /** (id, project) collisions detected on the most recent reconcile() pass. */
+  private collisions: IdCollision[] = [];
 
   constructor(
     private sqliteIndex: SqliteIndex,
@@ -49,12 +56,30 @@ export class Reconciler {
     const files = fs.readdirSync(this.tasksDir).filter(f => f.endsWith('.md'));
     let count = 0;
     let changed = 0;
+    this.collisions = [];
+    const seenIds = new Map<string, string>();
 
     for (const file of files) {
       const filePath = path.join(this.tasksDir, file);
       try {
         const task = this.markdownStore.read(filePath);
         if (task.project !== this.project) continue;
+
+        // Detect (id, project) collisions: two different files claiming the same id. The index PK is
+        // (id, project), so the last one upserted silently wins — surface a warning instead of failing
+        // silently, and let `agent-tasks fix-id-collisions` repair it (MCPAT-060).
+        const prevFile = seenIds.get(task.id);
+        if (prevFile && prevFile !== filePath) {
+          const existing = this.collisions.find(c => c.id === task.id);
+          if (existing) {
+            if (!existing.files.includes(filePath)) existing.files.push(filePath);
+          } else {
+            this.collisions.push({ id: task.id, files: [prevFile, filePath] });
+          }
+          console.error(`[reconciler] ID COLLISION: ${task.id} (${this.project}) — ${prevFile} & ${filePath}; last-write-wins. Run 'agent-tasks fix-id-collisions'.`);
+        } else {
+          seenIds.set(task.id, filePath);
+        }
 
         // Incremental reconcile: skip upsert only when the ENTIRE markdown file
         // is unchanged. Hashing the raw file (frontmatter + body) — not just the
@@ -87,6 +112,11 @@ export class Reconciler {
     }
 
     return count;
+  }
+
+  /** (id, project) collisions detected on the most recent reconcile() pass (empty when clean). */
+  getCollisions(): IdCollision[] {
+    return this.collisions;
   }
 
   /**

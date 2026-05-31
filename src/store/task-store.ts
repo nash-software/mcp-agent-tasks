@@ -51,6 +51,13 @@ export class TaskStore {
     // 2. Format ID
     const id = this.factory.formatId(input.project, num);
 
+    // 2b. Backstop guard: never create over an existing (id, project). With the authoritative nextId
+    // this should be unreachable for the normal path, but it protects against any caller that bypasses
+    // the allocator or a stale index — the root cause of the MCPAT-060 collisions.
+    if (this.sqliteIndex.getTask(id)) {
+      throw new McpTasksError('ID_CONFLICT', `Cannot create task: ${id} already exists in project ${input.project}`);
+    }
+
     // 3. Create task object
     const task = this.factory.create(input, id, this.tasksDir);
 
