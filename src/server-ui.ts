@@ -1,10 +1,11 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync, statSync } from 'node:fs';
 import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, writeConfig } from './config/loader.js';
+import type { StorageMode } from './types/config.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
@@ -1108,12 +1109,80 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       }
 
       // API: projects (for action button + project filter)
-      if (pathname === '/api/projects') {
+      if (pathname === '/api/projects' && req.method === 'GET') {
         // Include the auto-initialised global GEN project — it lives in projectIndexes but not in
         // config.projects, so without this it never appears in the filter (P5-09 AC3).
         const genIdx = projectIndexes.find(p => p.prefix === 'GEN');
         const projects = buildProjectsList(config.projects, genIdx ? genIdx.tasksDir : null);
         sendJson(res, 200, projects);
+        return;
+      }
+
+      // API: register + init a new project — POST /api/projects (MCPAT-063). Reuses the
+      // task_register_project contract; additionally creates the tasks dir + index and pushes the new
+      // ProjectIndex into the live array so the project is queryable WITHOUT a server restart.
+      if (pathname === '/api/projects' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { prefix?: unknown; path?: unknown; name?: unknown; storage?: unknown };
+            const prefix = typeof body.prefix === 'string' ? body.prefix.trim() : '';
+            const projPath = typeof body.path === 'string' ? body.path.trim() : '';
+            const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined;
+            const storage: StorageMode = body.storage === 'local' ? 'local' : 'global';
+
+            // Prefix: uppercase, starts with a letter (matches the PREFIX-NNN task-id grammar).
+            if (!/^[A-Z][A-Z0-9]*$/.test(prefix)) {
+              sendError(res, 400, 'INVALID_FIELD: prefix must be uppercase letters/digits, starting with a letter');
+              return;
+            }
+            if (name !== undefined && name.length > 80) {
+              sendError(res, 400, 'INVALID_FIELD: name must be 80 characters or fewer');
+              return;
+            }
+            // Uniqueness — against both config and the live index set (catches GEN/default too).
+            if (config.projects.some(p => p.prefix === prefix) || projectIndexes.some(p => p.prefix === prefix)) {
+              sendJson(res, 409, { error: 'PROJECT_EXISTS', message: `Project ${prefix} is already registered` });
+              return;
+            }
+            // Path must be an existing absolute directory.
+            if (!projPath || !isAbsolute(projPath)) {
+              sendError(res, 400, 'INVALID_FIELD: path must be an absolute directory path');
+              return;
+            }
+            let stat;
+            try { stat = statSync(projPath); } catch { sendError(res, 400, `INVALID_FIELD: path does not exist: ${projPath}`); return; }
+            if (!stat.isDirectory()) { sendError(res, 400, 'INVALID_FIELD: path must be a directory'); return; }
+
+            // Create the tasks dir, then persist config atomically (durable source of truth) before
+            // touching the derived index — if config write fails, roll back the in-memory push.
+            const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+            const tasksDir = join(projPath, tasksDirName);
+            mkdirSync(tasksDir, { recursive: true });
+
+            config.projects.push({ prefix, ...(name ? { name } : {}), path: projPath, storage });
+            try {
+              writeConfig(config);
+            } catch {
+              config.projects.pop();
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not write config' });
+              return;
+            }
+
+            // Init the index and push into the live array (no restart). Derived from config, so a failure
+            // here self-heals on the next reconcile/restart.
+            const dbPath = resolveServerDbPath(tasksDir, config, prefix);
+            const idx = new SqliteIndex(dbPath);
+            idx.init();
+            projectIndexes.push({ prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir });
+
+            sendJson(res, 201, { prefix, ...(name ? { name } : {}), path: projPath });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
         return;
       }
 
