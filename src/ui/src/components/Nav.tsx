@@ -12,6 +12,8 @@ interface NavProps {
   view: ViewId
   onViewChange: (v: ViewId) => void
   onPaletteOpen: () => void
+  /** Open the full-field New-task modal (P5-04). */
+  onNewTask: () => void
   /** Pinned project prefixes (P2-02). */
   favorites: string[]
   /** Open-task count per prefix (P2-02, derived once in App). */
@@ -40,6 +42,7 @@ export function Nav({
   view,
   onViewChange,
   onPaletteOpen,
+  onNewTask,
   favorites,
   projectCounts,
   filterProjects,
@@ -188,6 +191,15 @@ export function Nav({
             </button>
           ))}
         </div>
+
+        {/* New task button (P5-04) */}
+        <button
+          onClick={onNewTask}
+          className="bg-accent/20 text-accent text-xs px-3 py-1.5 rounded hover:bg-accent/30 transition-colors overflow-hidden whitespace-nowrap font-medium"
+          aria-label="New task"
+        >
+          + New task
+        </button>
 
         {/* Search / palette button */}
         <button

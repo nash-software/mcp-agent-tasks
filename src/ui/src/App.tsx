@@ -8,6 +8,7 @@ import { BrainDumpView } from './views/BrainDumpView'
 import { ArtifactsView } from './views/ArtifactsView'
 import { TaskPanel } from './components/TaskPanel'
 import { CaptureOverlay } from './components/CaptureOverlay'
+import { NewTaskModal } from './components/NewTaskModal'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
@@ -89,6 +90,7 @@ export function App(): React.JSX.Element {
   const [selectedTaskId, setSel]    = useState<string | null>(null)
   const [panel, setPanel]           = useState<PanelState | null>(null)
   const [cmdkOpen, setCmdkOpen]     = useState(false)
+  const [newTaskOpen, setNewTaskOpen] = useState(false)
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
@@ -358,6 +360,13 @@ export function App(): React.JSX.Element {
       run: () => { capture.focus() },
     })
     cmds.push({
+      id: 'create-new-task',
+      cat: 'Create',
+      label: 'New task…',
+      sub: 'Full-field create form',
+      run: () => { setNewTaskOpen(true) },
+    })
+    cmds.push({
       id: 'create-brain-dump',
       cat: 'Create',
       label: 'Open Brain Dump',
@@ -479,6 +488,7 @@ export function App(): React.JSX.Element {
         view={view}
         onViewChange={handleViewChange}
         onPaletteOpen={() => setCmdkOpen(true)}
+        onNewTask={() => setNewTaskOpen(true)}
         favorites={favorites}
         projectCounts={projectCounts}
         filterProjects={filterProjects}
@@ -554,6 +564,13 @@ export function App(): React.JSX.Element {
         open={cmdkOpen}
         onClose={() => setCmdkOpen(false)}
         commands={commands}
+      />
+
+      {/* P5-04 — New-task modal (full-field create) */}
+      <NewTaskModal
+        open={newTaskOpen}
+        onClose={() => setNewTaskOpen(false)}
+        projects={projectEntries}
       />
     </div>
   )
