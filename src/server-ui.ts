@@ -1237,10 +1237,35 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           try {
             const body = JSON.parse(Buffer.concat(chunks).toString()) as {
               title: string; project: string; body?: string;
+              priority?: string; area?: string; estimate_hours?: number; why?: string;
             };
             if (!body.title || typeof body.title !== 'string' ||
                 !body.project || typeof body.project !== 'string') {
               sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'title and project are required strings' });
+              return;
+            }
+            if (body.title.length > 200) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'title must be 200 characters or fewer' });
+              return;
+            }
+            // Optional full fields (P5-04 New-task modal). All optional + backward-compatible with the
+            // title/project/body quick-capture callers.
+            const VALID_CREATE_PRIORITIES = new Set(['critical', 'high', 'medium', 'low']);
+            if (body.priority !== undefined && (typeof body.priority !== 'string' || !VALID_CREATE_PRIORITIES.has(body.priority))) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: `priority must be one of: ${[...VALID_CREATE_PRIORITIES].join(', ')}` });
+              return;
+            }
+            const VALID_CREATE_AREAS = new Set(['client', 'personal', 'outsource', 'internal']);
+            if (body.area !== undefined && (typeof body.area !== 'string' || !VALID_CREATE_AREAS.has(body.area))) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: `area must be one of: ${[...VALID_CREATE_AREAS].join(', ')}` });
+              return;
+            }
+            if (body.estimate_hours !== undefined && (typeof body.estimate_hours !== 'number' || !Number.isFinite(body.estimate_hours) || body.estimate_hours < 0 || body.estimate_hours > 9999)) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'estimate_hours must be a number between 0 and 9999' });
+              return;
+            }
+            if (body.why !== undefined && (typeof body.why !== 'string' || body.why.length > 1000)) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'why must be a string up to 1000 characters' });
               return;
             }
             const pIdx = projectIndexes.find(p => p.prefix === body.project);
@@ -1248,20 +1273,33 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               sendJson(res, 404, { error: 'PROJECT_NOT_FOUND' });
               return;
             }
-            const num = pIdx.index.nextId(body.project);
+            const num = pIdx.index.nextId(body.project, pIdx.tasksDir);
             const id = `${body.project}-${String(num).padStart(3, '0')}`;
             const now = new Date().toISOString();
-            const task = {
-              schema_version: 1, id, title: body.title, type: 'plan' as const,
-              status: 'draft' as const, priority: 'medium' as const, project: body.project,
-              tags: [], complexity: 1, complexity_manual: false, why: '',
+            const task: Task = {
+              schema_version: 1, id, title: body.title, type: 'plan',
+              status: 'draft', priority: (body.priority ?? 'medium') as Priority, project: body.project,
+              area: body.area as Area | undefined,
+              estimate_hours: body.estimate_hours,
+              tags: [], complexity: 1, complexity_manual: false, why: body.why ?? '',
               created: now, updated: now, last_activity: now,
               claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
               parent: null, children: [], dependencies: [], subtasks: [],
               git: { commits: [] }, transitions: [], files: [],
-              body: body.body ?? '', file_path: `${id}.md`,
+              body: body.body ?? '', file_path: join(pIdx.tasksDir, `${id}.md`),
               auto_captured: false,
             };
+            // Markdown-first durable create — write the file, THEN index, so a deliberate New-task
+            // create persists immediately rather than depending on the async triage to write markdown
+            // (which it does via persistTaskDurable, but only best-effort). Fail closed: no index-only task.
+            try {
+              new MarkdownStore().write(task);
+            } catch (err) {
+              // Log the detail server-side; don't echo raw exception text (it can carry fs paths) (codex F2).
+              console.error('[serve-ui] task create failed:', err instanceof Error ? err.message : String(err));
+              sendJson(res, 500, { error: 'CREATE_FAILED', message: 'Failed to create task' });
+              return;
+            }
             pIdx.index.upsertTask(task);
             // Respond FIRST, then fire-and-forget triage — the capture response must never wait
             // on (or be blocked by) the Haiku call (spec invariant).
@@ -1571,6 +1609,49 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: delete task — DELETE /api/tasks/:id (P5-04). Markdown-first: archive the markdown via the
+      // durable MarkdownStore path, then drop the SQLite index row. Reconcile scans the tasks dir (not
+      // archive/), so a deleted task cannot resurrect (AC3). No TaskStore in this layer (§13).
+      const taskDeleteMatch = pathname.match(/^\/api\/tasks\/([^/]+)$/);
+      if (taskDeleteMatch && req.method === 'DELETE') {
+        const taskId = taskDeleteMatch[1];
+        // Malformed id → 400 (AC4) — must look like a project-prefixed task id (PREFIX-NNN).
+        if (!/^[A-Za-z0-9]+-\d+$/.test(taskId)) {
+          sendError(res, 400, 'INVALID_FIELD: malformed task id');
+          return;
+        }
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!pIdx || !task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        // Block deletion when subtasks exist — promote/delete them first (Open Q1: safest default).
+        if (task.subtasks && task.subtasks.length > 0) {
+          sendError(res, 400, 'INVALID_FIELD: cannot delete a task with subtasks — promote or remove them first');
+          return;
+        }
+        try {
+          // Markdown-first: archive the file when one exists (durable, recoverable), then drop the
+          // index row. Resolve a relative file_path against the project tasks dir (legacy tasks store
+          // relative paths) so existsSync doesn't false-negative against CWD and leave an orphan that
+          // reconcile would resurrect (codex F1). Index-only tasks (no markdown) just lose the row.
+          const mdPath = isAbsolute(task.file_path) ? task.file_path : join(pIdx.tasksDir, task.file_path);
+          // Defense-in-depth: only archive a file that resolves inside the project tasks dir, in case a
+          // legacy/absolute file_path in the index points elsewhere (security scan: containment boundary).
+          if (existsSync(mdPath) && resolve(mdPath).startsWith(resolve(pIdx.tasksDir))) {
+            new MarkdownStore().delete(mdPath);
+          }
+          pIdx.index.deleteTask(taskId);
+          sendJson(res, 200, { deleted: true, id: taskId });
+        } catch (err) {
+          // Log detail server-side; return a stable code without raw exception text (codex F2).
+          console.error('[serve-ui] task delete failed:', err instanceof Error ? err.message : String(err));
+          sendError(res, 500, 'DELETE_FAILED');
+        }
         return;
       }
 

@@ -20,7 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { Task, PanelState, TaskStatus, TaskPriority, TaskArea, TaskType } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
-import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr } from '../api'
+import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask } from '../api'
 import { useMilestones } from '../hooks/useMilestones'
 import { milestoneProject } from '../lib/milestone'
 
@@ -96,6 +96,8 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const [editType, setEditType]               = useState<boolean>(false)
   const [editMilestone, setEditMilestone]     = useState<boolean>(false)
   const [tagInput, setTagInput]               = useState<string>('')
+  // Two-step delete: first click arms, second click within the panel confirms (guard, overview §9).
+  const [confirmDelete, setConfirmDelete]     = useState<boolean>(false)
   // Optimistic local tag draft — tags are accumulative (add to the existing set), so deriving the
   // next array from server props at event time can clobber a sibling tag if two edits fire before
   // a refetch lands. Hold the in-flight array locally and roll back on error (overview §5 / AC9).
@@ -112,6 +114,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     setEditMilestone(false)
     setTagInput('')
     setDraftTags(null)
+    setConfirmDelete(false)
     setErrorMsg(null)
   }, [taskId])
 
@@ -349,6 +352,29 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   async function handleTagRemove(tag: string): Promise<void> {
     if (!task) return
     await commitTags(currentTags.filter(t => t !== tag))
+  }
+
+  // Delete — guarded two-step (arm then confirm) with optimistic removal + rollback (AC6/AC7). The
+  // row vanishes from the list caches immediately; on error the snapshot is restored and the error
+  // surfaces in the still-open panel.
+  async function handleDelete(): Promise<void> {
+    if (!task) return
+    const deletedId = task.id
+    const snapshot = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] })
+    queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
+      Array.isArray(old) ? old.filter(t => t.id !== deletedId) : old,
+    )
+    try {
+      await deleteTask(deletedId)
+      await invalidateCaches()
+      setErrorMsg(null)
+      onClose()
+    } catch (err) {
+      // rollback the optimistic removal
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, data)
+      setConfirmDelete(false)
+      surfaceError(err)
+    }
   }
 
   // ── render ──────────────────────────────────────────────────────────────
@@ -819,6 +845,34 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
           >
             ACR
           </button>
+
+          {/* Delete — guarded two-step: first click arms, confirm deletes (overview §9). P5-04 */}
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="ml-auto px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-status-red/80 hover:bg-status-red/10 hover:text-status-red transition-colors duration-100"
+              aria-label="Delete task"
+            >
+              Delete
+            </button>
+          ) : (
+            <span className="ml-auto inline-flex items-center gap-1.5">
+              <button
+                onClick={() => void handleDelete()}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-status-red/20 text-status-red hover:bg-status-red/30 transition-colors duration-100"
+                aria-label="Confirm delete task"
+              >
+                Confirm delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-2 py-1.5 rounded text-xs text-ink-muted hover:text-ink transition-colors duration-100"
+                aria-label="Cancel delete"
+              >
+                Cancel
+              </button>
+            </span>
+          )}
         </div>
 
         {/* Peek hint — only in peek mode; click promotes peek → detail (onPromote) */}
