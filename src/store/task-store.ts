@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import type { Task, TaskStatus, StatusTransition } from '../types/task.js';
 import type { TaskCreateInput, TaskUpdateInput } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
@@ -8,6 +9,7 @@ import type { ManifestWriter } from './manifest-writer.js';
 import { TaskFactory } from './task-factory.js';
 import { detectCycle } from './dependency-graph.js';
 import { MAX_TRANSITIONS } from './limits.js';
+import { escapeRegExp } from '../util/escape-regexp.js';
 
 const DEFAULT_CLAIM_TTL_HOURS = 4;
 
@@ -43,6 +45,20 @@ export class TaskStore {
     private project: string,
   ) {}
 
+  /**
+   * Cheap disk backstop for the create guard (MCPAT-060): does a markdown file for this id already
+   * exist on disk? Matches the filename convention `<id>.md` or `<id>-<slug>.md` via readdir (no file
+   * reads), so it holds even when the index is stale and missing the row.
+   */
+  private diskHasTaskId(id: string): boolean {
+    try {
+      const re = new RegExp(`^${escapeRegExp(id)}(-.*)?\\.md$`);
+      return fs.readdirSync(this.tasksDir).some(f => re.test(f));
+    } catch {
+      return false;
+    }
+  }
+
   createTask(input: TaskCreateInput): Task {
     // 1. Get next ID — pass tasksDir so the allocator skips past any
     // markdown files already on disk (regression: MCPAT clobber 2026-05-05).
@@ -50,6 +66,14 @@ export class TaskStore {
 
     // 2. Format ID
     const id = this.factory.formatId(input.project, num);
+
+    // 2b. Backstop guard: never create over an existing (id, project). The authoritative nextId (which
+    // also scans `tasksDir`) makes this unreachable on the normal path; the guard additionally checks
+    // both the index AND disk so it still holds when the index is stale/incomplete — the root cause of
+    // the MCPAT-060 collisions.
+    if (this.sqliteIndex.getTask(id) || this.diskHasTaskId(id)) {
+      throw new McpTasksError('ID_CONFLICT', `Cannot create task: ${id} already exists in project ${input.project}`);
+    }
 
     // 3. Create task object
     const task = this.factory.create(input, id, this.tasksDir);

@@ -14,6 +14,7 @@ import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
 import { TaskStore } from './store/task-store.js';
 import { Reconciler } from './store/reconciler.js';
+import { planCollisionFixes, applyCollisionFixes, findReferences, type StoreRef } from './store/id-collision-fixer.js';
 
 // Extended update type to carry git link fields through the update path
 interface UpdateWithGit extends TaskUpdateInput {
@@ -464,6 +465,94 @@ program
       const pruned = reconciler.pruneOrphans();
       console.log(`✓ Pruned ${pruned} orphaned tasks`);
     }
+    const collisions = reconciler.getCollisions();
+    if (collisions.length > 0) {
+      console.warn(`⚠ ${collisions.length} (id, project) collision(s) detected — run 'agent-tasks fix-id-collisions' to repair.`);
+    }
+  });
+
+// ── fix-id-collisions ─────────────────────────────────────────────────────────
+
+program
+  .command('fix-id-collisions')
+  .description('Find and repair (id, project) collisions: keep the canonical task, re-ID the others')
+  .option('--apply', 'apply the fixes (default is a dry-run report)', false)
+  .option('--force', 'apply even when re-IDed tasks are referenced elsewhere (refs left for manual review)', false)
+  .action((options: { apply?: boolean; force?: boolean }) => {
+    const config = loadConfig();
+    const dirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+    const stores: StoreRef[] = config.projects.map(p => ({ prefix: p.prefix, tasksDir: path.join(p.path, dirName) }));
+    const genDir = path.join(os.homedir(), '.mcp-tasks', 'tasks', 'gen', dirName);
+    if (fs.existsSync(genDir)) stores.push({ prefix: 'GEN', tasksDir: genDir });
+
+    // Seed new-id allocation from each project's index watermark too (not just disk), so re-IDed tasks
+    // never land on a number the authoritative nextId could later reuse (MCPAT-060 codex F1).
+    const indexMaxByPrefix: Record<string, number> = {};
+    for (const s of stores) {
+      try {
+        const { sqliteIndex } = buildStore(s.tasksDir, s.prefix, config);
+        indexMaxByPrefix[s.prefix] = sqliteIndex.maxIdNumberForProject(s.prefix);
+        sqliteIndex.close();
+      } catch { /* index unavailable — fall back to disk max */ }
+    }
+
+    const plans = planCollisionFixes(stores, indexMaxByPrefix);
+    if (plans.length === 0) {
+      console.log('✓ No (id, project) collisions found.');
+      return;
+    }
+
+    const totalReassign = plans.reduce((n, p) => n + p.reassign.length, 0);
+    console.log(`Found ${plans.length} collision group(s), ${totalReassign} file(s) to re-ID:\n`);
+    for (const plan of plans) {
+      console.log(`  ${plan.id} (${plan.project})`);
+      console.log(`    keep   ${plan.canonical.file}  "${plan.canonical.title}" [${plan.canonical.status}]`);
+      for (const r of plan.reassign) {
+        console.log(`    re-ID  ${r.file} → ${r.newFile}  (${r.id} → ${r.newId})  "${r.title}" [${r.status}]`);
+      }
+    }
+
+    // Warn about any files referencing an id that is about to move.
+    const movingIds = plans.flatMap(p => p.reassign.map(r => r.id));
+    const refs = findReferences(stores, movingIds);
+    if (refs.length > 0) {
+      console.warn(`\n⚠ ${refs.length} file(s) reference a re-IDed task — review these manually after applying:`);
+      for (const r of refs) console.warn(`    ${r.id} referenced in ${r.file}`);
+    }
+
+    if (!options.apply) {
+      console.log(`\nDry-run only. Re-run with --apply to perform the re-ID, then rebuild affected indexes.`);
+      return;
+    }
+
+    // Safety gate: re-IDing a task referenced elsewhere leaves those references dangling. Refuse to
+    // apply when references exist unless --force is passed, so cross-references get a deliberate review.
+    if (refs.length > 0 && !options.force) {
+      console.error(`\n✗ Refusing to apply: ${refs.length} reference(s) to re-IDed tasks would be left dangling.`);
+      console.error(`  Review the references above, then re-run with --apply --force to proceed (references are left as-is for manual fixup).`);
+      process.exitCode = 1;
+      return;
+    }
+
+    const { reassigned } = applyCollisionFixes(plans);
+    console.log(`\n✓ Re-IDed ${reassigned} file(s).`);
+
+    // Rebuild the index for each affected project so the masked tasks become visible.
+    const affected = [...new Set(plans.map(p => p.project))];
+    for (const prefix of affected) {
+      const store = stores.find(s => s.prefix === prefix);
+      if (!store) continue;
+      try {
+        const { sqliteIndex } = buildStore(store.tasksDir, prefix, config);
+        const reconciler = new Reconciler(sqliteIndex, store.tasksDir, prefix);
+        const count = reconciler.reconcile();
+        const remaining = reconciler.getCollisions().length;
+        console.log(`  ${prefix}: reindexed ${count} tasks${remaining > 0 ? ` (⚠ ${remaining} collision(s) remain)` : ''}`);
+      } catch (err) {
+        console.warn(`  ${prefix}: reindex failed — ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    console.log(`\n✓ Done. Re-run 'agent-tasks fix-id-collisions' to confirm 0 collisions remain.`);
   });
 
 // ── archive ───────────────────────────────────────────────────────────────────

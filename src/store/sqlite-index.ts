@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { Task, TaskStatus, Priority, Area, AgentStatus, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
+import { escapeRegExp } from '../util/escape-regexp.js';
 import { MAX_TRANSITIONS, MAX_COMMITS, MAX_TAGS } from './limits.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -712,9 +713,27 @@ export class SqliteIndex {
     `).run(prefix);
   }
 
+  /**
+   * Highest numeric suffix among task IDs already indexed for a project (e.g. `COND-011` → 11).
+   * Returns 0 when the project has no tasks. Used to make nextId authoritative (MCPAT-060).
+   */
+  maxIdNumberForProject(prefix: string): number {
+    const rows = this.db.prepare(`SELECT id FROM tasks WHERE project = ?`).all(prefix) as { id: string }[];
+    const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`);
+    let max = 0;
+    for (const r of rows) {
+      const m = re.exec(r.id);
+      if (m && m[1]) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+    return max;
+  }
+
   nextId(prefix: string, tasksDir?: string): number {
     if (tasksDir && fs.existsSync(tasksDir)) {
-      const re = new RegExp(`^${prefix}-(\\d+)`);
+      const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)`);
       let onDiskMax = 0;
       for (const entry of fs.readdirSync(tasksDir)) {
         const m = re.exec(entry);
@@ -730,6 +749,19 @@ export class SqliteIndex {
           ON CONFLICT(prefix) DO UPDATE SET next_id = MAX(next_id, excluded.next_id)
         `).run(prefix, onDiskMax);
       }
+    }
+
+    // Authoritative watermark: also reconcile against the max ID already present in the index for
+    // this project. This makes nextId safe even when `tasksDir` is not passed or the stored watermark
+    // is stale (e.g. after an index rebuild) — without it, a low stale counter hands out an ID that
+    // already exists on disk, producing (id, project) collisions (MCPAT-060).
+    const indexMax = this.maxIdNumberForProject(prefix);
+    if (indexMax > 0) {
+      this.db.prepare(`
+        INSERT INTO projects (prefix, path, storage_mode, tasks_dir, next_id, created)
+        VALUES (?, '', 'local', '', ?, datetime('now'))
+        ON CONFLICT(prefix) DO UPDATE SET next_id = MAX(next_id, excluded.next_id)
+      `).run(prefix, indexMax);
     }
 
     // Try to increment existing row

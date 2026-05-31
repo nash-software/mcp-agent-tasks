@@ -5,7 +5,7 @@ import { McpTasksError } from '../types/errors.js';
 
 const SCHEMA_VERSION = 1;
 
-function formatId(prefix: string, num: number): string {
+export function formatId(prefix: string, num: number): string {
   if (num >= 1000) {
     return `${prefix}-${num}`;
   }

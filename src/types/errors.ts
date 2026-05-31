@@ -7,7 +7,8 @@ export type ErrorCode =
   | 'MAX_DEPTH_EXCEEDED'
   | 'INVALID_FIELD'
   | 'SCHEMA_MISMATCH'
-  | 'TASK_FILE_EXISTS';
+  | 'TASK_FILE_EXISTS'
+  | 'ID_CONFLICT';
 
 export class McpTasksError extends Error {
   constructor(
