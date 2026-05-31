@@ -202,6 +202,25 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     }
   }
 
+  // "Reopen" / "Resume" — P5-05: closed tasks are reopenable (closed → todo | in_progress). Optimistic
+  // status flip (so the task leaves the Completed list immediately), rollback + error on failure.
+  async function handleReopen(to: 'todo' | 'in_progress'): Promise<void> {
+    if (!task) return
+    const id = task.id
+    const snapshot = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] })
+    queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
+      Array.isArray(old) ? old.map(t => (t.id === id ? { ...t, status: to } : t)) : old,
+    )
+    try {
+      await transitionTask(id, to)
+      await invalidateCaches()
+      setErrorMsg(null)
+    } catch (err) {
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, data)
+      surfaceError(err)
+    }
+  }
+
   async function handleScheduleToggle(): Promise<void> {
     if (!task) return
     try {
@@ -387,6 +406,8 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   // Done is only a valid transition from in_progress (per the state machine) —
   // showing it elsewhere produces guaranteed 409s (codex F5).
   const canDone  = task && task.status === 'in_progress'
+  // Closed tasks are reopenable (P5-05) — offer back-to-queue (todo) and resume (in_progress).
+  const canReopen = task && task.status === 'closed'
 
   return (
     /*
@@ -795,6 +816,26 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
       <div className="flex-shrink-0 border-t border-surface-3 px-4 py-3 space-y-2">
         {/* Action buttons row */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Reopen / Resume — P5-05: shown only for closed tasks */}
+          {canReopen && (
+            <>
+              <button
+                onClick={() => void handleReopen('todo')}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-status-blue/20 text-status-blue hover:bg-status-blue/30 transition-colors duration-100"
+                aria-label="Reopen task — back to queue"
+              >
+                Reopen
+              </button>
+              <button
+                onClick={() => void handleReopen('in_progress')}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
+                aria-label="Resume task — reopen to in progress"
+              >
+                Resume
+              </button>
+            </>
+          )}
+
           {/* Start — P4-01: shown for todo/blocked tasks */}
           {canStart && (
             <button

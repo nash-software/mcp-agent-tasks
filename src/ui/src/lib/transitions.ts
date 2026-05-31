@@ -29,7 +29,7 @@ const VALID_TRANSITIONS: Readonly<Partial<Record<TaskStatus, readonly TaskStatus
   archived:    [],
   draft:       ['approved', 'blocked'],
   approved:    ['in_progress', 'draft', 'blocked'],
-  closed:      [],
+  closed:      ['todo', 'in_progress'], // reopenable (P5-05) — mirror of server transitions.ts
 }
 
 /**

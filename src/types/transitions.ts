@@ -8,7 +8,9 @@ export const VALID_TRANSITIONS: Readonly<Record<TaskStatus, readonly TaskStatus[
   archived:    [],
   draft:       ['approved', 'blocked'],
   approved:    ['in_progress', 'draft', 'blocked'],
-  closed:      [],
+  // closed is reopenable (P5-05) — a mistaken "Complete all" must not permanently strand a task.
+  // Reopen to todo (re-triage) or in_progress (resume); closed → done remains invalid.
+  closed:      ['todo', 'in_progress'],
 } as const;
 
 export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {

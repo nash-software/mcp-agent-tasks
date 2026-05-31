@@ -540,7 +540,7 @@ export function App(): React.JSX.Element {
           {view === 'artifacts' && <ArtifactsView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
-          {view === 'completed' && <CompletedView />}
+          {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
         </div>
       </main>
 
