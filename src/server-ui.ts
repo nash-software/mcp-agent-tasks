@@ -11,6 +11,7 @@ import { MarkdownStore } from './store/markdown-store.js';
 import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
 import type { Priority, Area, Task, TaskStatus, StatusTransition, TaskType } from './types/task.js';
 import { isValidTransition } from './types/transitions.js';
+import { buildProjectsList } from './projects-list.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1106,9 +1107,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: projects (for action button)
+      // API: projects (for action button + project filter)
       if (pathname === '/api/projects') {
-        const projects = config.projects.map(p => ({ prefix: p.prefix, path: p.path }));
+        // Include the auto-initialised global GEN project — it lives in projectIndexes but not in
+        // config.projects, so without this it never appears in the filter (P5-09 AC3).
+        const genIdx = projectIndexes.find(p => p.prefix === 'GEN');
+        const projects = buildProjectsList(config.projects, genIdx ? genIdx.tasksDir : null);
         sendJson(res, 200, projects);
         return;
       }

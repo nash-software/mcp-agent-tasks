@@ -21,6 +21,7 @@ import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
 import { PRI_RANK } from '../lib/format'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { isCommittedBucket } from '../lib/today-buckets'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -125,7 +126,9 @@ export function TodayView({
   // Committed list: all scheduled today excluding the hero, then matchFilter.
   const committedList = sortCommitted(
     committed
-      .filter(t => t.status !== 'in_progress')
+      // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
+      // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
+      .filter(isCommittedBucket)
       .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
@@ -357,7 +360,7 @@ export function TodayView({
                   task={task}
                   mode="candidate"
                   selected={selectedTaskId === task.id}
-                  onClick={() => onSelectTask?.(task.id)}
+                  onClick={() => { onSelectTask?.(task.id); handleOpenDetail(task) }}
                   onCommit={() => handleCommit(task)}
                 />
               ))}
@@ -394,7 +397,7 @@ export function TodayView({
                       task={task}
                       mode="candidate"
                       selected={selectedTaskId === task.id}
-                      onClick={() => onSelectTask?.(task.id)}
+                      onClick={() => { onSelectTask?.(task.id); handleOpenDetail(task) }}
                       onCommit={() => handleCommit(task)}
                     />
                   ))}
