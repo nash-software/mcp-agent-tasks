@@ -210,12 +210,15 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(res2.status).not.toBe(200);
   });
 
-  it('P5-05: closed→done is rejected → non-200 (MUT-004 still closed)', async () => {
+  it('P5-05: closed→done → 409 INVALID_TRANSITION, state preserved as closed', async () => {
     const res = await fetch(`${baseUrl}/api/tasks/MUT-004/transition`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: 'done' }),
     });
-    expect(res.status).not.toBe(200);
+    expect(res.status).toBe(409);
+    // MUT-004 must still be closed after the rejected transition
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    expect(tasks.find(t => t.id === 'MUT-004')?.status).toBe('closed');
   });
 
   it('P5-05: reopen a closed task → 200 in_progress, persisted', async () => {
