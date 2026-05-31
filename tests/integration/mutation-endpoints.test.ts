@@ -229,6 +229,8 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(reopen.status).toBe(200);
     const task = await reopen.json() as TaskShape;
     expect(task.status).toBe('in_progress');
+    // AC2: a new transition entry is appended (from closed → in_progress)
+    expect(task.transitions?.some(t => t.from === 'closed' && t.to === 'in_progress')).toBe(true);
     const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
     expect(tasks.find(t => t.id === 'MUT-004')?.status).toBe('in_progress');
   });
