@@ -5,6 +5,7 @@ export type EnforcementMode = 'warn' | 'block' | 'off';
 
 export interface ProjectConfig {
   prefix: string;
+  name?: string;        // optional friendly display name (e.g. "Agent Control Room"); falls back to prefix
   path: string;
   storage: StorageMode;
 }

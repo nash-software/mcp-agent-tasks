@@ -128,3 +128,38 @@ describe('loadConfig() cwd-independence', () => {
     }
   });
 });
+
+describe('writeConfig — atomic persistence (MCPAT-063)', () => {
+  it('writes valid JSON that round-trips, leaving no temp file', async () => {
+    const { writeConfig } = await import('../../src/config/loader.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-writecfg-'));
+    const cfgPath = path.join(dir, 'config.json');
+    try {
+      const config = makeConfig({
+        projects: [{ prefix: 'ACR', name: 'Agent Control Room', path: '/p/acr', storage: 'local' }],
+      });
+      writeConfig(config, cfgPath);
+
+      const back = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')) as McpTasksConfig;
+      expect(back.projects[0]).toEqual({ prefix: 'ACR', name: 'Agent Control Room', path: '/p/acr', storage: 'local' });
+      // no stray temp artifact left behind
+      expect(fs.readdirSync(dir).filter(f => f.includes('.tmp-'))).toEqual([]);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('overwrites an existing config atomically (rename over existing)', async () => {
+    const { writeConfig } = await import('../../src/config/loader.js');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-writecfg-'));
+    const cfgPath = path.join(dir, 'config.json');
+    try {
+      writeConfig(makeConfig({ claimTtlHours: 4 }), cfgPath);
+      writeConfig(makeConfig({ claimTtlHours: 9 }), cfgPath);
+      const back = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')) as McpTasksConfig;
+      expect(back.claimTtlHours).toBe(9);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -9,6 +9,7 @@ import { ArtifactsView } from './views/ArtifactsView'
 import { TaskPanel } from './components/TaskPanel'
 import { CaptureOverlay } from './components/CaptureOverlay'
 import { NewTaskModal } from './components/NewTaskModal'
+import { ProjectsModal } from './components/ProjectsModal'
 import { LiveFeedSection } from './components/LiveFeedSection'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
@@ -91,6 +92,7 @@ export function App(): React.JSX.Element {
   const [panel, setPanel]           = useState<PanelState | null>(null)
   const [cmdkOpen, setCmdkOpen]     = useState(false)
   const [newTaskOpen, setNewTaskOpen] = useState(false)
+  const [projectsModalOpen, setProjectsModalOpen] = useState(false)
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
@@ -176,9 +178,14 @@ export function App(): React.JSX.Element {
     const prefixes = new Set<string>()
     for (const t of allTasks) if (t.project) prefixes.add(t.project)
     for (const p of projectEntries) prefixes.add(p.prefix)
+    // Build a lookup so the FilterBar can show "PREFIX — Name" when a name exists (MCPAT-063).
+    const nameByPrefix = new Map(projectEntries.map(p => [p.prefix, p.name]))
     return Array.from(prefixes)
       .sort((a, b) => a.localeCompare(b))
-      .map(prefix => ({ prefix, name: prefix, area: areaMap[prefix] ?? null }))
+      .map(prefix => {
+        const projectName = nameByPrefix.get(prefix)
+        return { prefix, name: projectName ?? prefix, area: areaMap[prefix] ?? null }
+      })
   }, [allTasks, projectEntries, areaMap])
 
   const toggleProject = useCallback((prefix: string): void => {
@@ -490,6 +497,7 @@ export function App(): React.JSX.Element {
         onViewChange={handleViewChange}
         onPaletteOpen={() => setCmdkOpen(true)}
         onNewTask={() => setNewTaskOpen(true)}
+        onOpenProjects={() => setProjectsModalOpen(true)}
         favorites={favorites}
         projectCounts={projectCounts}
         filterProjects={filterProjects}
@@ -571,6 +579,13 @@ export function App(): React.JSX.Element {
       <NewTaskModal
         open={newTaskOpen}
         onClose={() => setNewTaskOpen(false)}
+        projects={projectEntries}
+      />
+
+      {/* MCPAT-063 — Projects modal (settings cog) */}
+      <ProjectsModal
+        open={projectsModalOpen}
+        onClose={() => setProjectsModalOpen(false)}
         projects={projectEntries}
       />
     </div>

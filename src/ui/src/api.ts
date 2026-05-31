@@ -290,6 +290,7 @@ export async function closeBatch(project?: string): Promise<BatchCloseResponse> 
 
 export interface ProjectEntry {
   prefix: string
+  name?: string
   path: string
 }
 
@@ -297,6 +298,50 @@ export async function fetchProjects(): Promise<ProjectEntry[]> {
   const res = await fetch('/api/projects')
   if (!res.ok) return []
   return res.json() as Promise<ProjectEntry[]>
+}
+
+export async function createProject(fields: {
+  prefix: string
+  path: string
+  name?: string
+  storage?: 'global' | 'local'
+}): Promise<ProjectEntry> {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; message?: string }
+    throw new Error(err.message ?? err.error ?? `Create project failed: ${res.status}`)
+  }
+  return res.json() as Promise<ProjectEntry>
+}
+
+export async function updateProject(
+  prefix: string,
+  fields: { name?: string },
+): Promise<ProjectEntry> {
+  const res = await fetch(`/api/projects/${prefix}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; message?: string }
+    throw new Error(err.message ?? err.error ?? `Update project failed: ${res.status}`)
+  }
+  return res.json() as Promise<ProjectEntry>
+}
+
+export async function listDir(path?: string): Promise<{ path: string | null; dirs: string[] }> {
+  const url = path ? `/api/fs/list?path=${encodeURIComponent(path)}` : '/api/fs/list'
+  const res = await fetch(url)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; message?: string }
+    throw new Error(err.message ?? err.error ?? `List dir failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ path: string | null; dirs: string[] }>
 }
 
 // ── Phase 2 / Hermes endpoints ─────────────────────────────────────────────

@@ -1,10 +1,12 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync, statSync, realpathSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath } from './config/loader.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, writeConfig } from './config/loader.js';
+import type { StorageMode } from './types/config.js';
+import { isPathWithinRoots } from './fs-sandbox.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
@@ -1108,12 +1110,191 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       }
 
       // API: projects (for action button + project filter)
-      if (pathname === '/api/projects') {
+      if (pathname === '/api/projects' && req.method === 'GET') {
         // Include the auto-initialised global GEN project — it lives in projectIndexes but not in
         // config.projects, so without this it never appears in the filter (P5-09 AC3).
         const genIdx = projectIndexes.find(p => p.prefix === 'GEN');
         const projects = buildProjectsList(config.projects, genIdx ? genIdx.tasksDir : null);
         sendJson(res, 200, projects);
+        return;
+      }
+
+      // API: register + init a new project — POST /api/projects (MCPAT-063). Reuses the
+      // task_register_project contract; additionally creates the tasks dir + index and pushes the new
+      // ProjectIndex into the live array so the project is queryable WITHOUT a server restart.
+      if (pathname === '/api/projects' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { prefix?: unknown; path?: unknown; name?: unknown; storage?: unknown };
+            const prefix = typeof body.prefix === 'string' ? body.prefix.trim() : '';
+            const projPath = typeof body.path === 'string' ? body.path.trim() : '';
+            const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined;
+            // Strict storage validation — reject unknown values rather than silently coercing (codex F4).
+            if (body.storage !== undefined && body.storage !== 'global' && body.storage !== 'local') {
+              sendError(res, 400, "INVALID_FIELD: storage must be 'global' or 'local'");
+              return;
+            }
+            const storage: StorageMode = body.storage === 'local' ? 'local' : 'global';
+
+            // Prefix: uppercase, starts with a letter (matches the PREFIX-NNN task-id grammar).
+            if (!/^[A-Z][A-Z0-9]*$/.test(prefix)) {
+              sendError(res, 400, 'INVALID_FIELD: prefix must be uppercase letters/digits, starting with a letter');
+              return;
+            }
+            if (name !== undefined && name.length > 80) {
+              sendError(res, 400, 'INVALID_FIELD: name must be 80 characters or fewer');
+              return;
+            }
+            // Uniqueness — against both config and the live index set (catches GEN/default too).
+            if (config.projects.some(p => p.prefix === prefix) || projectIndexes.some(p => p.prefix === prefix)) {
+              sendJson(res, 409, { error: 'PROJECT_EXISTS', message: `Project ${prefix} is already registered` });
+              return;
+            }
+            // Path must be an existing absolute directory.
+            if (!projPath || !isAbsolute(projPath)) {
+              sendError(res, 400, 'INVALID_FIELD: path must be an absolute directory path');
+              return;
+            }
+            let stat;
+            try { stat = statSync(projPath); } catch { sendError(res, 400, `INVALID_FIELD: path does not exist: ${projPath}`); return; }
+            if (!stat.isDirectory()) { sendError(res, 400, 'INVALID_FIELD: path must be a directory'); return; }
+
+            // Guard the operator-config tasksDirName against traversal before joining (security LOW —
+            // a tampered config must not let mkdirSync escape the registered project path).
+            const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+            if (tasksDirName.includes('..') || isAbsolute(tasksDirName)) {
+              sendError(res, 400, 'INVALID_CONFIG: tasksDirName must be a simple relative directory name');
+              return;
+            }
+            const tasksDir = join(projPath, tasksDirName);
+            mkdirSync(tasksDir, { recursive: true });
+
+            // Persist config atomically (durable source of truth) first, then init the derived index.
+            config.projects.push({ prefix, ...(name ? { name } : {}), path: projPath, storage });
+            try {
+              writeConfig(config);
+            } catch {
+              config.projects.pop();
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not write config' });
+              return;
+            }
+
+            // Init the index + push into the live array (no restart). On failure, roll the config entry
+            // back (re-persist) so the durable state matches the live state, and report 500 (codex F2) —
+            // not a misleading 400. (A surviving config entry would otherwise self-heal only on restart.)
+            try {
+              const dbPath = resolveServerDbPath(tasksDir, config, prefix);
+              const idx = new SqliteIndex(dbPath);
+              idx.init();
+              projectIndexes.push({ prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir });
+            } catch (initErr) {
+              config.projects.pop();
+              try { writeConfig(config); } catch { /* best-effort rollback; reconcile corrects on restart */ }
+              const m = initErr instanceof Error ? initErr.message : String(initErr);
+              sendJson(res, 500, { error: 'INDEX_INIT_FAILED', message: `project creation failed (index init error), configuration rolled back: ${m}` });
+              return;
+            }
+
+            sendJson(res, 201, { prefix, ...(name ? { name } : {}), path: projPath });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: edit a project's name — PATCH /api/projects/:prefix (MCPAT-063). Prefix is immutable
+      // (renaming it = re-IDing every task — deferred, P5-02 migrate territory). Name only.
+      const projectPatchMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
+      if (projectPatchMatch && req.method === 'PATCH') {
+        const prefix = decodeURIComponent(projectPatchMatch[1]);
+        const entry = config.projects.find(p => p.prefix === prefix);
+        if (!entry) {
+          sendError(res, 404, 'PROJECT_NOT_FOUND');
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { name?: unknown; prefix?: unknown };
+            if (body.prefix !== undefined && body.prefix !== prefix) {
+              sendError(res, 400, 'INVALID_FIELD: prefix is immutable (renaming would re-ID every task)');
+              return;
+            }
+            if (body.name !== undefined && typeof body.name !== 'string') {
+              sendError(res, 400, 'INVALID_FIELD: name must be a string');
+              return;
+            }
+            const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+            if (name !== undefined && name.length > 80) {
+              sendError(res, 400, 'INVALID_FIELD: name must be 80 characters or fewer');
+              return;
+            }
+            const prev = entry.name;
+            if (name === undefined) {
+              // no-op on name
+            } else if (name === '') {
+              delete entry.name; // clearing falls back to the prefix at render time
+            } else {
+              entry.name = name;
+            }
+            try {
+              writeConfig(config);
+            } catch {
+              if (prev === undefined) delete entry.name; else entry.name = prev;
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not write config' });
+              return;
+            }
+            sendJson(res, 200, { prefix: entry.prefix, ...(entry.name ? { name: entry.name } : {}), path: entry.path });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: sandboxed directory browser — GET /api/fs/list?path= (MCPAT-063, folder picker).
+      // Allowed roots = the user home + each registered project's path and its parent. With no `path`,
+      // returns the roots themselves (top-level choices). Listing-only: directories, no file contents.
+      if (pathname === '/api/fs/list' && req.method === 'GET') {
+        // Allowed roots = home + each project's PARENT dir (codex F3 — narrower than the project paths
+        // themselves, which are redundant: a project at <parent>/x is already reachable under <parent>).
+        // Canonicalise (realpath) so the comparison is symlink/case-safe — macOS /tmp → /private/tmp,
+        // Windows drive-letter case. Non-existent roots fall back to resolve().
+        const roots = Array.from(new Set(
+          [homedir(), ...config.projects.map(p => dirname(p.path))]
+            .filter(r => typeof r === 'string' && isAbsolute(r))
+            .map(r => { try { return realpathSync(r); } catch { return resolve(r); } }),
+        ));
+        const reqPath = url.searchParams.get('path');
+        if (!reqPath) {
+          // Entry point: offer the browsable roots.
+          sendJson(res, 200, { path: null, dirs: roots });
+          return;
+        }
+        if (!isAbsolute(reqPath)) {
+          sendError(res, 400, 'INVALID_FIELD: path must be absolute');
+          return;
+        }
+        // Resolve symlinks BEFORE the sandbox check so a symlink can't escape an allowed root.
+        let real: string;
+        try { real = realpathSync(reqPath); } catch { sendError(res, 404, 'NOT_FOUND: path does not exist'); return; }
+        if (!isPathWithinRoots(real, roots)) {
+          sendError(res, 403, 'FORBIDDEN: path is outside the allowed roots');
+          return;
+        }
+        let entries;
+        try { entries = readdirSync(real, { withFileTypes: true }); } catch { sendError(res, 400, 'INVALID_FIELD: cannot read directory'); return; }
+        const dirs = entries
+          .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+          .map(e => join(real, e.name))
+          .sort();
+        sendJson(res, 200, { path: real, dirs });
         return;
       }
 
