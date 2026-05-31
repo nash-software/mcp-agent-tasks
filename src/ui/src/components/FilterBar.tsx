@@ -144,7 +144,7 @@ export function FilterBar({
                     >
                       <Checkbox on={filter.projects.includes(p.prefix)} />
                       <span className="fpr-prefix">{p.prefix}</span>
-                      <span className="fpr-name">{p.name && p.name !== p.prefix ? `${p.prefix} — ${p.name}` : p.prefix}</span>
+                      <span className="fpr-name">{p.name && p.name !== p.prefix ? p.name : ''}</span>
                       {p.area && <AreaDot area={p.area} />}
                     </button>
                     <button

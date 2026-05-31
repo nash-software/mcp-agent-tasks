@@ -130,8 +130,14 @@ export function writeConfig(config: McpTasksConfig, configPath: string = resolve
   // Temp name is unique per write (PID + monotonic seq) so two writes in the same process can't collide
   // on the temp path (codex F1). Same-dir temp keeps the rename atomic.
   const tmp = `${configPath}.tmp-${process.pid}-${writeConfigSeq++}`;
-  fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
-  fs.renameSync(tmp, configPath); // atomic on POSIX + NTFS
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
+    fs.renameSync(tmp, configPath); // atomic on POSIX + NTFS
+  } catch (err) {
+    // Don't leave a stale temp artifact behind on a failed write/rename (codex r2 F2).
+    try { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); } catch { /* best-effort */ }
+    throw err;
+  }
 }
 
 function applyEnvOverrides(config: McpTasksConfig): McpTasksConfig {

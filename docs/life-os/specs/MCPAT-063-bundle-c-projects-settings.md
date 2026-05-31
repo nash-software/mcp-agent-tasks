@@ -151,3 +151,18 @@ the `gh pr checks` **status string**. Windows: kill `dist/server` node holders b
 - **Security PASS:** the scanner confirmed `isPathWithinRoots` is sound (prefix look-alikes blocked, symlink
   escape defeated by realpath on both target and roots, non-absolute rejected); no file-content leak; POST
   path validated before mkdir; rollback correct.
+
+## 12. Codex round 2 resolution
+
+- **F1 (MED, security — DISMISSED, documented):** codex re-raised `GET /api/fs/list` returning absolute
+  paths as "filesystem-structure exposure." Dismissed: (1) trust model is **localhost single-user** — the
+  user is browsing their **own** filesystem in their **own** browser to pick a folder; absolute paths are
+  not a secret to them. (2) The picker **requires** the absolute path of the selected folder to POST it as
+  the new project's `path` — basenames + a cursor token would force client-side path reconstruction, the
+  exact fragility that caused the FolderBrowser double-join bug (fixed in 16fc639). (3) The
+  **security-scanner explicitly PASSED** this surface (sound sandbox, no file-content leak). Anchoring on the
+  security authority + technical necessity over a repeated convenience-contract concern (handoff §7).
+- **F2 (LOW, fixed):** `writeConfig` now removes the temp file (best-effort `unlinkSync`) on write/rename
+  failure before rethrowing — no stale `.tmp-*` artifacts.
+- **F3 (LOW, fixed):** FilterBar popover row no longer duplicates the prefix — `fpr-prefix` shows the prefix
+  and `fpr-name` shows the **name only** (the single-span chip already renders the combined "PREFIX — Name").
