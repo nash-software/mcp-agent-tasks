@@ -1,5 +1,5 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync } from 'node:fs';
 import { join, resolve, dirname, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -582,6 +582,111 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   return indexes;
 }
 
+/**
+ * Markdown-first ID-migration primitive.
+ *
+ * Moves a task from one project to another by:
+ *   1. Writing the migrated markdown to the target project dir (new ID, updated frontmatter).
+ *   2. Removing the old markdown file from the source project dir.
+ *   3. Rewriting any cross-task references (closes/blocks/related) that pointed at oldId.
+ *   4. Updating the SQLite index last (upsert new, delete old).
+ *
+ * Crash-safety: steps 1–3 are markdown-first so a crash before step 4 leaves reconcile
+ * able to rebuild correctly from markdown (no orphan old file, no missing new file).
+ *
+ * If the source task has no markdown file (SQLite-only quick-capture), steps 1–3 are
+ * skipped and only the index is updated.
+ */
+function migrateTaskId(opts: {
+  oldId: string;
+  newId: string;
+  fromProject: ProjectIndex;
+  toProject: ProjectIndex;
+  task: Task;
+}): Task {
+  const { oldId, newId, fromProject, toProject, task } = opts;
+  const now = new Date().toISOString();
+
+  const migrated: Task = {
+    ...task,
+    id: newId,
+    project: toProject.prefix,
+    file_path: `${newId}.md`,
+    updated: now,
+    last_activity: now,
+  };
+
+  const oldMdPath = join(fromProject.tasksDir, `${oldId}.md`);
+  const hasMarkdown = existsSync(oldMdPath);
+
+  if (hasMarkdown) {
+    // Step 1: Write new markdown at target path (durable atomic write via MarkdownStore).
+    const newMdPath = join(toProject.tasksDir, `${newId}.md`);
+    const mdStore = new MarkdownStore();
+    const mdTask = mdStore.read(oldMdPath);
+    mdTask.id = newId;
+    mdTask.project = toProject.prefix;
+    mdTask.file_path = newMdPath;
+    mdTask.updated = now;
+    mdTask.last_activity = now;
+    mdStore.write(mdTask);
+
+    // Step 2: Remove the old markdown file (after new file is safely written).
+    unlinkSync(oldMdPath);
+
+    // Step 3: Rewrite cross-task references in all project indexes.
+    // Query the source index for tasks that reference oldId (cheap reverse-ref lookup).
+    const refRows = fromProject.index.getRawDb()
+      .prepare<string>('SELECT DISTINCT from_id FROM task_references WHERE to_id=?')
+      .all(oldId) as Array<{ from_id: string }>;
+
+    // Also check the target index (in case cross-project references exist there).
+    const targetRefRows = toProject.index !== fromProject.index
+      ? (toProject.index.getRawDb()
+          .prepare<string>('SELECT DISTINCT from_id FROM task_references WHERE to_id=?')
+          .all(oldId) as Array<{ from_id: string }>)
+      : [];
+
+    const referencing: Array<{ idx: ProjectIndex; taskId: string }> = [
+      ...refRows.map(r => ({ idx: fromProject, taskId: r.from_id })),
+      ...targetRefRows.map(r => ({ idx: toProject, taskId: r.from_id })),
+    ];
+
+    for (const { idx, taskId: refId } of referencing) {
+      const refTask = idx.index.getTask(refId);
+      if (!refTask) continue;
+      const updatedRefs = (refTask.references ?? []).map(ref =>
+        ref.id === oldId ? { ...ref, id: newId } : ref,
+      );
+      refTask.references = updatedRefs;
+      refTask.updated = now;
+      refTask.last_activity = now;
+
+      // Persist markdown-first if file exists
+      const refMdPath = join(idx.tasksDir, refTask.file_path);
+      if (existsSync(refMdPath)) {
+        try {
+          const refMdStore = new MarkdownStore();
+          const refMd = refMdStore.read(refMdPath);
+          refMd.references = updatedRefs;
+          refMd.updated = now;
+          refMd.last_activity = now;
+          refMdStore.write(refMd);
+        } catch (err) {
+          console.error(`[migrateTaskId] ref rewrite failed for ${refId}:`, err instanceof Error ? err.message : err);
+        }
+      }
+      idx.index.upsertTask(refTask);
+    }
+  }
+
+  // Step 4: Update the SQLite index — upsert new entry, delete old (markdown-first complete above).
+  toProject.index.upsertTask(migrated);
+  fromProject.index.deleteTask(oldId);
+
+  return migrated;
+}
+
 function rerouteTask(taskId: string, targetPrefix: string, projectIndexes: ProjectIndex[]): void {
   const sourceIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
   if (!sourceIdx) return;
@@ -595,17 +700,14 @@ function rerouteTask(taskId: string, targetPrefix: string, projectIndexes: Proje
   // Assign a new ID in the target project
   const num = targetIdx.index.nextId(targetPrefix);
   const newId = `${targetPrefix}-${String(num).padStart(3, '0')}`;
-  const now = new Date().toISOString();
-  const rerouted = {
-    ...task,
-    id: newId,
-    project: targetPrefix,
-    file_path: `${newId}.md`,
-    updated: now,
-    last_activity: now,
-  };
-  targetIdx.index.upsertTask(rerouted);
-  sourceIdx.index.deleteTask(taskId);
+
+  migrateTaskId({
+    oldId: taskId,
+    newId,
+    fromProject: sourceIdx,
+    toProject: targetIdx,
+    task,
+  });
 }
 
 /**
@@ -709,7 +811,7 @@ export function getDraftTriageThreshold(): number {
 }
 
 /** Neutralise the sentinel tags so untrusted content can't close the <task> block and inject. */
-function sanitizeForPrompt(s: string): string {
+export function sanitizeForPrompt(s: string): string {
   return s.replace(/<\/?task>/gi, '');
 }
 
