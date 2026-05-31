@@ -1295,8 +1295,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             try {
               new MarkdownStore().write(task);
             } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              sendJson(res, 500, { error: 'CREATE_FAILED', message: msg });
+              // Log the detail server-side; don't echo raw exception text (it can carry fs paths) (codex F2).
+              console.error('[serve-ui] task create failed:', err instanceof Error ? err.message : String(err));
+              sendJson(res, 500, { error: 'CREATE_FAILED', message: 'Failed to create task' });
               return;
             }
             pIdx.index.upsertTask(task);
@@ -1645,8 +1646,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           pIdx.index.deleteTask(taskId);
           sendJson(res, 200, { deleted: true, id: taskId });
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          sendError(res, 500, `DELETE_FAILED: ${msg}`);
+          // Log detail server-side; return a stable code without raw exception text (codex F2).
+          console.error('[serve-ui] task delete failed:', err instanceof Error ? err.message : String(err));
+          sendError(res, 500, 'DELETE_FAILED');
         }
         return;
       }
