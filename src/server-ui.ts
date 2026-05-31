@@ -9,7 +9,7 @@ import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
-import type { Priority, Area, Task, TaskStatus, StatusTransition } from './types/task.js';
+import type { Priority, Area, Task, TaskStatus, StatusTransition, TaskType } from './types/task.js';
 import { isValidTransition } from './types/transitions.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1594,14 +1594,14 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
             // Require at least one patchable field (empty PATCH is a no-op error)
             if (Object.keys(body).length === 0) {
-              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours, milestone) is required');
+              sendError(res, 400, 'INVALID_FIELD: at least one patchable field (title, why, priority, estimate_hours, milestone, area, tags, type) is required');
               return;
             }
 
-            const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours', 'milestone']);
+            const VALID_PATCH_FIELDS = new Set(['title', 'why', 'priority', 'estimate_hours', 'milestone', 'area', 'tags', 'type']);
             for (const key of Object.keys(body)) {
               if (!VALID_PATCH_FIELDS.has(key)) {
-                sendError(res, 400, `INVALID_FIELD: field '${key}' is not patchable; allowed: title, why, priority, estimate_hours, milestone`);
+                sendError(res, 400, `INVALID_FIELD: field '${key}' is not patchable; allowed: title, why, priority, estimate_hours, milestone, area, tags, type`);
                 return;
               }
             }
@@ -1639,6 +1639,54 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 sendError(res, 400, 'INVALID_FIELD: milestone must be a string (milestone id) or null to clear');
                 return;
               }
+              // Cap length — a milestone id is a short project-prefixed key (PREFIX-ms-<ts>);
+              // an unbounded string would bloat the frontmatter / be a local disk-write DoS.
+              if (typeof ms === 'string' && ms.length > 200) {
+                sendError(res, 400, 'INVALID_FIELD: milestone id must be 200 characters or fewer');
+                return;
+              }
+            }
+            const VALID_TASK_AREAS = new Set<string>(['client', 'personal', 'outsource', 'internal']);
+            if ('area' in body) {
+              const a = body['area'];
+              if (a !== null && (typeof a !== 'string' || !VALID_TASK_AREAS.has(a))) {
+                sendError(res, 400, `INVALID_FIELD: area must be one of: ${[...VALID_TASK_AREAS].join(', ')} (or null to clear)`);
+                return;
+              }
+            }
+            const VALID_TASK_TYPES = new Set<string>(['feature', 'bug', 'chore', 'spike', 'refactor', 'spec', 'plan']);
+            if ('type' in body) {
+              if (typeof body['type'] !== 'string' || !VALID_TASK_TYPES.has(body['type'])) {
+                sendError(res, 400, `INVALID_FIELD: type must be one of: ${[...VALID_TASK_TYPES].join(', ')}`);
+                return;
+              }
+            }
+            if ('tags' in body) {
+              const t = body['tags'];
+              if (!Array.isArray(t)) {
+                sendError(res, 400, 'INVALID_FIELD: tags must be an array of strings');
+                return;
+              }
+              if (t.length > 20) {
+                sendError(res, 400, 'INVALID_FIELD: tags array may contain at most 20 items');
+                return;
+              }
+              for (const tag of t) {
+                if (typeof tag !== 'string' || tag.trim().length === 0) {
+                  sendError(res, 400, 'INVALID_FIELD: each tag must be a non-empty string');
+                  return;
+                }
+                if (tag.length > 40) {
+                  sendError(res, 400, 'INVALID_FIELD: each tag must be 40 characters or fewer');
+                  return;
+                }
+                // Reject control characters (incl. NUL) — they survive into the markdown
+                // frontmatter and confuse downstream readers (gray-matter, grep, shell tools).
+                if (/[\x00-\x1f\x7f]/.test(tag)) {
+                  sendError(res, 400, 'INVALID_FIELD: tags may not contain control characters');
+                  return;
+                }
+              }
             }
 
             // Apply allowed fields
@@ -1652,6 +1700,18 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               const ms = body['milestone'];
               task.milestone = (ms === '' || ms === null) ? undefined : ms as string;
             }
+            if ('area' in body) {
+              const a = body['area'];
+              task.area = (a === null || a === undefined) ? undefined : a as Area;
+            }
+            if ('type' in body) {
+              task.type = body['type'] as TaskType;
+            }
+            if ('tags' in body) {
+              // Deduplicate, trim, and apply tag array
+              const raw = body['tags'] as string[];
+              task.tags = [...new Set(raw.map(t => t.trim()).filter(t => t.length > 0))];
+            }
             task.updated = now;
             task.last_activity = now;
 
@@ -1664,6 +1724,17 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               if ('milestone' in body) {
                 const ms = body['milestone'];
                 md.milestone = (ms === '' || ms === null) ? undefined : ms as string;
+              }
+              if ('area' in body) {
+                const a = body['area'];
+                md.area = (a === null || a === undefined) ? undefined : a as Area;
+              }
+              if ('type' in body) {
+                md.type = body['type'] as TaskType;
+              }
+              if ('tags' in body) {
+                const raw = body['tags'] as string[];
+                md.tags = [...new Set(raw.map(t => t.trim()).filter(t => t.length > 0))];
               }
               md.updated = now;
               md.last_activity = now;

@@ -1,28 +1,16 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Milestone, Task } from '../types'
+import type { Task } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone, updateTask } from '../api'
 import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { milestoneProject } from '../lib/milestone'
 
 interface Props {
   filter: Filter
   areaMap?: Record<string, Area>
-}
-
-/**
- * A milestone's owning project is encoded in its ID. The real Milestone type has no `project`
- * field, and milestones live in a per-project store keyed as `PREFIX-ms-<ts>`. Derive the project
- * from the ID prefix (everything before `-ms-`, falling back to the first dash segment) so filtering
- * uses the milestone's own project rather than the fragile related-task derivation.
- */
-function milestoneProject(ms: Milestone): string {
-  const msIdx = ms.id.indexOf('-ms-')
-  if (msIdx > 0) return ms.id.slice(0, msIdx)
-  const dash = ms.id.indexOf('-')
-  return dash > 0 ? ms.id.slice(0, dash) : ms.id
 }
 
 /** Status dot colour per task status, matching the design-token colour palette. */

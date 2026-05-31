@@ -1,4 +1,4 @@
-import type { Task, TaskPriority, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine, BatchCloseResponse } from './types'
+import type { Task, TaskPriority, TaskArea, TaskType, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine, BatchCloseResponse } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -205,6 +205,12 @@ export interface TaskUpdateFields {
   estimate_hours?: number
   /** Assign a task to a milestone by id, or null/undefined to clear. */
   milestone?: string | null
+  /** PARA area for the task. */
+  area?: TaskArea | null
+  /** Tags / labels for the task (replaces the full array on save). */
+  tags?: string[]
+  /** Task type (feature/bug/chore/spike/refactor/spec/plan). */
+  type?: TaskType
 }
 
 export async function updateTask(

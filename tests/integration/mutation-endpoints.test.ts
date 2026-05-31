@@ -521,3 +521,222 @@ describe('P4-02 — batch close (Complete all → Completed)', () => {
     expect(body.closed).toBe(0);
   });
 });
+
+// ── P5-03: PATCH area / tags / type fields ────────────────────────────────────
+
+interface P503TaskShape {
+  id: string;
+  area?: string;
+  tags?: string[];
+  type?: string;
+  project?: string;
+  status?: string;
+}
+
+describe('P5-03 — PATCH area/tags/type fields', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let saved: Record<string, string | undefined> = {};
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-p503-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    const configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1, storageDir: tasksDir, defaultStorage: 'local', enforcement: 'off',
+      autoCommit: false, claimTtlHours: 4, trackManifest: false, tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'P5', path: tempDir, storage: 'local' }],
+    }), 'utf-8');
+
+    saved = {
+      MCP_TASKS_CONFIG: process.env['MCP_TASKS_CONFIG'],
+      MCP_TASKS_DB: process.env['MCP_TASKS_DB'],
+    };
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    delete process.env['MCP_TASKS_DB'];
+
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const dbPath = path.join(tasksDir, '.index.db');
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('P5');
+    const ts = new Date().toISOString();
+
+    // P5-001: task for area/tags/type tests
+    idx.upsertTask({
+      schema_version: 1, id: 'P5-001', title: 'Field editing task', type: 'feature',
+      status: 'todo', priority: 'medium', project: 'P5', tags: [], complexity: 1,
+      complexity_manual: false, why: 'p5-03 test', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'P5-001.md',
+    });
+
+    idx.close();
+
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  // ── area ─────────────────────────────────────────────────────────────────
+
+  it('AC-1: PATCH {area:"client"} returns 200 with updated area', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ area: 'client' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as P503TaskShape;
+    expect(task.id).toBe('P5-001');
+    expect(task.area).toBe('client');
+  });
+
+  it('AC-1: Persistence confirmed — GET /api/tasks shows area=client', async () => {
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as P503TaskShape[];
+    const t = tasks.find(t => t.id === 'P5-001');
+    expect(t?.area).toBe('client');
+  });
+
+  it('AC-1: PATCH {area:"banana"} returns 400 INVALID_FIELD', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ area: 'banana' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  // ── tags ─────────────────────────────────────────────────────────────────
+
+  it('AC-2: PATCH {tags:["x","y"]} returns 200 and persists tags', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: ['x', 'y'] }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as P503TaskShape;
+    expect(task.tags).toEqual(expect.arrayContaining(['x', 'y']));
+  });
+
+  it('AC-2: Persistence confirmed — GET /api/tasks shows tags set', async () => {
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as P503TaskShape[];
+    const t = tasks.find(t => t.id === 'P5-001');
+    expect(t?.tags).toEqual(expect.arrayContaining(['x', 'y']));
+  });
+
+  it('AC-2: PATCH {tags:[...21 items]} returns 400 over-cap', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: Array.from({ length: 21 }, (_, i) => `tag${i}`) }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-2: PATCH {tags:[""]} returns 400 (blank/empty tag)', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: [''] }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-2: PATCH a tag containing a control character (NUL) returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: ['ok', `bad${String.fromCharCode(0)}tag`] }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  // ── milestone length cap ───────────────────────────────────────────────────
+
+  it('AC-8: PATCH an over-long milestone id (>200 chars) returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: 'x'.repeat(201) }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  // ── type ──────────────────────────────────────────────────────────────────
+
+  it('AC-3: PATCH {type:"bug"} returns 200 with updated type', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'bug' }),
+    });
+    expect(res.status).toBe(200);
+    const task = await res.json() as P503TaskShape;
+    expect(task.type).toBe('bug');
+  });
+
+  it('AC-3: PATCH {type:"invalid"} returns 400 INVALID_FIELD', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'invalid' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-3: Persistence confirmed — GET /api/tasks shows type=bug', async () => {
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as P503TaskShape[];
+    const t = tasks.find(t => t.id === 'P5-001');
+    expect(t?.type).toBe('bug');
+  });
+
+  // ── reject project/status ────────────────────────────────────────────────
+
+  it('AC-4: PATCH {project:"MCPAT"} returns 400 INVALID_FIELD', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: 'MCPAT' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  it('AC-4: PATCH {status:"done"} returns 400 INVALID_FIELD', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'done' }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+});

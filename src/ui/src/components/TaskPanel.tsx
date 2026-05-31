@@ -17,10 +17,12 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import type { Task, PanelState, TaskStatus, TaskPriority } from '../types'
+import type { Task, PanelState, TaskStatus, TaskPriority, TaskArea, TaskType } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
 import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr } from '../api'
+import { useMilestones } from '../hooks/useMilestones'
+import { milestoneProject } from '../lib/milestone'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,8 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
 }
 
 const PRIORITIES: TaskPriority[] = ['critical', 'high', 'medium', 'low']
+const AREAS: TaskArea[] = ['client', 'personal', 'outsource', 'internal']
+const TASK_TYPES: TaskType[] = ['feature', 'bug', 'chore', 'spike', 'refactor', 'spec', 'plan']
 
 // ─── props ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +76,7 @@ interface Props {
 export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX.Element | null {
   const scrollRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
+  const { milestones } = useMilestones()
 
   const isOpen   = panel !== null
   const mode     = panel?.mode ?? 'peek'
@@ -82,11 +87,19 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   // Inline error message for surfacing mutation rejections
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Edit state — local draft values committed on blur
+  // Edit state — local draft values committed on blur / change
   const [editTitle, setEditTitle]             = useState<string | null>(null)
   const [editWhy, setEditWhy]                 = useState<string | null>(null)
   const [editPriority, setEditPriority]       = useState<TaskPriority | null>(null)
   const [editEstimate, setEditEstimate]       = useState<string | null>(null)
+  const [editArea, setEditArea]               = useState<boolean>(false)
+  const [editType, setEditType]               = useState<boolean>(false)
+  const [editMilestone, setEditMilestone]     = useState<boolean>(false)
+  const [tagInput, setTagInput]               = useState<string>('')
+  // Optimistic local tag draft — tags are accumulative (add to the existing set), so deriving the
+  // next array from server props at event time can clobber a sibling tag if two edits fire before
+  // a refetch lands. Hold the in-flight array locally and roll back on error (overview §5 / AC9).
+  const [draftTags, setDraftTags]             = useState<string[] | null>(null)
 
   // Reset edit state when the task changes
   useEffect(() => {
@@ -94,6 +107,11 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     setEditWhy(null)
     setEditPriority(null)
     setEditEstimate(null)
+    setEditArea(false)
+    setEditType(false)
+    setEditMilestone(false)
+    setTagInput('')
+    setDraftTags(null)
     setErrorMsg(null)
   }, [taskId])
 
@@ -116,11 +134,15 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   // ── helpers ─────────────────────────────────────────────────────────────
 
-  function invalidateCaches(): Promise<unknown[]> {
-    return Promise.all([
+  function invalidateCaches(extra?: string[]): Promise<unknown[]> {
+    const keys: Array<Promise<void>> = [
       queryClient.invalidateQueries({ queryKey: ['tasks'] }),
       queryClient.invalidateQueries({ queryKey: ['today'] }),
-    ])
+    ]
+    if (extra?.includes('milestones')) {
+      keys.push(queryClient.invalidateQueries({ queryKey: ['milestones'] }))
+    }
+    return Promise.all(keys)
   }
 
   function surfaceError(err: unknown): void {
@@ -132,11 +154,14 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   // ── PATCH helpers ────────────────────────────────────────────────────────
 
-  const commitField = useCallback(async (fields: { title?: string; why?: string; priority?: TaskPriority; estimate_hours?: number }): Promise<void> => {
+  const commitField = useCallback(async (
+    fields: { title?: string; why?: string; priority?: TaskPriority; estimate_hours?: number; area?: TaskArea | null; tags?: string[]; type?: TaskType; milestone?: string | null },
+    extra?: string[],
+  ): Promise<void> => {
     if (!task) return
     try {
       await updateTask(task.id, fields)
-      await invalidateCaches()
+      await invalidateCaches(extra)
       setErrorMsg(null)
     } catch (err) {
       surfaceError(err)
@@ -262,6 +287,70 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     await commitField({ estimate_hours: num })
   }
 
+  // Area select commit
+  async function handleAreaChange(a: string): Promise<void> {
+    if (!task) return
+    setEditArea(false)
+    const newArea = a === '' ? null : (a as TaskArea)
+    if (newArea === (task.area ?? null)) return
+    await commitField({ area: newArea })
+  }
+
+  // Type select commit
+  async function handleTypeChange(t: string): Promise<void> {
+    if (!task) return
+    setEditType(false)
+    const newType = t as TaskType
+    if (newType === task.type) return
+    await commitField({ type: newType })
+  }
+
+  // Milestone select commit
+  async function handleMilestoneChange(m: string): Promise<void> {
+    if (!task) return
+    setEditMilestone(false)
+    const newMilestone = m === '' ? null : m
+    if (newMilestone === (task.milestone ?? null)) return
+    await commitField({ milestone: newMilestone }, ['milestones'])
+  }
+
+  // Current tag set — the optimistic draft while a write is in flight, else server truth.
+  const currentTags = draftTags ?? task?.tags ?? task?.labels ?? []
+
+  // Commit a tag array optimistically: patch local state immediately, roll back on error so a
+  // rejected PATCH never leaves the panel showing an unsaved chip set (AC9). Reads the next array
+  // from `currentTags` (not stale props), so rapid successive edits can't clobber a sibling tag.
+  async function commitTags(next: string[]): Promise<void> {
+    if (!task) return
+    const prev = currentTags
+    setDraftTags(next)
+    try {
+      await updateTask(task.id, { tags: next })
+      await invalidateCaches()
+      setDraftTags(null) // refetch landed — server is the source of truth again
+      setErrorMsg(null)
+    } catch (err) {
+      setDraftTags(prev) // rollback the optimistic edit
+      surfaceError(err)
+    }
+  }
+
+  // Tag add (Enter / blur)
+  async function handleTagAdd(): Promise<void> {
+    if (!task) return
+    const trimmed = tagInput.trim()
+    if (!trimmed) { setTagInput(''); return }
+    if (currentTags.includes(trimmed)) { setTagInput(''); return }
+    setTagInput('')
+    await commitTags([...currentTags, trimmed])
+  }
+
+  // Tag remove
+  async function handleTagRemove(tag: string): Promise<void> {
+    if (!task) return
+    await commitTags(currentTags.filter(t => t !== tag))
+  }
+
   // ── render ──────────────────────────────────────────────────────────────
 
   const statusDotClass = task ? (STATUS_DOT[task.status] ?? 'bg-ink-muted') : 'bg-ink-muted'
@@ -362,11 +451,31 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
             {/* Area chip + priority (editable) + status badge + estimate (editable) */}
             <div className="flex flex-wrap items-center gap-2">
-              {task.area && (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-surface-2 text-ink-2">
-                  <span className={`w-1.5 h-1.5 rounded-full ${areaDotClass}`} />
-                  {task.area}
-                </span>
+              {/* Area — click to edit */}
+              {editArea ? (
+                <select
+                  autoFocus
+                  value={task.area ?? ''}
+                  onChange={(e) => { void handleAreaChange(e.target.value) }}
+                  onBlur={() => setEditArea(false)}
+                  className="text-xs bg-surface-2 border border-surface-3 rounded px-1 py-0.5 outline-none focus:border-accent"
+                  aria-label="Select area"
+                >
+                  <option value="">(none)</option>
+                  {AREAS.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  onClick={() => setEditArea(true)}
+                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100 cursor-pointer"
+                  title="Click to change area"
+                  aria-label={task.area ? `Area: ${task.area} — click to edit` : 'Set area — click to edit'}
+                >
+                  {task.area && <span className={`w-1.5 h-1.5 rounded-full ${areaDotClass}`} />}
+                  {task.area ?? '+ area'}
+                </button>
               )}
 
               {/* Priority — click cycles through options */}
@@ -426,6 +535,66 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                   aria-label={task.estimate_hours != null ? `Estimate: ${task.estimate_hours}h — click to edit` : 'Add estimate — click to edit'}
                 >
                   {task.estimate_hours != null ? `${task.estimate_hours}h` : '+ est'}
+                </button>
+              )}
+            </div>
+
+            {/* Type + Milestone row */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Type — click to edit */}
+              {editType ? (
+                <select
+                  autoFocus
+                  value={task.type}
+                  onChange={(e) => { void handleTypeChange(e.target.value) }}
+                  onBlur={() => setEditType(false)}
+                  className="text-xs bg-surface-2 border border-surface-3 rounded px-1 py-0.5 outline-none focus:border-accent"
+                  aria-label="Select task type"
+                >
+                  {TASK_TYPES.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              ) : (
+                <button
+                  onClick={() => setEditType(true)}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100 cursor-pointer"
+                  title="Click to change type"
+                  aria-label={`Type: ${task.type} — click to edit`}
+                >
+                  {task.type}
+                </button>
+              )}
+
+              {/* Milestone — click to edit */}
+              {editMilestone ? (
+                <select
+                  autoFocus
+                  value={task.milestone ?? ''}
+                  onChange={(e) => { void handleMilestoneChange(e.target.value) }}
+                  onBlur={() => setEditMilestone(false)}
+                  className="text-xs bg-surface-2 border border-surface-3 rounded px-1 py-0.5 outline-none focus:border-accent"
+                  aria-label="Select milestone"
+                >
+                  <option value="">(none)</option>
+                  {/* Scope options to the task's own project — milestones live in a per-project
+                      store keyed by ID prefix; a task can only belong to a same-project milestone. */}
+                  {milestones
+                    .filter(m => milestoneProject(m) === (task.project ?? task.id.split('-')[0]))
+                    .map(m => (
+                      <option key={m.id} value={m.id}>{m.title}</option>
+                    ))}
+                </select>
+              ) : (
+                <button
+                  onClick={() => setEditMilestone(true)}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100 cursor-pointer"
+                  title="Click to assign milestone"
+                  aria-label={task.milestone ? `Milestone: ${task.milestone} — click to edit` : 'Assign milestone — click to edit'}
+                >
+                  {task.milestone
+                    ? (milestones.find(m => m.id === task.milestone)?.title ?? task.milestone)
+                    : '+ milestone'}
                 </button>
               )}
             </div>
@@ -529,21 +698,41 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
               </Section>
             )}
 
-            {/* Tags — uses task.tags (epic §4) or falls back to task.labels */}
-            {((task.tags ?? task.labels) ?? []).length > 0 && (
-              <Section title="Tags">
-                <div className="flex flex-wrap gap-1">
-                  {(task.tags ?? task.labels ?? []).map(l => (
-                    <span
-                      key={l}
-                      className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-surface-2 text-ink-2"
+            {/* Tags — chip editor: add + remove per tag */}
+            <Section title="Tags">
+              <div className="flex flex-wrap gap-1 items-center">
+                {currentTags.map(tag => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs bg-surface-2 text-ink-2"
+                  >
+                    {tag}
+                    <button
+                      onClick={() => { void handleTagRemove(tag) }}
+                      className="text-ink-faint hover:text-status-red transition-colors duration-100 leading-none"
+                      aria-label={`Remove tag ${tag}`}
                     >
-                      {l}
-                    </span>
-                  ))}
-                </div>
-              </Section>
-            )}
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {/* Add tag input */}
+                <input
+                  type="text"
+                  value={tagInput}
+                  maxLength={40}
+                  placeholder="+ tag"
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); void handleTagAdd() }
+                    if (e.key === 'Escape') setTagInput('')
+                  }}
+                  onBlur={() => { void handleTagAdd() }}
+                  className="w-16 text-xs bg-transparent text-ink-faint placeholder-ink-faint border-b border-surface-3 focus:border-accent outline-none px-1 py-0.5"
+                  aria-label="Add tag — press Enter to confirm"
+                />
+              </div>
+            </Section>
 
             {/* Status history — detail mode only */}
             {!isPeek && task.transitions && task.transitions.length > 0 && (
