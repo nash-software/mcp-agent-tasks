@@ -21,6 +21,7 @@ import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
 import { PRI_RANK } from '../lib/format'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { isCommittedBucket } from '../lib/today-buckets'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -125,11 +126,9 @@ export function TodayView({
   // Committed list: all scheduled today excluding the hero, then matchFilter.
   const committedList = sortCommitted(
     committed
-      .filter(t => t.status !== 'in_progress')
-      // Drafts scheduled for today are returned by getTasksByScheduledDate AND the all-drafts query
-      // that feeds "Needs your call". Exclude them here so a single id never renders in two buckets
-      // (which made selecting it highlight both rows). Drafts surface only under "Needs your call".
-      .filter(t => t.status !== 'draft')
+      // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
+      // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
+      .filter(isCommittedBucket)
       .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
