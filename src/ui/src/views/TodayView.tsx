@@ -126,6 +126,10 @@ export function TodayView({
   const committedList = sortCommitted(
     committed
       .filter(t => t.status !== 'in_progress')
+      // Drafts scheduled for today are returned by getTasksByScheduledDate AND the all-drafts query
+      // that feeds "Needs your call". Exclude them here so a single id never renders in two buckets
+      // (which made selecting it highlight both rows). Drafts surface only under "Needs your call".
+      .filter(t => t.status !== 'draft')
       .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
   )
 
@@ -357,7 +361,7 @@ export function TodayView({
                   task={task}
                   mode="candidate"
                   selected={selectedTaskId === task.id}
-                  onClick={() => onSelectTask?.(task.id)}
+                  onClick={() => { onSelectTask?.(task.id); handleOpenDetail(task) }}
                   onCommit={() => handleCommit(task)}
                 />
               ))}
@@ -394,7 +398,7 @@ export function TodayView({
                       task={task}
                       mode="candidate"
                       selected={selectedTaskId === task.id}
-                      onClick={() => onSelectTask?.(task.id)}
+                      onClick={() => { onSelectTask?.(task.id); handleOpenDetail(task) }}
                       onCommit={() => handleCommit(task)}
                     />
                   ))}

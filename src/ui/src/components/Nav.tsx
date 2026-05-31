@@ -194,7 +194,7 @@ export function Nav({
           onClick={onPaletteOpen}
           className="bg-surface-2 text-ink-muted text-xs px-3 py-1.5 rounded hover:text-ink transition-colors overflow-hidden whitespace-nowrap"
         >
-          Search {MOD}K
+          Search {MOD}+K
         </button>
       </div>
     </nav>

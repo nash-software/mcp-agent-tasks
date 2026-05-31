@@ -1106,9 +1106,15 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: projects (for action button)
+      // API: projects (for action button + project filter)
       if (pathname === '/api/projects') {
         const projects = config.projects.map(p => ({ prefix: p.prefix, path: p.path }));
+        // Include the auto-initialised global GEN project — it lives in projectIndexes but not in
+        // config.projects, so without this it never appears in the filter (P5-09 AC3).
+        const genIdx = projectIndexes.find(p => p.prefix === 'GEN');
+        if (genIdx && !projects.some(p => p.prefix === 'GEN')) {
+          projects.push({ prefix: 'GEN', path: genIdx.tasksDir });
+        }
         sendJson(res, 200, projects);
         return;
       }
