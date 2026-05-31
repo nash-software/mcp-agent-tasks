@@ -662,6 +662,30 @@ describe('P5-03 — PATCH area/tags/type fields', () => {
     expect(body.error).toMatch(/INVALID_FIELD/);
   });
 
+  it('AC-2: PATCH a tag containing a control character (NUL) returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags: ['ok', `bad${String.fromCharCode(0)}tag`] }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  // ── milestone length cap ───────────────────────────────────────────────────
+
+  it('AC-8: PATCH an over-long milestone id (>200 chars) returns 400', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/P5-001`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ milestone: 'x'.repeat(201) }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
   // ── type ──────────────────────────────────────────────────────────────────
 
   it('AC-3: PATCH {type:"bug"} returns 200 with updated type', async () => {
