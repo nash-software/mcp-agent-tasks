@@ -104,11 +104,13 @@ export function FilterBar({
           key={p.prefix}
           className={`fav-chip ${filter.projects.includes(p.prefix) ? 'active' : ''}`}
           onClick={() => onToggleProject(p.prefix)}
-          title={p.name}
+          title={p.name !== p.prefix ? `${p.prefix} — ${p.name}` : p.prefix}
           type="button"
         >
           <Star size={11} className="fav-chip-star" />
-          <span className="fc-prefix">{p.prefix}</span>
+          <span className="fc-prefix">
+            {p.name && p.name !== p.prefix ? `${p.prefix} — ${p.name}` : p.prefix}
+          </span>
           {projectCounts[p.prefix] ? <span className="fc-count">{projectCounts[p.prefix]}</span> : null}
         </button>
       ))}
@@ -142,7 +144,7 @@ export function FilterBar({
                     >
                       <Checkbox on={filter.projects.includes(p.prefix)} />
                       <span className="fpr-prefix">{p.prefix}</span>
-                      <span className="fpr-name">{p.name}</span>
+                      <span className="fpr-name">{p.name && p.name !== p.prefix ? `${p.prefix} — ${p.name}` : p.prefix}</span>
                       {p.area && <AreaDot area={p.area} />}
                     </button>
                     <button

@@ -178,9 +178,14 @@ export function App(): React.JSX.Element {
     const prefixes = new Set<string>()
     for (const t of allTasks) if (t.project) prefixes.add(t.project)
     for (const p of projectEntries) prefixes.add(p.prefix)
+    // Build a lookup so the FilterBar can show "PREFIX — Name" when a name exists (MCPAT-063).
+    const nameByPrefix = new Map(projectEntries.map(p => [p.prefix, p.name]))
     return Array.from(prefixes)
       .sort((a, b) => a.localeCompare(b))
-      .map(prefix => ({ prefix, name: prefix, area: areaMap[prefix] ?? null }))
+      .map(prefix => {
+        const projectName = nameByPrefix.get(prefix)
+        return { prefix, name: projectName ?? prefix, area: areaMap[prefix] ?? null }
+      })
   }, [allTasks, projectEntries, areaMap])
 
   const toggleProject = useCallback((prefix: string): void => {
