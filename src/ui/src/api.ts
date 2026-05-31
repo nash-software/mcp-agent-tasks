@@ -114,11 +114,17 @@ export async function scheduleTask(id: string, date: string | null): Promise<Tas
   return res.json() as Promise<Task>
 }
 
-export async function quickCapture(text: string): Promise<{ taskId: string; project: string }> {
+export async function quickCapture(
+  text: string,
+  context?: string,
+): Promise<{ taskId: string; project: string }> {
+  // P5-06: thread the dashboard's active project prefix as a routing bias. The P4-06 backend reads
+  // `context` as a STRING prefix and validates it against known projects; an explicit `#PREFIX` in the
+  // text still wins server-side, so context is only a tiebreaker for ambiguous captures.
   const res = await fetch('/api/capture/quick', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(context ? { text, context } : { text }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }

@@ -15,9 +15,11 @@ interface Props {
   onExpand: (text: string) => void
   /** Called by App to register the focus function so Ctrl+Space can target this input. */
   registerFocus: (fn: () => void) => void
+  /** Active project (single selected filter) — threaded to quickCapture as a routing bias (P5-06). */
+  activeProject?: string
 }
 
-export function CaptureOverlay({ onExpand, registerFocus }: Props): React.JSX.Element {
+export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props): React.JSX.Element {
   const [text, setText] = useState('')
   const [retryHint, setRetryHint] = useState(false)
   const [flash, setFlash] = useState(false)
@@ -55,7 +57,8 @@ export function CaptureOverlay({ onExpand, registerFocus }: Props): React.JSX.El
 
   // TanStack mutation for quick capture
   const captureMutation = useMutation({
-    mutationFn: (t: string) => quickCapture(t),
+    // Thread the active project prefix as a routing-bias context (P5-06); #PREFIX still wins server-side.
+    mutationFn: (t: string) => quickCapture(t, activeProject),
     onSuccess: () => {
       setText('')
       setRetryHint(false)

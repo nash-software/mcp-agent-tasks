@@ -481,6 +481,7 @@ export function App(): React.JSX.Element {
       <CaptureOverlay
         onExpand={handleCaptureExpand}
         registerFocus={capture.registerFocus}
+        activeProject={filter.projects.length === 1 ? filter.projects[0] : undefined}
       />
 
       {/* left nav */}
