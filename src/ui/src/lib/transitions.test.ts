@@ -52,9 +52,13 @@ describe('isValidBoardTransition', () => {
     expect(isValidBoardTransition('done', 'blocked')).toBe(false)
   })
 
-  // closed / archived — no valid board transitions
-  it('closed → todo is INVALID (closed is terminal)', () => {
-    expect(isValidBoardTransition('closed', 'todo')).toBe(false)
+  // closed is reopenable (P5-05); archived stays terminal
+  it('closed → todo and closed → in_progress are VALID (reopen, P5-05)', () => {
+    expect(isValidBoardTransition('closed', 'todo')).toBe(true)
+    expect(isValidBoardTransition('closed', 'in_progress')).toBe(true)
+  })
+  it('closed → done is INVALID (not a reopen target)', () => {
+    expect(isValidBoardTransition('closed', 'done')).toBe(false)
   })
   it('archived → in_progress is INVALID (archived is terminal)', () => {
     expect(isValidBoardTransition('archived', 'in_progress')).toBe(false)
