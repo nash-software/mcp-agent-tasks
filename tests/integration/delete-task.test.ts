@@ -89,6 +89,14 @@ describe('P5-04 — DELETE /api/tasks/:id + full-field create', () => {
     expect(res.status).toBe(400);
   });
 
+  it('AC2: out-of-range estimate_hours → 400 (security: upper bound)', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'huge est', project: 'DEL', estimate_hours: 1e308 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('AC3: DELETE removes markdown + index, and reconcile does not resurrect', async () => {
     const { id } = await createTask({ title: 'To delete', project: 'DEL' });
     const mdPath = path.join(tasksDir, `${id}.md`);

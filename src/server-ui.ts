@@ -1260,8 +1260,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               sendJson(res, 400, { error: 'INVALID_FIELD', message: `area must be one of: ${[...VALID_CREATE_AREAS].join(', ')}` });
               return;
             }
-            if (body.estimate_hours !== undefined && (typeof body.estimate_hours !== 'number' || body.estimate_hours < 0)) {
-              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'estimate_hours must be a non-negative number' });
+            if (body.estimate_hours !== undefined && (typeof body.estimate_hours !== 'number' || !Number.isFinite(body.estimate_hours) || body.estimate_hours < 0 || body.estimate_hours > 9999)) {
+              sendJson(res, 400, { error: 'INVALID_FIELD', message: 'estimate_hours must be a number between 0 and 9999' });
               return;
             }
             if (body.why !== undefined && (typeof body.why !== 'string' || body.why.length > 1000)) {
@@ -1640,7 +1640,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           // relative paths) so existsSync doesn't false-negative against CWD and leave an orphan that
           // reconcile would resurrect (codex F1). Index-only tasks (no markdown) just lose the row.
           const mdPath = isAbsolute(task.file_path) ? task.file_path : join(pIdx.tasksDir, task.file_path);
-          if (existsSync(mdPath)) {
+          // Defense-in-depth: only archive a file that resolves inside the project tasks dir, in case a
+          // legacy/absolute file_path in the index points elsewhere (security scan: containment boundary).
+          if (existsSync(mdPath) && resolve(mdPath).startsWith(resolve(pIdx.tasksDir))) {
             new MarkdownStore().delete(mdPath);
           }
           pIdx.index.deleteTask(taskId);
