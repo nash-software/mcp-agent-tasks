@@ -145,7 +145,12 @@ export function applyCollisionFixes(plans: CollisionPlan[]): { reassigned: numbe
       if (fs.existsSync(newPath)) {
         throw new Error(`Refusing to overwrite existing file ${newPath}`);
       }
-      fs.writeFileSync(newPath, updated, 'utf-8');
+      // Atomic write (temp + rename, per the store's write protocol) so a crash mid-migration can
+      // never leave a partially-written task file. If it dies after the rename but before the unlink,
+      // the two files have DIFFERENT ids (old + new) — no new collision, just a stray to clean up.
+      const tmp = `${newPath}.tmp-${r.newId}`;
+      fs.writeFileSync(tmp, updated, 'utf-8');
+      fs.renameSync(tmp, newPath);
       if (path.resolve(newPath) !== path.resolve(r.path)) {
         fs.rmSync(r.path);
       }

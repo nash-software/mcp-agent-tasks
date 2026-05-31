@@ -15,7 +15,7 @@ import { SqliteIndex } from '../../src/store/sqlite-index.js';
 import { ManifestWriter } from '../../src/store/manifest-writer.js';
 import { Reconciler } from '../../src/store/reconciler.js';
 import { McpTasksError } from '../../src/types/errors.js';
-import { planCollisionFixes, applyCollisionFixes, type StoreRef } from '../../src/store/id-collision-fixer.js';
+import { planCollisionFixes, applyCollisionFixes, findReferences, type StoreRef } from '../../src/store/id-collision-fixer.js';
 
 function md(id: string, title: string, status = 'todo', body = ''): string {
   return `---\nschema_version: 1\nid: ${id}\ntitle: "${title}"\nstatus: ${status}\ntype: feature\npriority: medium\nproject: ${id.split('-')[0]}\ncreated: 2026-01-01T00:00:00.000Z\nupdated: 2026-01-01T00:00:00.000Z\n---\n${body}`;
@@ -117,5 +117,30 @@ describe('P5-10 — ID-collision integrity', () => {
 
     // idempotent: re-planning finds nothing
     expect(planCollisionFixes(stores)).toHaveLength(0);
+  });
+
+  // AC4 (refinement) — identical-content duplicates are NOT flagged as collisions (codex F3)
+  it('AC4: identical-content files with the same id are not flagged', () => {
+    const same = md('TEST-007', 'Same', 'todo', 'identical body');
+    fs.writeFileSync(path.join(tasksDir, 'TEST-007.md'), same);
+    fs.writeFileSync(path.join(tasksDir, 'TEST-007-copy.md'), same);
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const reconciler = new Reconciler(idx, tasksDir, 'TEST');
+    reconciler.reconcile();
+    warn.mockRestore();
+    expect(reconciler.getCollisions()).toHaveLength(0);
+  });
+
+  // codex F4 — references to a moving id are surfaced so apply can be gated
+  it('findReferences reports files that mention a re-IDed task elsewhere', () => {
+    fs.writeFileSync(path.join(tasksDir, 'TEST-001-real.md'), md('TEST-001', 'Real', 'in_progress', 'body'));
+    fs.writeFileSync(path.join(tasksDir, 'TEST-001.md'), md('TEST-001', 'Masked', 'todo'));
+    // Another task whose body references TEST-001
+    fs.writeFileSync(path.join(tasksDir, 'TEST-050.md'), md('TEST-050', 'Refers', 'todo', 'blocked by TEST-001 here'));
+    const stores: StoreRef[] = [{ prefix: 'TEST', tasksDir }];
+    const refs = findReferences(stores, ['TEST-001']);
+    expect(refs.some(r => r.file === 'TEST-050.md')).toBe(true);
+    // the colliding files' own `id:` lines do not count as external references
+    expect(refs.some(r => r.file === 'TEST-001.md')).toBe(false);
   });
 });

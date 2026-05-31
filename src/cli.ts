@@ -477,7 +477,8 @@ program
   .command('fix-id-collisions')
   .description('Find and repair (id, project) collisions: keep the canonical task, re-ID the others')
   .option('--apply', 'apply the fixes (default is a dry-run report)', false)
-  .action((options: { apply?: boolean }) => {
+  .option('--force', 'apply even when re-IDed tasks are referenced elsewhere (refs left for manual review)', false)
+  .action((options: { apply?: boolean; force?: boolean }) => {
     const config = loadConfig();
     const dirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
     const stores: StoreRef[] = config.projects.map(p => ({ prefix: p.prefix, tasksDir: path.join(p.path, dirName) }));
@@ -510,6 +511,15 @@ program
 
     if (!options.apply) {
       console.log(`\nDry-run only. Re-run with --apply to perform the re-ID, then rebuild affected indexes.`);
+      return;
+    }
+
+    // Safety gate: re-IDing a task referenced elsewhere leaves those references dangling. Refuse to
+    // apply when references exist unless --force is passed, so cross-references get a deliberate review.
+    if (refs.length > 0 && !options.force) {
+      console.error(`\n✗ Refusing to apply: ${refs.length} reference(s) to re-IDed tasks would be left dangling.`);
+      console.error(`  Review the references above, then re-run with --apply --force to proceed (references are left as-is for manual fixup).`);
+      process.exitCode = 1;
       return;
     }
 

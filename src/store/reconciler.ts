@@ -58,6 +58,7 @@ export class Reconciler {
     let changed = 0;
     this.collisions = [];
     const seenIds = new Map<string, string>();
+    const seenHash = new Map<string, string>();
 
     for (const file of files) {
       const filePath = path.join(this.tasksDir, file);
@@ -65,27 +66,31 @@ export class Reconciler {
         const task = this.markdownStore.read(filePath);
         if (task.project !== this.project) continue;
 
-        // Detect (id, project) collisions: two different files claiming the same id. The index PK is
-        // (id, project), so the last one upserted silently wins — surface a warning instead of failing
-        // silently, and let `agent-tasks fix-id-collisions` repair it (MCPAT-060).
+        // Hash the raw file (frontmatter + body) once — reused for both collision detection and the
+        // incremental-skip check below. Hashing the whole file (not just the body) ensures frontmatter
+        // edits are never falsely skipped (MCPAT-049 F1).
+        const fileHash = SqliteIndex.hashBody(fs.readFileSync(filePath, 'utf-8'));
+
+        // Detect (id, project) collisions: two DIFFERENT-content files claiming the same id. The index
+        // PK is (id, project), so the last one upserted silently wins — surface a warning instead of
+        // failing silently (MCPAT-060). Identical-content duplicates reconcile to the same row, so they
+        // are not flagged.
         const prevFile = seenIds.get(task.id);
         if (prevFile && prevFile !== filePath) {
-          const existing = this.collisions.find(c => c.id === task.id);
-          if (existing) {
-            if (!existing.files.includes(filePath)) existing.files.push(filePath);
-          } else {
-            this.collisions.push({ id: task.id, files: [prevFile, filePath] });
+          if (seenHash.get(task.id) !== fileHash) {
+            const existing = this.collisions.find(c => c.id === task.id);
+            if (existing) {
+              if (!existing.files.includes(filePath)) existing.files.push(filePath);
+            } else {
+              this.collisions.push({ id: task.id, files: [prevFile, filePath] });
+            }
+            console.error(`[reconciler] ID COLLISION: ${task.id} (${this.project}) — ${prevFile} & ${filePath}; last-write-wins. Run 'agent-tasks fix-id-collisions'.`);
           }
-          console.error(`[reconciler] ID COLLISION: ${task.id} (${this.project}) — ${prevFile} & ${filePath}; last-write-wins. Run 'agent-tasks fix-id-collisions'.`);
         } else {
           seenIds.set(task.id, filePath);
+          seenHash.set(task.id, fileHash);
         }
 
-        // Incremental reconcile: skip upsert only when the ENTIRE markdown file
-        // is unchanged. Hashing the raw file (frontmatter + body) — not just the
-        // body — ensures frontmatter edits (status, priority, tags, deps, git
-        // metadata) are never falsely skipped (MCPAT-049 F1).
-        const fileHash = SqliteIndex.hashBody(fs.readFileSync(filePath, 'utf-8'));
         const storedHash = this.sqliteIndex.getBodyHash(task.id);
         if (storedHash !== null && storedHash === fileHash) {
           count++;
