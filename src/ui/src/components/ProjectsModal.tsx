@@ -64,12 +64,9 @@ function FolderBrowser({ selectedPath, onSelect }: FolderBrowserProps): React.JS
   }
 
   function handleDirClick(dir: string): void {
-    const sep = browsePath
-      ? (browsePath.includes('\\') ? '\\' : '/')
-      : (dir.includes(':') ? '\\' : '/')
-    const next = browsePath ? browsePath.replace(/[/\\]?$/, sep) + dir : dir
-    setBrowsePath(next)
-    onSelect(next)
+    // `dir` is already a full absolute path — the backend returns join(real, name), not a basename.
+    setBrowsePath(dir)
+    onSelect(dir)
   }
 
   return (
@@ -108,11 +105,9 @@ function FolderBrowser({ selectedPath, onSelect }: FolderBrowserProps): React.JS
           <div className="px-3 py-2 text-xs text-ink-faint">(no sub-directories)</div>
         )}
         {!isLoading && !error && data?.dirs.map(dir => {
-          const sep = browsePath
-            ? (browsePath.includes('\\') ? '\\' : '/')
-            : (dir.includes(':') ? '\\' : '/')
-          const full = browsePath ? browsePath.replace(/[/\\]?$/, sep) + dir : dir
-          const isSelected = selectedPath === full
+          // `dir` is a full absolute path; show just the basename, navigate/select with the full path.
+          const base = dir.split(/[/\\]/).filter(Boolean).pop() ?? dir
+          const isSelected = selectedPath === dir
           return (
             <button
               key={dir}
@@ -123,8 +118,9 @@ function FolderBrowser({ selectedPath, onSelect }: FolderBrowserProps): React.JS
                   ? 'bg-accent/20 text-accent'
                   : 'text-ink-muted hover:bg-surface-3 hover:text-ink'
               }`}
+              title={dir}
             >
-              {dir}
+              {base}
             </button>
           )
         })}
