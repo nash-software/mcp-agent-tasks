@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { formatId } from './task-factory.js';
+import { escapeRegExp } from '../util/escape-regexp.js';
 
 /**
  * One-time repair for `(id, project)` collisions — two different task files claiming the same id.
@@ -76,7 +77,7 @@ function scanStore(store: StoreRef): FileInfo[] {
 }
 
 function maxIdNum(infos: FileInfo[], prefix: string): number {
-  const re = new RegExp(`^${prefix}-(\\d+)$`);
+  const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`);
   let max = 0;
   for (const i of infos) {
     const m = re.exec(i.id);
@@ -176,9 +177,10 @@ export function findReferences(stores: StoreRef[], ids: string[]): Array<{ id: s
       try { txt = fs.readFileSync(abs, 'utf-8'); } catch { continue; }
       for (const id of idSet) {
         // Skip the colliding file itself (its own `id:` line) — only count references elsewhere.
-        const re = new RegExp(`\\b${id}\\b`, 'g');
+        const esc = escapeRegExp(id);
+        const re = new RegExp(`\\b${esc}\\b`, 'g');
         const matches = txt.match(re) ?? [];
-        const ownIdLine = new RegExp(`^id:\\s*["']?${id}["']?\\s*$`, 'm').test(txt);
+        const ownIdLine = new RegExp(`^id:\\s*["']?${esc}["']?\\s*$`, 'm').test(txt);
         const threshold = ownIdLine ? 1 : 0;
         if (matches.length > threshold) hits.push({ id, file });
       }

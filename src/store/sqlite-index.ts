@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import type { Task, TaskStatus, Priority, Area, AgentStatus, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
+import { escapeRegExp } from '../util/escape-regexp.js';
 import { MAX_TRANSITIONS, MAX_COMMITS, MAX_TAGS } from './limits.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -718,7 +719,7 @@ export class SqliteIndex {
    */
   maxIdNumberForProject(prefix: string): number {
     const rows = this.db.prepare(`SELECT id FROM tasks WHERE project = ?`).all(prefix) as { id: string }[];
-    const re = new RegExp(`^${prefix}-(\\d+)$`);
+    const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`);
     let max = 0;
     for (const r of rows) {
       const m = re.exec(r.id);
@@ -732,7 +733,7 @@ export class SqliteIndex {
 
   nextId(prefix: string, tasksDir?: string): number {
     if (tasksDir && fs.existsSync(tasksDir)) {
-      const re = new RegExp(`^${prefix}-(\\d+)`);
+      const re = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)`);
       let onDiskMax = 0;
       for (const entry of fs.readdirSync(tasksDir)) {
         const m = re.exec(entry);

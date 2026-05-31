@@ -9,6 +9,7 @@ import type { ManifestWriter } from './manifest-writer.js';
 import { TaskFactory } from './task-factory.js';
 import { detectCycle } from './dependency-graph.js';
 import { MAX_TRANSITIONS } from './limits.js';
+import { escapeRegExp } from '../util/escape-regexp.js';
 
 const DEFAULT_CLAIM_TTL_HOURS = 4;
 
@@ -51,7 +52,7 @@ export class TaskStore {
    */
   private diskHasTaskId(id: string): boolean {
     try {
-      const re = new RegExp(`^${id}(-.*)?\\.md$`);
+      const re = new RegExp(`^${escapeRegExp(id)}(-.*)?\\.md$`);
       return fs.readdirSync(this.tasksDir).some(f => re.test(f));
     } catch {
       return false;
