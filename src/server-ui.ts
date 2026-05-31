@@ -1617,6 +1617,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       const taskDeleteMatch = pathname.match(/^\/api\/tasks\/([^/]+)$/);
       if (taskDeleteMatch && req.method === 'DELETE') {
         const taskId = taskDeleteMatch[1];
+        // Malformed id → 400 (AC4) — must look like a project-prefixed task id (PREFIX-NNN).
+        if (!/^[A-Za-z0-9]+-\d+$/.test(taskId)) {
+          sendError(res, 400, 'INVALID_FIELD: malformed task id');
+          return;
+        }
         const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
         const task = pIdx ? pIdx.index.getTask(taskId) : null;
         if (!pIdx || !task) {
@@ -1630,9 +1635,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         }
         try {
           // Markdown-first: archive the file when one exists (durable, recoverable), then drop the
-          // index row. Index-only tasks (no markdown on disk) just lose the row.
-          if (existsSync(task.file_path)) {
-            new MarkdownStore().delete(task.file_path);
+          // index row. Resolve a relative file_path against the project tasks dir (legacy tasks store
+          // relative paths) so existsSync doesn't false-negative against CWD and leave an orphan that
+          // reconcile would resurrect (codex F1). Index-only tasks (no markdown) just lose the row.
+          const mdPath = isAbsolute(task.file_path) ? task.file_path : join(pIdx.tasksDir, task.file_path);
+          if (existsSync(mdPath)) {
+            new MarkdownStore().delete(mdPath);
           }
           pIdx.index.deleteTask(taskId);
           sendJson(res, 200, { deleted: true, id: taskId });

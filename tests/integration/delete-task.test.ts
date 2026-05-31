@@ -118,4 +118,36 @@ describe('P5-04 — DELETE /api/tasks/:id + full-field create', () => {
     const res = await fetch(`${baseUrl}/api/tasks/DEL-999`, { method: 'DELETE' });
     expect(res.status).toBe(404);
   });
+
+  it('AC4: DELETE malformed id → 400 (codex F2)', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/not-a-valid-id-format`, { method: 'DELETE' });
+    expect(res.status).toBe(400);
+  });
+
+  it('AC3: DELETE resolves a relative file_path and still removes the markdown (codex F1)', async () => {
+    // Seed a task whose stored file_path is RELATIVE (as legacy/index-only paths are) but whose
+    // markdown actually lives in the project tasks dir. The handler must resolve it, not false-negative.
+    const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const { MarkdownStore } = await import('../../src/store/markdown-store.js');
+    const ts = new Date().toISOString();
+    const task = {
+      schema_version: 1, id: 'DEL-500', title: 'Relative path task', type: 'feature' as const,
+      status: 'todo' as const, priority: 'medium' as const, project: 'DEL', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: 'rel', file_path: 'DEL-500.md', auto_captured: false,
+    };
+    const seedIdx = new SqliteIndex(path.join(tasksDir, '.index.db'));
+    seedIdx.init();
+    // Write markdown with an ABSOLUTE path so the file lands in tasksDir, then store a RELATIVE path.
+    new MarkdownStore().write({ ...task, file_path: path.join(tasksDir, 'DEL-500.md') });
+    seedIdx.upsertTask(task); // index keeps the relative file_path
+    seedIdx.close();
+    expect(fs.existsSync(path.join(tasksDir, 'DEL-500.md'))).toBe(true);
+
+    const del = await fetch(`${baseUrl}/api/tasks/DEL-500`, { method: 'DELETE' });
+    expect(del.status).toBe(200);
+    expect(fs.existsSync(path.join(tasksDir, 'DEL-500.md'))).toBe(false);
+  });
 });

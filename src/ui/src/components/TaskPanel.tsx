@@ -354,16 +354,24 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     await commitTags(currentTags.filter(t => t !== tag))
   }
 
-  // Delete — guarded two-step (arm then confirm). On success close + invalidate; on error the task
-  // stays (no optimistic removal beyond closing) and the error surfaces (AC6/AC7).
+  // Delete — guarded two-step (arm then confirm) with optimistic removal + rollback (AC6/AC7). The
+  // row vanishes from the list caches immediately; on error the snapshot is restored and the error
+  // surfaces in the still-open panel.
   async function handleDelete(): Promise<void> {
     if (!task) return
+    const deletedId = task.id
+    const snapshot = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] })
+    queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
+      Array.isArray(old) ? old.filter(t => t.id !== deletedId) : old,
+    )
     try {
-      await deleteTask(task.id)
+      await deleteTask(deletedId)
       await invalidateCaches()
       setErrorMsg(null)
       onClose()
     } catch (err) {
+      // rollback the optimistic removal
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, data)
       setConfirmDelete(false)
       surfaceError(err)
     }
