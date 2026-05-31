@@ -131,3 +131,23 @@ the `gh pr checks` **status string**. Windows: kill `dist/server` node holders b
 - **Prefix rename** (= re-ID every task; P5-02 migrate territory).
 - Project **delete/archive** from the UI, storage-mode switching, area editing.
 - A richer fs picker (drive roots on Windows, file preview) — listing-only for now.
+
+## 11. Deviations resolved in codex round 1 + security review
+
+- **F1 (HIGH, fixed):** `writeConfig` temp name now includes a monotonic per-write counter (PID + seq) so
+  two writes in the same process can't collide on the temp path.
+- **F2 (HIGH, fixed):** `POST /api/projects` now wraps index init in try/catch; on failure it rolls the
+  config entry back (re-persist) and returns **500 `INDEX_INIT_FAILED`** (not a misleading 400), keeping
+  durable and live state consistent.
+- **F3 (MED, partially accepted + documented):** `GET /api/fs/list` **keeps returning full absolute paths**
+  for `dirs` (deliberate — returning basenames forced fragile client-side path-joining, which caused a real
+  double-join bug; full paths are the correct contract). Allowed roots **narrowed to `home + dirname(project.path)`**
+  (dropped the redundant project paths — already reachable via their parent), satisfying the
+  surface-narrowing intent. Spec §3.3/§5 updated to reflect full-path `dirs`.
+- **F4 (MED, fixed):** invalid `storage` values are now rejected with 400 instead of silently coercing to
+  `global`.
+- **Security LOW (fixed):** `isPathWithinRoots` folds case on Windows (NTFS case-insensitive → no spurious
+  403); `tasksDirName` from operator config is guarded against `..`/absolute before the `mkdirSync` join.
+- **Security PASS:** the scanner confirmed `isPathWithinRoots` is sound (prefix look-alikes blocked, symlink
+  escape defeated by realpath on both target and roots, non-absolute rejected); no file-content leak; POST
+  path validated before mkdir; rollback correct.

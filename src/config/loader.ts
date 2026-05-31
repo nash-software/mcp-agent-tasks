@@ -120,12 +120,16 @@ export function resolveConfigPath(): string {
  * truncated config.json. Mirrors the MarkdownStore atomic-write convention (critical-rules: "atomic
  * config file write via temp-file rename"). MCPAT-063 — used by the projects CRUD endpoints.
  */
+let writeConfigSeq = 0;
+
 export function writeConfig(config: McpTasksConfig, configPath: string = resolveConfigPath()): void {
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  const tmp = `${configPath}.tmp-${process.pid}`;
+  // Temp name is unique per write (PID + monotonic seq) so two writes in the same process can't collide
+  // on the temp path (codex F1). Same-dir temp keeps the rename atomic.
+  const tmp = `${configPath}.tmp-${process.pid}-${writeConfigSeq++}`;
   fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
   fs.renameSync(tmp, configPath); // atomic on POSIX + NTFS
 }

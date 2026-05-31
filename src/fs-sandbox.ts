@@ -14,10 +14,12 @@ import { isAbsolute, resolve, sep } from 'node:path';
  */
 export function isPathWithinRoots(target: string, roots: readonly string[]): boolean {
   if (!target || !isAbsolute(target)) return false;
-  const t = resolve(target);
+  // NTFS is case-insensitive — fold case on Windows so C:\Code and c:\code match (avoids spurious 403).
+  const fold = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
+  const t = fold(resolve(target));
   return roots.some((root) => {
     if (!root || !isAbsolute(root)) return false;
-    const r = resolve(root);
+    const r = fold(resolve(root));
     if (t === r) return true;
     return t.startsWith(r.endsWith(sep) ? r : r + sep);
   });

@@ -111,6 +111,14 @@ describe('MCPAT-063 — projects CRUD', () => {
     expect(res.status).toBe(400);
   });
 
+  it('invalid storage value → 400 (not silently coerced — codex F4)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefix: 'STORG', path: newProjDir, storage: 'cloud' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   // ── PATCH /api/projects/:prefix (name only) ──────────────────────────────
 
   it('PATCH updates the name and persists it atomically (re-read)', async () => {

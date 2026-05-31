@@ -1131,6 +1131,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const prefix = typeof body.prefix === 'string' ? body.prefix.trim() : '';
             const projPath = typeof body.path === 'string' ? body.path.trim() : '';
             const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined;
+            // Strict storage validation — reject unknown values rather than silently coercing (codex F4).
+            if (body.storage !== undefined && body.storage !== 'global' && body.storage !== 'local') {
+              sendError(res, 400, "INVALID_FIELD: storage must be 'global' or 'local'");
+              return;
+            }
             const storage: StorageMode = body.storage === 'local' ? 'local' : 'global';
 
             // Prefix: uppercase, starts with a letter (matches the PREFIX-NNN task-id grammar).
@@ -1156,12 +1161,17 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             try { stat = statSync(projPath); } catch { sendError(res, 400, `INVALID_FIELD: path does not exist: ${projPath}`); return; }
             if (!stat.isDirectory()) { sendError(res, 400, 'INVALID_FIELD: path must be a directory'); return; }
 
-            // Create the tasks dir, then persist config atomically (durable source of truth) before
-            // touching the derived index — if config write fails, roll back the in-memory push.
+            // Guard the operator-config tasksDirName against traversal before joining (security LOW —
+            // a tampered config must not let mkdirSync escape the registered project path).
             const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
+            if (tasksDirName.includes('..') || isAbsolute(tasksDirName)) {
+              sendError(res, 400, 'INVALID_CONFIG: tasksDirName must be a simple relative directory name');
+              return;
+            }
             const tasksDir = join(projPath, tasksDirName);
             mkdirSync(tasksDir, { recursive: true });
 
+            // Persist config atomically (durable source of truth) first, then init the derived index.
             config.projects.push({ prefix, ...(name ? { name } : {}), path: projPath, storage });
             try {
               writeConfig(config);
@@ -1171,12 +1181,21 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               return;
             }
 
-            // Init the index and push into the live array (no restart). Derived from config, so a failure
-            // here self-heals on the next reconcile/restart.
-            const dbPath = resolveServerDbPath(tasksDir, config, prefix);
-            const idx = new SqliteIndex(dbPath);
-            idx.init();
-            projectIndexes.push({ prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir });
+            // Init the index + push into the live array (no restart). On failure, roll the config entry
+            // back (re-persist) so the durable state matches the live state, and report 500 (codex F2) —
+            // not a misleading 400. (A surviving config entry would otherwise self-heal only on restart.)
+            try {
+              const dbPath = resolveServerDbPath(tasksDir, config, prefix);
+              const idx = new SqliteIndex(dbPath);
+              idx.init();
+              projectIndexes.push({ prefix, index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir });
+            } catch (initErr) {
+              config.projects.pop();
+              try { writeConfig(config); } catch { /* best-effort rollback; reconcile corrects on restart */ }
+              const m = initErr instanceof Error ? initErr.message : String(initErr);
+              sendJson(res, 500, { error: 'INDEX_INIT_FAILED', message: `project registered but index init failed: ${m}` });
+              return;
+            }
 
             sendJson(res, 201, { prefix, ...(name ? { name } : {}), path: projPath });
           } catch (err) {
@@ -1243,10 +1262,12 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       // Allowed roots = the user home + each registered project's path and its parent. With no `path`,
       // returns the roots themselves (top-level choices). Listing-only: directories, no file contents.
       if (pathname === '/api/fs/list' && req.method === 'GET') {
-        // Canonicalise roots (realpath) so the comparison is symlink/case-safe — e.g. macOS /tmp →
-        // /private/tmp, Windows drive-letter case. Non-existent roots fall back to resolve().
+        // Allowed roots = home + each project's PARENT dir (codex F3 — narrower than the project paths
+        // themselves, which are redundant: a project at <parent>/x is already reachable under <parent>).
+        // Canonicalise (realpath) so the comparison is symlink/case-safe — macOS /tmp → /private/tmp,
+        // Windows drive-letter case. Non-existent roots fall back to resolve().
         const roots = Array.from(new Set(
-          [homedir(), ...config.projects.flatMap(p => [p.path, dirname(p.path)])]
+          [homedir(), ...config.projects.map(p => dirname(p.path))]
             .filter(r => typeof r === 'string' && isAbsolute(r))
             .map(r => { try { return realpathSync(r); } catch { return resolve(r); } }),
         ));
