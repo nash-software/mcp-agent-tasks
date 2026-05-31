@@ -117,6 +117,8 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
   const [newProject, setNewProject] = useState('')
   const [newDue, setNewDue]         = useState('')
   const [formError, setFormError]   = useState<string | null>(null)
+  // P5-06: surface a visible error when a milestone-assign fails (was a silent rollback).
+  const [assignError, setAssignError] = useState<string | null>(null)
 
   // Per-milestone picker open state (milestoneId or null)
   const [pickerOpen, setPickerOpen] = useState<string | null>(null)
@@ -155,11 +157,13 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
       }
       return { previous }
     },
-    onError: (_err, _vars, context) => {
-      // Roll back on error
+    onError: (err: Error, _vars, context) => {
+      // Roll back on error AND surface it (P5-06: was a silent rollback — overview §5).
       if (context?.previous) {
         queryClient.setQueryData(['tasks'], context.previous)
       }
+      setAssignError(err.message || 'Failed to assign task to milestone')
+      setTimeout(() => setAssignError(null), 5000)
     },
     onSettled: () => {
       // Refetch to ensure consistency
@@ -218,6 +222,22 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
 
   return (
     <div className="space-y-4">
+      {/* P5-06: visible error when a milestone-assign fails (was a silent rollback) */}
+      {assignError && (
+        <div
+          role="alert"
+          className="px-3 py-2 rounded text-xs text-status-red bg-status-red/10 border border-status-red/20 flex items-start gap-2"
+        >
+          <span className="flex-1 leading-relaxed">{assignError}</span>
+          <button
+            onClick={() => setAssignError(null)}
+            className="text-status-red/70 hover:text-status-red flex-shrink-0 leading-none"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {/* Header */}
       <ViewHeader
         title="Roadmap"
