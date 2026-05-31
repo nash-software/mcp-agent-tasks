@@ -19,6 +19,7 @@
         "required": ["prefix", "path", "storage"],
         "properties": {
           "prefix": { "type": "string" },
+          "name": { "type": "string", "maxLength": 80, "description": "Optional friendly display name; falls back to the prefix when unset." },
           "path": { "type": "string", "description": "Absolute path to the project root. For the GEN global project, set to the user home subdirectory (e.g. ~/.mcp-tasks)." },
           "storage": { "type": "string", "enum": ["global", "local"] }
         }

@@ -290,6 +290,7 @@ export async function closeBatch(project?: string): Promise<BatchCloseResponse> 
 
 export interface ProjectEntry {
   prefix: string
+  name?: string
   path: string
 }
 

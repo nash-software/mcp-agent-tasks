@@ -29,8 +29,18 @@ describe('buildProjectsList', () => {
     expect(out.find(p => p.prefix === 'GEN')?.path).toBe('/p/gen-configured');
   });
 
-  it('returns prefix+path only (no extra config fields leak through)', () => {
+  it('returns prefix+path only when no name is set (no extra config fields leak through)', () => {
     const out = buildProjectsList([{ prefix: 'X', path: '/x' }], null);
     expect(out).toEqual([{ prefix: 'X', path: '/x' }]);
+  });
+
+  it('passes the optional name through when present (MCPAT-063)', () => {
+    const out = buildProjectsList([{ prefix: 'ACR', name: 'Agent Control Room', path: '/p/acr' }], null);
+    expect(out).toEqual([{ prefix: 'ACR', name: 'Agent Control Room', path: '/p/acr' }]);
+  });
+
+  it('omits the name key entirely when unset (does not emit name: undefined)', () => {
+    const out = buildProjectsList([{ prefix: 'Y', path: '/y' }], null);
+    expect(Object.prototype.hasOwnProperty.call(out[0], 'name')).toBe(false);
   });
 });
