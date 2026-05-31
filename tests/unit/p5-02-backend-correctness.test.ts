@@ -6,8 +6,14 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { sanitizeForPrompt } from '../../src/server-ui.js';
+import { sanitizeForPrompt, migrateTaskId } from '../../src/server-ui.js';
+import { SqliteIndex } from '../../src/store/sqlite-index.js';
+import { MarkdownStore } from '../../src/store/markdown-store.js';
+import { MilestoneRepository } from '../../src/store/milestone-repository.js';
+import { Reconciler } from '../../src/store/reconciler.js';
+import type { Task } from '../../src/types/task.js';
 
 const serverSrc = fs.readFileSync(
   path.join(process.cwd(), 'src', 'server-ui.ts'),
@@ -75,5 +81,56 @@ describe('P5-02 K1 — rerouteTask is markdown-first (no silent reconcile-revert
     expect(mdWrite).toBeGreaterThanOrEqual(0);
     expect(mdUnlink).toBeGreaterThan(mdWrite);          // remove old markdown after writing new
     expect(idxUpdate).toBeGreaterThan(mdUnlink);        // index update is AFTER markdown (markdown-first)
+  });
+});
+
+describe('P5-02 K1 — reroute SURVIVES a reconcile (behavioral, the data-loss fix)', () => {
+  function makeTask(id: string, filePath: string): Task {
+    const now = new Date().toISOString();
+    return {
+      schema_version: 1, id, title: `task ${id}`, type: 'feature', status: 'todo',
+      priority: 'medium', project: id.split('-')[0], tags: [], complexity: 1,
+      complexity_manual: false, why: 'reroute test', created: now, updated: now,
+      last_activity: now, claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
+      parent: null, children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: 'body', file_path: filePath,
+    };
+  }
+
+  it('migrates GEN→COND markdown-first and the task is NOT resurrected by reconcile', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-reroute-'));
+    const genDir = path.join(tmp, 'GEN'); const condDir = path.join(tmp, 'COND');
+    fs.mkdirSync(genDir, { recursive: true }); fs.mkdirSync(condDir, { recursive: true });
+
+    const idx = new SqliteIndex(path.join(tmp, '.index.db'));
+    idx.init(); idx.ensureProject('GEN'); idx.ensureProject('COND');
+    const mrepo = new MilestoneRepository(idx.getRawDb());
+    const fromProject = { prefix: 'GEN', index: idx, milestoneRepo: mrepo, tasksDir: genDir };
+    const toProject = { prefix: 'COND', index: idx, milestoneRepo: mrepo, tasksDir: condDir };
+
+    // Seed a GEN task: markdown (source of truth) + index.
+    const genMd = path.join(genDir, 'GEN-001.md');
+    const task = makeTask('GEN-001', genMd);
+    new MarkdownStore().write(task);
+    idx.upsertTask(task, undefined);
+
+    migrateTaskId({ oldId: 'GEN-001', newId: 'COND-001', fromProject, toProject, task, allProjects: [fromProject, toProject] });
+
+    // Immediately after migration: markdown moved, index moved.
+    expect(fs.existsSync(path.join(condDir, 'COND-001.md'))).toBe(true);
+    expect(fs.existsSync(genMd)).toBe(false);
+    expect(idx.getTask('COND-001')).not.toBeNull();
+    expect(idx.getTask('GEN-001')).toBeNull();
+
+    // THE point of the fix: a reconcile (markdown = source of truth) must NOT resurrect
+    // GEN-001 nor drop COND-001 (the old index-only reroute did exactly that).
+    new Reconciler(idx, genDir, 'GEN').reconcile();
+    new Reconciler(idx, condDir, 'COND').reconcile();
+    expect(idx.getTask('GEN-001')).toBeNull();          // not resurrected
+    expect(idx.getTask('COND-001')).not.toBeNull();      // survived
+    expect(idx.getTask('COND-001')!.project).toBe('COND');
+
+    idx.close();
+    for (let i = 0; i < 10; i++) { try { fs.rmSync(tmp, { recursive: true, force: true }); break; } catch { /* win retry */ } }
   });
 });

@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync } from 'node:fs';
-import { join, resolve, dirname, extname } from 'node:path';
+import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
@@ -597,7 +597,7 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
  * If the source task has no markdown file (SQLite-only quick-capture), steps 1–3 are
  * skipped and only the index is updated.
  */
-function migrateTaskId(opts: {
+export function migrateTaskId(opts: {
   oldId: string;
   newId: string;
   fromProject: ProjectIndex;
@@ -666,7 +666,8 @@ function migrateTaskId(opts: {
 
       // Persist markdown-first: the index is updated ONLY after the markdown is durable,
       // so a markdown write failure can't create markdown/index divergence (codex F3).
-      const refMdPath = join(idx.tasksDir, refTask.file_path);
+      // file_path may be absolute (the index convention) or relative — handle both (r3 F3).
+      const refMdPath = isAbsolute(refTask.file_path) ? refTask.file_path : join(idx.tasksDir, refTask.file_path);
       if (existsSync(refMdPath)) {
         try {
           const refMdStore = new MarkdownStore();
@@ -685,12 +686,10 @@ function migrateTaskId(opts: {
     }
   } else {
     // No source markdown (a SQLite-only record) — materialize markdown for the new id
-    // BEFORE the index move so the migrated task is durable / survives reconcile (codex F4).
-    try {
-      new MarkdownStore().write(migrated);
-    } catch (err) {
-      console.error(`[migrateTaskId] failed to materialize markdown for ${newId}:`, err instanceof Error ? err.message : err);
-    }
+    // BEFORE the index move so the migrated task is durable / survives reconcile. If this
+    // write fails it THROWS and aborts the migration: the index is never moved without
+    // durable markdown behind it (markdown-first invariant; codex r3 F1).
+    new MarkdownStore().write(migrated);
   }
 
   // Step 4: Update the SQLite index — upsert new entry, delete old (markdown-first complete above).
