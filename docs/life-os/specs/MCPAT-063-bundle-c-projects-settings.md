@@ -166,3 +166,13 @@ the `gh pr checks` **status string**. Windows: kill `dist/server` node holders b
   failure before rethrowing — no stale `.tmp-*` artifacts.
 - **F3 (LOW, fixed):** FilterBar popover row no longer duplicates the prefix — `fpr-prefix` shows the prefix
   and `fpr-name` shows the **name only** (the single-span chip already renders the combined "PREFIX — Name").
+
+## 13. Codex round 3 resolution (final round)
+
+- **F1 (MED, fixed):** `buildProjectsList` now always emits `name` (falling back to the prefix) so
+  `/api/projects` is a uniform contract — consumers never implement their own fallback. `name === prefix`
+  signals "no friendly name". (action-button + projects-list tests updated to the new shape.)
+- **F2 (LOW, fixed):** `INDEX_INIT_FAILED` message now states "project creation failed (index init error),
+  configuration rolled back" — no longer claims the project was registered.
+- **F3 (LOW, fixed):** FolderBrowser clears the selected path when the "Roots" breadcrumb is clicked, so the
+  submitted path always matches the visible navigation.

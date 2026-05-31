@@ -14,6 +14,7 @@ describe('buildProjectsList', () => {
     const out = buildProjectsList(config, '/home/.mcp-tasks/tasks/gen');
     expect(out.map(p => p.prefix)).toEqual(['ACT', 'SEC', 'GEN']);
     expect(out.find(p => p.prefix === 'GEN')?.path).toBe('/home/.mcp-tasks/tasks/gen');
+    expect(out.find(p => p.prefix === 'GEN')?.name).toBe('GEN');
   });
 
   it('omits GEN when no GEN tasks dir exists', () => {
@@ -29,9 +30,9 @@ describe('buildProjectsList', () => {
     expect(out.find(p => p.prefix === 'GEN')?.path).toBe('/p/gen-configured');
   });
 
-  it('returns prefix+path only when no name is set (no extra config fields leak through)', () => {
+  it('falls back name to prefix when unset (uniform API contract — AC1)', () => {
     const out = buildProjectsList([{ prefix: 'X', path: '/x' }], null);
-    expect(out).toEqual([{ prefix: 'X', path: '/x' }]);
+    expect(out).toEqual([{ prefix: 'X', name: 'X', path: '/x' }]);
   });
 
   it('passes the optional name through when present (MCPAT-063)', () => {
@@ -39,8 +40,8 @@ describe('buildProjectsList', () => {
     expect(out).toEqual([{ prefix: 'ACR', name: 'Agent Control Room', path: '/p/acr' }]);
   });
 
-  it('omits the name key entirely when unset (does not emit name: undefined)', () => {
+  it('always includes a name key (name === prefix signals "no friendly name")', () => {
     const out = buildProjectsList([{ prefix: 'Y', path: '/y' }], null);
-    expect(Object.prototype.hasOwnProperty.call(out[0], 'name')).toBe(false);
+    expect(out[0].name).toBe('Y');
   });
 });

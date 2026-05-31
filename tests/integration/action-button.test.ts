@@ -53,15 +53,18 @@ describe('Action button endpoints', () => {
   it('GET /api/projects returns project list with paths', async () => {
     const res = await fetch(`${baseUrl}/api/projects`);
     expect(res.status).toBe(200);
-    const data = await res.json() as { prefix: string; path: string }[];
+    const data = await res.json() as { prefix: string; name: string; path: string }[];
     expect(Array.isArray(data)).toBe(true);
     expect(data.length).toBe(2);
     expect(data[0].prefix).toBe('ACT');
     expect(data[0].path).toBe(tempDir);
     expect(data[1].prefix).toBe('SEC');
-    // Route wiring: the handler returns buildProjectsList's projection — {prefix, path} only,
-    // with the config's `storage` field dropped (P5-09). Proves the assembler is on the path.
-    expect(Object.keys(data[0]).sort()).toEqual(['path', 'prefix']);
+    // Route wiring: the handler returns buildProjectsList's projection — {prefix, name, path}, with the
+    // config's `storage` field dropped (P5-09) and name falling back to prefix (MCPAT-063 AC1). Proves
+    // the assembler is on the path.
+    expect(Object.keys(data[0]).sort()).toEqual(['name', 'path', 'prefix']);
+    expect(data[0].name).toBe('ACT'); // no friendly name set → falls back to prefix
+
   });
 
   it('GET /api/config returns conductor URLs from env', async () => {

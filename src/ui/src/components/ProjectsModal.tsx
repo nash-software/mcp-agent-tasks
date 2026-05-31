@@ -78,7 +78,7 @@ function FolderBrowser({ selectedPath, onSelect }: FolderBrowserProps): React.JS
             {i > 0 && <span className="text-ink-faint text-xs">/</span>}
             <button
               type="button"
-              onClick={() => { setBrowsePath(c.path); if (c.path) onSelect(c.path) }}
+              onClick={() => { setBrowsePath(c.path); onSelect(c.path ?? '') }}
               className="text-xs text-accent hover:underline"
             >
               {c.label}

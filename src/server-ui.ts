@@ -1193,7 +1193,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               config.projects.pop();
               try { writeConfig(config); } catch { /* best-effort rollback; reconcile corrects on restart */ }
               const m = initErr instanceof Error ? initErr.message : String(initErr);
-              sendJson(res, 500, { error: 'INDEX_INIT_FAILED', message: `project registered but index init failed: ${m}` });
+              sendJson(res, 500, { error: 'INDEX_INIT_FAILED', message: `project creation failed (index init error), configuration rolled back: ${m}` });
               return;
             }
 

@@ -18,13 +18,15 @@ export function buildProjectsList(
   configProjects: ReadonlyArray<{ prefix: string; name?: string; path: string }>,
   genTasksDir: string | null,
 ): ProjectListEntry[] {
+  // Always emit `name`, falling back to the prefix — a uniform API contract so consumers never have to
+  // implement their own fallback (AC1). `name === prefix` signals "no friendly name set".
   const projects: ProjectListEntry[] = configProjects.map(p => ({
     prefix: p.prefix,
-    ...(p.name ? { name: p.name } : {}),
+    name: p.name ?? p.prefix,
     path: p.path,
   }));
   if (genTasksDir && !projects.some(p => p.prefix === 'GEN')) {
-    projects.push({ prefix: 'GEN', path: genTasksDir });
+    projects.push({ prefix: 'GEN', name: 'GEN', path: genTasksDir });
   }
   return projects;
 }
