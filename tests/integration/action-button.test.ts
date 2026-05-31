@@ -59,6 +59,9 @@ describe('Action button endpoints', () => {
     expect(data[0].prefix).toBe('ACT');
     expect(data[0].path).toBe(tempDir);
     expect(data[1].prefix).toBe('SEC');
+    // Route wiring: the handler returns buildProjectsList's projection — {prefix, path} only,
+    // with the config's `storage` field dropped (P5-09). Proves the assembler is on the path.
+    expect(Object.keys(data[0]).sort()).toEqual(['path', 'prefix']);
   });
 
   it('GET /api/config returns conductor URLs from env', async () => {
