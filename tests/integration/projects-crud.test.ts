@@ -148,4 +148,43 @@ describe('MCPAT-063 — projects CRUD', () => {
     });
     expect(res.status).toBe(404);
   });
+
+  // ── GET /api/fs/list — sandboxed directory browser ───────────────────────
+  // tempDir is an allowed root (it is the parent of the registered project paths). Roots are realpath'd
+  // server-side, so compare against realpath(tempDir) (macOS /tmp → /private/tmp, etc.).
+
+  it('GET /api/fs/list with no path returns the browsable roots (incl. tempDir)', async () => {
+    const realTemp = fs.realpathSync(tempDir);
+    const res = await fetch(`${baseUrl}/api/fs/list`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { path: string | null; dirs: string[] };
+    expect(body.path).toBeNull();
+    expect(body.dirs).toContain(realTemp);
+  });
+
+  it('GET /api/fs/list?path=<tempDir> lists its subdirectories', async () => {
+    const realTemp = fs.realpathSync(tempDir);
+    const res = await fetch(`${baseUrl}/api/fs/list?path=${encodeURIComponent(tempDir)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { path: string; dirs: string[] };
+    expect(body.dirs).toContain(path.join(realTemp, 'existing-project'));
+    expect(body.dirs).toContain(path.join(realTemp, 'new-project'));
+  });
+
+  it('GET /api/fs/list outside the allowed roots → 403', async () => {
+    // dirname(home) is above the home root and outside tempDir/project roots.
+    const outside = path.dirname(os.homedir());
+    const res = await fetch(`${baseUrl}/api/fs/list?path=${encodeURIComponent(outside)}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /api/fs/list with a relative path → 400', async () => {
+    const res = await fetch(`${baseUrl}/api/fs/list?path=${encodeURIComponent('relative/path')}`);
+    expect(res.status).toBe(400);
+  });
+
+  it('GET /api/fs/list with a non-existent absolute path → 404', async () => {
+    const res = await fetch(`${baseUrl}/api/fs/list?path=${encodeURIComponent(path.join(tempDir, 'nope-xyz'))}`);
+    expect(res.status).toBe(404);
+  });
 });

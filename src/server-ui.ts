@@ -1,11 +1,12 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync, statSync, realpathSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, writeConfig } from './config/loader.js';
 import type { StorageMode } from './types/config.js';
+import { isPathWithinRoots } from './fs-sandbox.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
@@ -1235,6 +1236,44 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: sandboxed directory browser — GET /api/fs/list?path= (MCPAT-063, folder picker).
+      // Allowed roots = the user home + each registered project's path and its parent. With no `path`,
+      // returns the roots themselves (top-level choices). Listing-only: directories, no file contents.
+      if (pathname === '/api/fs/list' && req.method === 'GET') {
+        // Canonicalise roots (realpath) so the comparison is symlink/case-safe — e.g. macOS /tmp →
+        // /private/tmp, Windows drive-letter case. Non-existent roots fall back to resolve().
+        const roots = Array.from(new Set(
+          [homedir(), ...config.projects.flatMap(p => [p.path, dirname(p.path)])]
+            .filter(r => typeof r === 'string' && isAbsolute(r))
+            .map(r => { try { return realpathSync(r); } catch { return resolve(r); } }),
+        ));
+        const reqPath = url.searchParams.get('path');
+        if (!reqPath) {
+          // Entry point: offer the browsable roots.
+          sendJson(res, 200, { path: null, dirs: roots });
+          return;
+        }
+        if (!isAbsolute(reqPath)) {
+          sendError(res, 400, 'INVALID_FIELD: path must be absolute');
+          return;
+        }
+        // Resolve symlinks BEFORE the sandbox check so a symlink can't escape an allowed root.
+        let real: string;
+        try { real = realpathSync(reqPath); } catch { sendError(res, 404, 'NOT_FOUND: path does not exist'); return; }
+        if (!isPathWithinRoots(real, roots)) {
+          sendError(res, 403, 'FORBIDDEN: path is outside the allowed roots');
+          return;
+        }
+        let entries;
+        try { entries = readdirSync(real, { withFileTypes: true }); } catch { sendError(res, 400, 'INVALID_FIELD: cannot read directory'); return; }
+        const dirs = entries
+          .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+          .map(e => join(real, e.name))
+          .sort();
+        sendJson(res, 200, { path: real, dirs });
         return;
       }
 
