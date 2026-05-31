@@ -157,12 +157,12 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
       }
       return { previous }
     },
-    onError: (err: Error, _vars, context) => {
+    onError: (err: unknown, _vars, context) => {
       // Roll back on error AND surface it (P5-06: was a silent rollback — overview §5).
       if (context?.previous) {
         queryClient.setQueryData(['tasks'], context.previous)
       }
-      setAssignError(err.message || 'Failed to assign task to milestone')
+      setAssignError(err instanceof Error ? err.message : 'Failed to assign task to milestone')
       setTimeout(() => setAssignError(null), 5000)
     },
     onSettled: () => {
