@@ -110,6 +110,26 @@ export function loadConfig(): McpTasksConfig {
   return applyEnvOverrides(ensureDefaultConfig());
 }
 
+/** Resolve the active config file path (env override or the global default). */
+export function resolveConfigPath(): string {
+  return process.env['MCP_TASKS_CONFIG'] ?? GLOBAL_CONFIG_PATH;
+}
+
+/**
+ * Persist config atomically (temp-file + rename) so a crashed/interrupted write can never leave a
+ * truncated config.json. Mirrors the MarkdownStore atomic-write convention (critical-rules: "atomic
+ * config file write via temp-file rename"). MCPAT-063 — used by the projects CRUD endpoints.
+ */
+export function writeConfig(config: McpTasksConfig, configPath: string = resolveConfigPath()): void {
+  const dir = path.dirname(configPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  const tmp = `${configPath}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
+  fs.renameSync(tmp, configPath); // atomic on POSIX + NTFS
+}
+
 function applyEnvOverrides(config: McpTasksConfig): McpTasksConfig {
   const result = { ...config };
 
