@@ -3,6 +3,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -117,10 +118,15 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   })
 
   // Sensors: PointerSensor with 8px activation distance (so plain clicks still open the panel)
+  //          TouchSensor with a 200ms long-press delay (P5-07) so a short touch scrolls the board and a
+  //          press-and-hold starts a drag — the two coexist on phones; a tap still opens the peek.
   //          KeyboardSensor for a11y (Space/Enter picks up, arrows move, Space/Enter drops)
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -168,8 +174,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   if (isLoading) {
     return (
       <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+        className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
       >
         {BOARD_STATUSES.map(status => (
           <div key={status} className="space-y-3">
@@ -253,8 +258,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
         }}
       >
         <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+          className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
         >
           {BOARD_STATUSES.map(status => {
             const colTasks = tasks.filter((t: Task) => t.status === status)
