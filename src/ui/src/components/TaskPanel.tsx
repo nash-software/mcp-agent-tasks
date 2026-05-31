@@ -96,6 +96,10 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const [editType, setEditType]               = useState<boolean>(false)
   const [editMilestone, setEditMilestone]     = useState<boolean>(false)
   const [tagInput, setTagInput]               = useState<string>('')
+  // Optimistic local tag draft — tags are accumulative (add to the existing set), so deriving the
+  // next array from server props at event time can clobber a sibling tag if two edits fire before
+  // a refetch lands. Hold the in-flight array locally and roll back on error (overview §5 / AC9).
+  const [draftTags, setDraftTags]             = useState<string[] | null>(null)
 
   // Reset edit state when the task changes
   useEffect(() => {
@@ -107,6 +111,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     setEditType(false)
     setEditMilestone(false)
     setTagInput('')
+    setDraftTags(null)
     setErrorMsg(null)
   }, [taskId])
 
@@ -309,22 +314,41 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     await commitField({ milestone: newMilestone }, ['milestones'])
   }
 
+  // Current tag set — the optimistic draft while a write is in flight, else server truth.
+  const currentTags = draftTags ?? task?.tags ?? task?.labels ?? []
+
+  // Commit a tag array optimistically: patch local state immediately, roll back on error so a
+  // rejected PATCH never leaves the panel showing an unsaved chip set (AC9). Reads the next array
+  // from `currentTags` (not stale props), so rapid successive edits can't clobber a sibling tag.
+  async function commitTags(next: string[]): Promise<void> {
+    if (!task) return
+    const prev = currentTags
+    setDraftTags(next)
+    try {
+      await updateTask(task.id, { tags: next })
+      await invalidateCaches()
+      setDraftTags(null) // refetch landed — server is the source of truth again
+      setErrorMsg(null)
+    } catch (err) {
+      setDraftTags(prev) // rollback the optimistic edit
+      surfaceError(err)
+    }
+  }
+
   // Tag add (Enter / blur)
   async function handleTagAdd(): Promise<void> {
     if (!task) return
     const trimmed = tagInput.trim()
     if (!trimmed) { setTagInput(''); return }
-    const existing = task.tags ?? task.labels ?? []
-    if (existing.includes(trimmed)) { setTagInput(''); return }
+    if (currentTags.includes(trimmed)) { setTagInput(''); return }
     setTagInput('')
-    await commitField({ tags: [...existing, trimmed] })
+    await commitTags([...currentTags, trimmed])
   }
 
   // Tag remove
   async function handleTagRemove(tag: string): Promise<void> {
     if (!task) return
-    const existing = task.tags ?? task.labels ?? []
-    await commitField({ tags: existing.filter(t => t !== tag) })
+    await commitTags(currentTags.filter(t => t !== tag))
   }
 
   // ── render ──────────────────────────────────────────────────────────────
@@ -677,7 +701,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
             {/* Tags — chip editor: add + remove per tag */}
             <Section title="Tags">
               <div className="flex flex-wrap gap-1 items-center">
-                {(task.tags ?? task.labels ?? []).map(tag => (
+                {currentTags.map(tag => (
                   <span
                     key={tag}
                     className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded text-xs bg-surface-2 text-ink-2"

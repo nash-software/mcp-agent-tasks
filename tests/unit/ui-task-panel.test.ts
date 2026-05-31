@@ -237,7 +237,10 @@ describe('TaskPanel.tsx — structure', () => {
     });
 
     it('Tags section is conditional on tags/labels presence', () => {
-      expect(src).toContain('task.tags');
+      // The chip editor derives its set from the task's tags/labels (optional-chained, since the
+      // panel may render before the task resolves) into an optimistic `currentTags` draft.
+      expect(src).toContain('task?.tags');
+      expect(src).toContain('currentTags');
     });
   });
 
