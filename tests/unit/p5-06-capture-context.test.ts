@@ -28,6 +28,16 @@ describe('P5-06 — capture context', () => {
     expect(body.context).toBe('MCPAT');
   });
 
+  it('AC3: client preserves an explicit #PREFIX verbatim and still sends context (server resolves precedence)', async () => {
+    const fn = mockFetch();
+    await quickCapture('#MCPAT urgent note', 'COND');
+    const body = JSON.parse(fn.mock.calls[0][1].body as string) as { text: string; context?: string };
+    // the client must NOT strip/override the explicit prefix — it sends the text unchanged
+    expect(body.text).toBe('#MCPAT urgent note');
+    // context is still sent as a bias; the P4-06 backend honours #PREFIX over context
+    expect(body.context).toBe('COND');
+  });
+
   it('AC5: quickCapture omits context when none is supplied (graceful degradation)', async () => {
     const fn = mockFetch();
     await quickCapture('unscoped capture');
