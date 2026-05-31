@@ -100,6 +100,16 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
       transitions: [], files: [], body: '', file_path: 'MUT-003.md',
     });
 
+    // MUT-004: closed (for P5-05 reopen tests)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-004', title: 'Closed task', type: 'feature',
+      status: 'closed', priority: 'medium', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [{ from: 'done', to: 'closed', at: ts }], files: [], body: '', file_path: 'MUT-004.md',
+    });
+
     idx.close();
 
     handle = await startUiServer({ port: 0 });
@@ -198,6 +208,31 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
       body: JSON.stringify({ to: 'todo' }),  // done→todo is invalid
     });
     expect(res2.status).not.toBe(200);
+  });
+
+  it('P5-05: closed→done → 409 INVALID_TRANSITION, state preserved as closed', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-004/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'done' }),
+    });
+    expect(res.status).toBe(409);
+    // MUT-004 must still be closed after the rejected transition
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    expect(tasks.find(t => t.id === 'MUT-004')?.status).toBe('closed');
+  });
+
+  it('P5-05: reopen a closed task → 200 in_progress, persisted', async () => {
+    const reopen = await fetch(`${baseUrl}/api/tasks/MUT-004/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'in_progress' }),
+    });
+    expect(reopen.status).toBe(200);
+    const task = await reopen.json() as TaskShape;
+    expect(task.status).toBe('in_progress');
+    // AC2: a new transition entry is appended (from closed → in_progress)
+    expect(task.transitions?.some(t => t.from === 'closed' && t.to === 'in_progress')).toBe(true);
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    expect(tasks.find(t => t.id === 'MUT-004')?.status).toBe('in_progress');
   });
 
   it('AC-1: Transition includes optional reason in transitions entry', async () => {

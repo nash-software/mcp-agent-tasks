@@ -22,6 +22,16 @@ describe('VALID_TRANSITIONS', () => {
   it('archived has no valid transitions', () => {
     expect(VALID_TRANSITIONS.archived).toEqual([]);
   });
+
+  it('closed is reopenable to todo or in_progress (P5-05)', () => {
+    expect(VALID_TRANSITIONS.closed).toEqual(['todo', 'in_progress']);
+    expect(isValidTransition('closed', 'todo')).toBe(true);
+    expect(isValidTransition('closed', 'in_progress')).toBe(true);
+    expect(isValidTransition('closed', 'done')).toBe(false);
+    expect(isValidTransition('closed', 'closed')).toBe(false);
+    // archived stays terminal
+    expect(isValidTransition('archived', 'todo')).toBe(false);
+  });
 });
 
 describe('isValidTransition', () => {

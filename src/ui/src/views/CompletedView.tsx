@@ -8,7 +8,12 @@
 import React from 'react'
 import { useTasks } from '../hooks/useTasks'
 import { ViewHeader } from '../components/ViewHeader'
-import type { Task } from '../types'
+import type { Task, PanelState } from '../types'
+
+interface Props {
+  /** Open the slide-in panel for a task (P5-05 — inspect/reopen a closed task). */
+  onOpenPanel: (panel: PanelState) => void
+}
 
 interface ClosureBatch {
   batchId: string        // close_batch value or date string for fallback grouping
@@ -77,7 +82,7 @@ function groupBatches(tasks: Task[]): ClosureBatch[] {
   return batches
 }
 
-export function CompletedView(): React.JSX.Element {
+export function CompletedView({ onOpenPanel }: Props): React.JSX.Element {
   // Fetch all tasks and filter client-side to closed — spec recommends this; avoids a new GET route.
   const { tasks: allTasks, isLoading, error } = useTasks()
 
@@ -156,19 +161,24 @@ export function CompletedView(): React.JSX.Element {
             {/* Task list */}
             <ul className="space-y-1.5">
               {batch.tasks.map(task => (
-                <li
-                  key={task.id}
-                  className="flex items-center gap-2 text-sm text-ink-muted"
-                >
-                  {/* Closed indicator dot */}
-                  <span className="w-1.5 h-1.5 rounded-full bg-ink-faint flex-shrink-0" />
-                  <span className="flex-1 truncate" title={task.title}>{task.title}</span>
-                  <span className="text-ink-faint font-mono text-xs flex-shrink-0">{task.id}</span>
-                  {typeof task.estimate_hours === 'number' && task.estimate_hours > 0 && (
-                    <span className="text-ink-faint text-xs flex-shrink-0">
-                      {task.estimate_hours}h
-                    </span>
-                  )}
+                <li key={task.id}>
+                  {/* Clickable → opens the panel so a closed task can be inspected/reopened (P5-05) */}
+                  <button
+                    type="button"
+                    onClick={() => onOpenPanel({ mode: 'peek', taskId: task.id })}
+                    className="w-full flex items-center gap-2 text-sm text-ink-muted text-left rounded px-1 -mx-1 py-0.5 hover:bg-surface-2 hover:text-ink-2 transition-colors duration-100"
+                    aria-label={`Open ${task.id} — ${task.title}`}
+                  >
+                    {/* Closed indicator dot */}
+                    <span className="w-1.5 h-1.5 rounded-full bg-ink-faint flex-shrink-0" />
+                    <span className="flex-1 truncate" title={task.title}>{task.title}</span>
+                    <span className="text-ink-faint font-mono text-xs flex-shrink-0">{task.id}</span>
+                    {typeof task.estimate_hours === 'number' && task.estimate_hours > 0 && (
+                      <span className="text-ink-faint text-xs flex-shrink-0">
+                        {task.estimate_hours}h
+                      </span>
+                    )}
+                  </button>
                 </li>
               ))}
             </ul>
