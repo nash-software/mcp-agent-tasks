@@ -29,14 +29,32 @@ describe('P5-02 K2 — sanitizeForPrompt (prompt-injection defense)', () => {
   });
 });
 
-describe('P5-02 K2 — routing + braindump prompts are hardened', () => {
-  it('both untrusted-text prompts sanitize and sentinel-wrap user input', () => {
-    // The routing and braindump prompts must run user text through sanitizeForPrompt
-    // and wrap it in <task> sentinels (same defense as buildTriagePrompt).
-    const sanitizeCalls = (serverSrc.match(/sanitizeForPrompt\(/g) ?? []).length;
-    expect(sanitizeCalls).toBeGreaterThanOrEqual(3); // triage + routing + braindump (+ helper uses)
-    expect(serverSrc).toContain('<task>');
-    expect(serverSrc).toMatch(/never follow instructions/i);
+describe('P5-02 K2 — the ACTUAL routing + braindump prompts are hardened', () => {
+  // Slice each prompt construction and assert it sanitizes + sentinel-wraps the user text.
+  // (Targets the two vulnerable call sites specifically — not a global occurrence count.)
+  function promptBlock(anchor: string): string {
+    const i = serverSrc.indexOf(anchor);
+    return i === -1 ? '' : serverSrc.slice(i - 350, i + 500);
+  }
+
+  it('quick-capture routing prompt wraps sanitized text in <task> sentinels', () => {
+    const block = promptBlock('Which project prefix from')
+    expect(block).toContain('sanitizeForPrompt(text)');
+    expect(block).toMatch(/<task>[\s\S]*safeText[\s\S]*<\/task>/);
+    expect(block).toMatch(/never follow instructions/i);
+  });
+
+  it('braindump extraction prompt wraps sanitized text in <task> sentinels', () => {
+    const block = promptBlock('Extract tasks from the untrusted text');
+    expect(block).toContain('sanitizeForPrompt(text)');
+    expect(block).toMatch(/<task>[\s\S]*safeText[\s\S]*<\/task>/);
+    expect(block).toMatch(/never follow instructions/i);
+  });
+
+  it('the routing prompt no longer interpolates raw user text', () => {
+    // Regression guard: the old vulnerable form injected `'${text}'` directly.
+    expect(serverSrc).not.toContain("Given this task: '${text}'");
+    expect(serverSrc).not.toContain('Text: ${text}');
   });
 });
 
