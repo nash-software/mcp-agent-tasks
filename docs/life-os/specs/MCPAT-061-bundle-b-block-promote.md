@@ -133,7 +133,8 @@ message. 409 (invalid transition) → roll back, surface "Can't move … to …"
 ## 5. Acceptance criteria
 
 1. **Primary button** shows the correct forward step per status: `todo`→Start, `in_progress`→Mark done,
-   `blocked`→Resume, `draft`→Promote, `approved`→Start, `closed`→Reopen. Hidden when no valid forward edge.
+   `blocked`→Resume, `draft`→Promote, `approved`→Start, `closed`→Reopen, `done`→Complete (→closed).
+   Hidden when no valid forward edge (`archived`).
 2. **Move to… menu** lists exactly the other valid targets from the client transition map, semantically
    labelled. No invalid target ever appears.
 3. **Block** (todo/in_progress, and via menu elsewhere where valid) prompts for a reason; transitions to
@@ -168,6 +169,21 @@ message. 409 (invalid transition) → roll back, surface "Can't move … to …"
 target allow-list, reason handling) → gated-CI merge on the **status string** (not `gh run watch | tail`).
 Windows: kill `dist/server` node holders before `tsup`; `git checkout .handbook/` before each commit; no
 `Co-Authored-By`.
+
+## 7a. Deviations resolved in codex round 1
+
+- **F1 (HIGH, fixed):** the engine offers `done → closed` ("Complete") as the primary, but the route's
+  `VALID_TRANSITION_TARGETS` originally omitted `closed` → 400. **Added `'closed'`** to the route allow-list
+  (server `VALID_TRANSITIONS` already permits `done→closed`). Intentional feature: close a finished task
+  from the panel. Integration test added.
+- **F2 (MED, fixed):** removed `primaryTarget`'s fallback-to-first-edge. Now **explicit-only** — an unmapped
+  status returns `null` (no primary), no guessing. All real statuses are explicitly mapped.
+- **F3 (LOW, accepted + documented):** `done→Complete` is a deliberate addition beyond the initial primary
+  list (AC1 amended above); tests codify it intentionally.
+- **Security (fixed):** the user-supplied `reason` (persisted to `block_reason`) is now **capped at 1000
+  chars** (matches the PATCH `why` guard), returning 400 above the cap. Same persistence path as the
+  pre-existing `transitions[].reason`; MarkdownStore serialises via YAML (no frontmatter-injection surface),
+  and React escapes `block_reason` on render (no stored-XSS).
 
 ## 8. Out of scope / deferred
 

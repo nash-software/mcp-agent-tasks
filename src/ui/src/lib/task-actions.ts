@@ -13,7 +13,12 @@
 import type { TaskStatus } from '../types'
 import { validTargets } from './transitions'
 
-/** The natural forward step for each status. Only honoured if actually a valid edge. */
+/**
+ * The natural forward step for each status (the bold primary button). Every entry is a real edge in the
+ * transition map. `done → closed` is the panel's "Complete" action (archives a finished task) — it is a
+ * deliberate MCPAT-061 addition, matched by the server's /transition allow-list. `archived` is terminal
+ * (no entry → no primary). Explicit-only: an unmapped status has no primary (codex F2 — no first-edge guess).
+ */
 const PRIMARY_BY_STATUS: Partial<Record<TaskStatus, TaskStatus>> = {
   todo: 'in_progress',
   in_progress: 'done',
@@ -24,12 +29,10 @@ const PRIMARY_BY_STATUS: Partial<Record<TaskStatus, TaskStatus>> = {
   done: 'closed',
 }
 
-/** The one obvious forward step for `status`, or null when there's no valid forward edge. */
+/** The one obvious forward step for `status`, or null when none is defined / valid. */
 export function primaryTarget(status: TaskStatus): TaskStatus | null {
   const candidate = PRIMARY_BY_STATUS[status]
-  if (candidate && validTargets(status).includes(candidate)) return candidate
-  // Fallback: first valid edge (keeps a primary button for statuses not in the map above).
-  return validTargets(status)[0] ?? null
+  return candidate && validTargets(status).includes(candidate) ? candidate : null
 }
 
 /** Valid targets minus the primary — these populate the "Move to…" menu. */

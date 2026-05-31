@@ -301,6 +301,26 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect((await res.json() as TaskShape).status).toBe('approved');
   });
 
+  it('MCPAT-061: Complete done→closed is accepted (200, not 400) — codex F1', async () => {
+    // MUT-002 is done. The panel offers "Complete" (done→closed) as the primary; the route must accept it.
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-002/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'closed' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as TaskShape).status).toBe('closed');
+  });
+
+  it('MCPAT-061: an over-long block reason (>1000 chars) is rejected 400 — security cap', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-001/transition`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'blocked', reason: 'x'.repeat(1001) }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
   // ── PATCH /api/tasks/:id ─────────────────────────────────────────────────
 
   it('AC-3: PATCH {priority:"high"} returns 200 with updated priority', async () => {
