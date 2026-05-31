@@ -1186,6 +1186,58 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: edit a project's name — PATCH /api/projects/:prefix (MCPAT-063). Prefix is immutable
+      // (renaming it = re-IDing every task — deferred, P5-02 migrate territory). Name only.
+      const projectPatchMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
+      if (projectPatchMatch && req.method === 'PATCH') {
+        const prefix = decodeURIComponent(projectPatchMatch[1]);
+        const entry = config.projects.find(p => p.prefix === prefix);
+        if (!entry) {
+          sendError(res, 404, 'PROJECT_NOT_FOUND');
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { name?: unknown; prefix?: unknown };
+            if (body.prefix !== undefined && body.prefix !== prefix) {
+              sendError(res, 400, 'INVALID_FIELD: prefix is immutable (renaming would re-ID every task)');
+              return;
+            }
+            if (body.name !== undefined && typeof body.name !== 'string') {
+              sendError(res, 400, 'INVALID_FIELD: name must be a string');
+              return;
+            }
+            const name = typeof body.name === 'string' ? body.name.trim() : undefined;
+            if (name !== undefined && name.length > 80) {
+              sendError(res, 400, 'INVALID_FIELD: name must be 80 characters or fewer');
+              return;
+            }
+            const prev = entry.name;
+            if (name === undefined) {
+              // no-op on name
+            } else if (name === '') {
+              delete entry.name; // clearing falls back to the prefix at render time
+            } else {
+              entry.name = name;
+            }
+            try {
+              writeConfig(config);
+            } catch {
+              if (prev === undefined) delete entry.name; else entry.name = prev;
+              sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not write config' });
+              return;
+            }
+            sendJson(res, 200, { prefix: entry.prefix, ...(entry.name ? { name: entry.name } : {}), path: entry.path });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
       // API: config (conductor URLs for action button + project prefix list for capture)
       if (pathname === '/api/config') {
         const cfg: Record<string, unknown> = {};

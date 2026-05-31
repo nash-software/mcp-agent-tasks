@@ -110,4 +110,42 @@ describe('MCPAT-063 — projects CRUD', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // ── PATCH /api/projects/:prefix (name only) ──────────────────────────────
+
+  it('PATCH updates the name and persists it atomically (re-read)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/EXIST`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Existing — Renamed' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as ProjectShape).name).toBe('Existing — Renamed');
+    const cfg = JSON.parse(fs.readFileSync(path.join(tempDir, 'config.json'), 'utf-8')) as { projects: ProjectShape[] };
+    expect(cfg.projects.find(p => p.prefix === 'EXIST')?.name).toBe('Existing — Renamed');
+  });
+
+  it('PATCH with an empty name clears it (falls back to prefix)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/EXIST`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '' }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json() as ProjectShape).name).toBeUndefined();
+  });
+
+  it('PATCH attempting to change the prefix → 400 (immutable)', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/EXIST`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prefix: 'RENAMED' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('PATCH unknown project → 404', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/NOPE`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'x' }),
+    });
+    expect(res.status).toBe(404);
+  });
 });
