@@ -2,7 +2,8 @@ import React, { useState, useCallback } from 'react'
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -116,11 +117,17 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
     },
   })
 
-  // Sensors: PointerSensor with 8px activation distance (so plain clicks still open the panel)
+  // Sensors split by modality (P5-07): MouseSensor for desktop (8px distance so plain clicks still open
+  // the panel) and TouchSensor with a 200ms long-press delay so on phones a short touch scrolls the board
+  // and press-and-hold starts a drag. NOTE: PointerSensor is deliberately NOT used — pointer events fire
+  // for touch too, so its distance activation would race the TouchSensor delay and hijack scroll.
   //          KeyboardSensor for a11y (Space/Enter picks up, arrows move, Space/Enter drops)
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 8 },
     }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
@@ -168,8 +175,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
   if (isLoading) {
     return (
       <div
-        className="grid gap-4"
-        style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+        className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
       >
         {BOARD_STATUSES.map(status => (
           <div key={status} className="space-y-3">
@@ -253,8 +259,7 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
         }}
       >
         <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: 'repeat(4, minmax(0,1fr))' }}
+          className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
         >
           {BOARD_STATUSES.map(status => {
             const colTasks = tasks.filter((t: Task) => t.status === status)

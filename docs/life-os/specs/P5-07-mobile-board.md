@@ -135,6 +135,18 @@ Grid: replace inline `style={{ gridTemplateColumns: 'repeat(4, …)' }}` with
 
 ---
 
+## Implementation note (deviation from the example config)
+
+The §"Data shapes" example keeps `PointerSensor` alongside `TouchSensor`. **The implementation uses
+`MouseSensor` + `TouchSensor` instead** (PointerSensor dropped). Reason: `PointerSensor` listens to
+*pointer* events, which fire for touch too — so its `distance` activation would race the `TouchSensor`
+`delay` and hijack scroll on phones (the exact bug this spec fixes). Splitting by modality —
+`MouseSensor` (desktop, `distance: 8`, identical to the old PointerSensor behaviour for mouse) +
+`TouchSensor` (touch, `delay: 200, tolerance: 8`) — gives each input its own activation path, so
+tap-to-peek + long-press-drag coexist correctly. Desktop behaviour (AC6) is unchanged: `MouseSensor`
+with `distance: 8` activates a mouse drag exactly as the prior `PointerSensor` did, and a plain click
+still opens the peek.
+
 ## Open questions
 
 1. **`sm` breakpoint column count.** `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` vs adding `md:grid-cols-3`.
