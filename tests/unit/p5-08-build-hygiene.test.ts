@@ -22,10 +22,13 @@ describe('P5-08 — build hygiene', () => {
     expect(pkg.scripts['build:ui']).toMatch(/src\/ui run build/);
   });
 
-  it('AC4: CI installs UI deps in a dedicated step before build', () => {
+  it('AC4: CI installs UI deps in exactly one dedicated step, before build', () => {
     const ci = fs.readFileSync(path.join(process.cwd(), '.github', 'workflows', 'ci.yml'), 'utf-8');
-    expect(ci).toMatch(/npm --prefix src\/ui ci/);
-    // the dedicated install precedes the build step
+    // Exactly one `npm --prefix src/ui ci` — the dedicated step; the build no longer embeds it, so it
+    // can't run twice (AC4: "runs once before build, not embedded in build").
+    const installSteps = ci.match(/npm --prefix src\/ui ci/g) ?? [];
+    expect(installSteps).toHaveLength(1);
+    // and it precedes the `npm run build` step
     expect(ci.indexOf('src/ui ci')).toBeLessThan(ci.indexOf('npm run build'));
   });
 });
