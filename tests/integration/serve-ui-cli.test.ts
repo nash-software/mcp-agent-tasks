@@ -13,10 +13,18 @@ const TEST_PORT = 14567;
 describe('CLI serve-ui command', () => {
   let tempDir: string;
   let tempDbPath: string;
+  let configPath: string;
 
   beforeAll(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-cli-ui-'));
     tempDbPath = path.join(tempDir, 'tasks.db');
+    // Hermetic config with NO projects, so booting serve-ui doesn't reconcile the developer's real
+    // projects (which would emit reconciler warnings to stderr and open extra DB handles). MCPAT-065.
+    configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1, storageDir: tempDir, defaultStorage: 'global', enforcement: 'off',
+      autoCommit: false, claimTtlHours: 4, trackManifest: false, tasksDirName: 'agent-tasks', projects: [],
+    }), 'utf-8');
   });
 
   afterAll(() => {
@@ -26,7 +34,7 @@ describe('CLI serve-ui command', () => {
   it('prints Dashboard URL to stdout and exits cleanly on SIGINT', async () => {
     const proc = spawn('node', [DIST_CLI, 'serve-ui', '--port', String(TEST_PORT)], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, MCP_TASKS_DB: tempDbPath },
+      env: { ...process.env, MCP_TASKS_DB: tempDbPath, MCP_TASKS_CONFIG: configPath },
     });
 
     const firstLine = await new Promise<string>((resolve, reject) => {
@@ -46,10 +54,12 @@ describe('CLI serve-ui command', () => {
       });
 
       proc.stderr.on('data', (chunk: Buffer) => {
+        // Ignore benign boot-time warnings (reconcile-on-boot self-heal logs); only fail on real errors.
         const text = chunk.toString().trim();
-        if (text) {
+        const fatal = text.split('\n').filter(l => l.trim() && !/^\[(reconciler|serve-ui)\]/.test(l.trim()));
+        if (fatal.length) {
           clearTimeout(timeout);
-          reject(new Error(`serve-ui stderr: ${text}`));
+          reject(new Error(`serve-ui stderr: ${fatal.join(' | ')}`));
         }
       });
 
