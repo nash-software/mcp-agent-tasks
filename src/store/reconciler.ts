@@ -56,6 +56,7 @@ export class Reconciler {
     const files = fs.readdirSync(this.tasksDir).filter(f => f.endsWith('.md'));
     let count = 0;
     let changed = 0;
+    let skipped = 0;
     this.collisions = [];
     const seenIds = new Map<string, string>();
     const seenHash = new Map<string, string>();
@@ -101,13 +102,21 @@ export class Reconciler {
         count++;
         changed++;
       } catch (err) {
-        // Skip corrupt files — log and continue
-        if (err instanceof McpTasksError && err.code === 'SCHEMA_MISMATCH') {
-          // Silently skip corrupt files during reconciliation
-          continue;
-        }
-        throw err;
+        // Per-file resilience: skip ANY file that fails to ingest (corrupt frontmatter, schema mismatch,
+        // invalid enum/CHECK-constraint, etc.) and continue — one bad markdown file must never abort the
+        // whole project's reconcile (MCPAT-065; codex r2 F1). Systemic safety lives at the boundary, not
+        // here: reconcileIndexOnBoot's outer try/catch keeps the last-known index, and pruneOrphans is
+        // MARKDOWN-driven (it removes only ids with no markdown file) so a pass that ingests nothing can
+        // never delete markdown-backed rows. The skip count is surfaced below for observability (codex r1).
+        skipped++;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[reconciler] SKIPPED ${file} (${this.project}): ${msg}`);
+        continue;
       }
+    }
+
+    if (skipped > 0) {
+      console.error(`[reconciler] ${this.project}: skipped ${skipped} of ${files.length} file(s) during reconcile (see SKIPPED lines above)`);
     }
 
     // After processing tasks, reset FTS5 shadow tables only when at least one

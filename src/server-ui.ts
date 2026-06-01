@@ -10,6 +10,7 @@ import { isPathWithinRoots } from './fs-sandbox.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { MarkdownStore } from './store/markdown-store.js';
+import { Reconciler } from './store/reconciler.js';
 import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
 import type { Priority, Area, Task, TaskStatus, StatusTransition, TaskType } from './types/task.js';
 import { isValidTransition } from './types/transitions.js';
@@ -555,6 +556,32 @@ interface ProjectIndex {
   tasksDir: string;  // directory holding the project's markdown task files (for markdown write-through)
 }
 
+/**
+ * MCPAT-065 — reconcile a freshly-opened index against its markdown source of truth and prune orphan rows,
+ * so the dashboard never serves a stale/diverged index (the duplicate-task root cause). RESILIENT: a
+ * failure (e.g. a poison markdown file, a missing tasks dir) must never crash boot — log and keep the
+ * last-known index. (The Reconciler itself now skips individual poison files, so this guards whole-project
+ * failures like a missing dir.)
+ */
+function reconcileIndexOnBoot(pi: ProjectIndex): void {
+  try {
+    // Only self-heal when there is markdown to heal FROM. A missing or markdown-less tasks dir is
+    // ambiguous (a brand-new project, or a transiently missing/unmounted directory) — pruning the index
+    // to nothing in that case would be destructive, so leave the existing index untouched.
+    if (!existsSync(pi.tasksDir)) return;
+    const hasMarkdown = readdirSync(pi.tasksDir).some(f => f.endsWith('.md'));
+    if (!hasMarkdown) return;
+
+    const reconciler = new Reconciler(pi.index, pi.tasksDir, pi.prefix, pi.milestoneRepo);
+    reconciler.reconcile();
+    reconciler.pruneOrphans();
+  } catch (err) {
+    // Keep the last-known index for this project and carry on booting. Log full context (prefix, dir,
+    // stack) so a systemic self-heal failure is diagnosable rather than silent (codex F2).
+    console.error(`[serve-ui] reconcile-on-boot FAILED for ${pi.prefix} (tasksDir=${pi.tasksDir}) — serving last-known index:`, err);
+  }
+}
+
 function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex[] {
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
 
@@ -563,7 +590,9 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
     const dbPath = getDbPath();
     const idx = new SqliteIndex(dbPath);
     idx.init();
-    return [{ prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir: dirname(dbPath) }];
+    const fallback = { prefix: 'default', index: idx, milestoneRepo: new MilestoneRepository(idx.getRawDb()), tasksDir: dirname(dbPath) };
+    reconcileIndexOnBoot(fallback);
+    return [fallback];
   }
 
   const indexes = config.projects.map(p => {
@@ -581,6 +610,10 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
     genIdx.init();
     indexes.push({ prefix: 'GEN', index: genIdx, milestoneRepo: new MilestoneRepository(genIdx.getRawDb()), tasksDir: genTasksDir });
   }
+
+  // Self-heal each index from its markdown on boot (prune orphans) so a diverged index can't surface as
+  // ghost/duplicate rows in the dashboard (MCPAT-065). Resilient per project.
+  for (const pi of indexes) reconcileIndexOnBoot(pi);
 
   return indexes;
 }
