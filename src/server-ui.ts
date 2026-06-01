@@ -1,7 +1,7 @@
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, renameSync, appendFileSync, unlinkSync, statSync, realpathSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, writeConfig } from './config/loader.js';
@@ -1844,6 +1844,56 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: claim a task — POST /api/tasks/:id/claim (MCPAT-064). Assigns the task to the local dashboard
+      // user (claimed_by) and, from todo, takes it on (→ in_progress). Markdown-first; no TaskStore.
+      const claimMatch = pathname.match(/^\/api\/tasks\/([^/]+)\/claim$/);
+      if (claimMatch && req.method === 'POST') {
+        const taskId = claimMatch[1];
+        const pIdx = projectIndexes.find(p => taskId.startsWith(p.prefix + '-'));
+        const task = pIdx ? pIdx.index.getTask(taskId) : null;
+        if (!task) {
+          sendError(res, 404, 'TASK_NOT_FOUND');
+          return;
+        }
+        // Claimable only from todo / in_progress (taking on active work). Other statuses → 409.
+        if (task.status !== 'todo' && task.status !== 'in_progress') {
+          sendJson(res, 409, { error: 'NOT_CLAIMABLE', message: `Cannot claim a task in status '${task.status}'` });
+          return;
+        }
+        const now = new Date().toISOString();
+        const claimant = userInfo().username || 'me';
+        const movingToInProgress = task.status === 'todo';
+        const transition = movingToInProgress
+          ? { from: 'todo' as TaskStatus, to: 'in_progress' as TaskStatus, at: now, reason: 'Claimed' }
+          : null;
+
+        task.claimed_by = claimant;
+        task.claimed_at = now;
+        task.updated = now;
+        task.last_activity = now;
+        if (transition) {
+          task.status = 'in_progress';
+          task.transitions = [...task.transitions, transition].slice(-MAX_TRANSITIONS);
+        }
+
+        const persisted = persistTaskDurable(pIdx!, task, (md) => {
+          md.claimed_by = claimant;
+          md.claimed_at = now;
+          md.updated = now;
+          md.last_activity = now;
+          if (transition) {
+            md.status = 'in_progress';
+            md.transitions = [...(md.transitions ?? []), transition].slice(-MAX_TRANSITIONS);
+          }
+        });
+        if (!persisted) {
+          sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist claim' });
+          return;
+        }
+        sendJson(res, 200, task);
         return;
       }
 
