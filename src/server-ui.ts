@@ -1379,7 +1379,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
 
       // API: milestones (list)
       if (pathname === '/api/milestones' && req.method === 'GET') {
-        const milestones = projectIndexes.flatMap(p => p.milestoneRepo.listMilestones());
+        const milestones = projectIndexes.flatMap(p => p.milestoneRepo.listMilestones(p.prefix)); // MCPAT-066: scope (shared global index)
         sendJson(res, 200, milestones);
         return;
       }
@@ -1397,7 +1397,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       // API: activity
       if (pathname === '/api/activity') {
         const activity: ActivityEntry[] = projectIndexes
-          .flatMap(p => p.index.getRecentActivity(50))
+          .flatMap(p => p.index.getRecentActivity(50, p.prefix)) // MCPAT-066: scope (shared global index)
           .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
           .slice(0, 50);
         sendJson(res, 200, activity);
@@ -1634,7 +1634,11 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           targetMinutes = parsed;
         }
 
-        const committed = projectIndexes.flatMap(p => p.index.getTasksByScheduledDate(today));
+        // MCPAT-066: scope every per-index query by p.prefix. Several global-storage projects share one
+        // index db; an UNSCOPED query (getCandidates/getTasksByScheduledDate/listTasks) returns that db's
+        // rows once per global project → duplicate task ids in the response (the Today-view dupes). Scoping
+        // by prefix (as /api/tasks already does) makes each projectIndex contribute only its own tasks.
+        const committed = projectIndexes.flatMap(p => p.index.getTasksByScheduledDate(today, p.prefix));
         committed.sort((a, b) => {
           const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
           const pa = priorityOrder[a.priority] ?? 4;
@@ -1644,7 +1648,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         });
 
         const candidates = projectIndexes
-          .flatMap(p => p.index.getCandidates(20))
+          .flatMap(p => p.index.getCandidates(20, p.prefix))
           .sort((a, b) => {
             const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
             const pa = priorityOrder[a.priority] ?? 4;
@@ -1661,7 +1665,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         // needs_review (P2-04b): drafts the auto-triage flagged for a human call (triage_note set),
         // newest first. Surfaced by the Today "Needs your call" sub-section (P1-03).
         const needs_review = projectIndexes
-          .flatMap(p => p.index.listTasks({ status: 'draft' }))
+          .flatMap(p => p.index.listTasks({ status: 'draft', project: p.prefix }))
           .filter(t => typeof t.triage_note === 'string' && t.triage_note.length > 0)
           .sort((a, b) => (b.last_activity ?? '').localeCompare(a.last_activity ?? ''));
 
