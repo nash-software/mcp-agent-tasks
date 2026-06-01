@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { McpTasksError } from '../types/errors.js';
 import { Reconciler } from '../store/reconciler.js';
 import type { ToolContext, ToolOutput } from './context.js';
@@ -28,25 +27,33 @@ export function validate(input: unknown): asserts input is ValidatedInput {
 }
 
 export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<ToolOutput> {
-  // Find the tasks directory for the given project
-  let tasksDir: string;
-  let project: string;
-
   if (input.project) {
-    const projectConfig = ctx.config.projects.find(p => p.prefix === input.project);
-    if (!projectConfig) {
+    if (!ctx.config.projects.some(p => p.prefix === input.project)) {
       throw new McpTasksError('PROJECT_NOT_FOUND', `Project ${input.project} not found in config`);
     }
-    tasksDir = path.join(projectConfig.path, ctx.config.tasksDirName);
-    project = input.project;
-  } else {
-    // Use the default storage dir
-    tasksDir = ctx.config.storageDir;
-    project = ctx.config.projects[0]?.prefix ?? '';
+    const count = reconcileProject(ctx, input.project);
+    return ok({ rebuilt: true, count, projects: { [input.project]: count } });
   }
 
-  const reconciler = new Reconciler(ctx.index, tasksDir, project);
-  const count = reconciler.reconcile();
+  // No project → reconcile EVERY configured project against its own (storage-aware) dir + prefix. Global
+  // projects share storageDir; reconciling it once per prefix keeps each prefix's tasks correctly filtered.
+  const projects: Record<string, number> = {};
+  let count = 0;
+  for (const p of ctx.config.projects) {
+    const c = reconcileProject(ctx, p.prefix);
+    projects[p.prefix] = c;
+    count += c;
+  }
+  return ok({ rebuilt: true, count, projects });
+}
 
-  return ok({ rebuilt: true, count });
+/**
+ * Reconcile one project into the shared index, resolving its tasks dir storage-aware (global → storageDir,
+ * local → <path>/<tasksDirName>) via the registry. MCPAT-062: the old code hard-coded join(path,
+ * tasksDirName) for every project, so global-storage projects (markdown in storageDir) reconciled an empty
+ * dir → count 0.
+ */
+function reconcileProject(ctx: ToolContext, prefix: string): number {
+  const tasksDir = ctx.store.getTasksDirForPrefix(prefix);
+  return new Reconciler(ctx.index, tasksDir, prefix).reconcile();
 }
