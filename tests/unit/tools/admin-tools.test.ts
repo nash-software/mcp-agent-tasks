@@ -157,6 +157,8 @@ describe('task_rebuild_index', async () => {
     it('throws PROJECT_NOT_FOUND when project not in config', async () => {
       const ctx = makeCtx({ config: makeConfig(tmpDir) });
       await expect(mod.execute({ project: 'UNKNOWN' }, ctx)).rejects.toThrow(McpTasksError);
+      // Assert the contract-level error CODE, not just the class (codex r1 F1).
+      await expect(mod.execute({ project: 'UNKNOWN' }, ctx)).rejects.toMatchObject({ code: 'PROJECT_NOT_FOUND' });
     });
 
     it('reconciles a GLOBAL-storage project from storageDir, not <path>/agent-tasks (MCPAT-062)', async () => {
