@@ -118,42 +118,85 @@ describe('task_rebuild_index', async () => {
 
   describe('execute()', () => {
     let tmpDir: string;
+    let openIdx: { close(): void } | null = null;
 
     beforeEach(() => {
       tmpDir = makeTempDir();
+      openIdx = null;
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+      // Always close the DB (even if an assertion threw) so the temp-dir unlink doesn't hit a held handle,
+      // and give Windows a tick to release the WAL/-shm files before rmSync (avoids flaky EBUSY).
+      try { openIdx?.close(); } catch { /* already closed */ }
+      openIdx = null;
+      await new Promise(r => setTimeout(r, 30));
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
+
+    // Build a ctx backed by a REAL StoreRegistry + shared SqliteIndex (the MCP server's model).
+    async function buildCtx(config: McpTasksConfig): Promise<ToolContext> {
+      fs.mkdirSync(config.storageDir, { recursive: true });
+      const { SqliteIndex } = await import('../../../src/store/sqlite-index.js');
+      const { StoreRegistry } = await import('../../../src/store/store-registry.js');
+      const { MarkdownStore } = await import('../../../src/store/markdown-store.js');
+      const { ManifestWriter } = await import('../../../src/store/manifest-writer.js');
+      const idx = new SqliteIndex(path.join(config.storageDir, 'tasks.db'));
+      idx.init();
+      openIdx = idx; // closed in afterEach
+      const registry = new StoreRegistry(config, idx, new MarkdownStore(), new ManifestWriter());
+      // Ensure every project's (storage-aware) tasks dir exists so createTask's atomic write can land.
+      for (const p of config.projects) fs.mkdirSync(registry.getTasksDirForPrefix(p.prefix), { recursive: true });
+      return makeCtx({
+        config,
+        index: idx as unknown as ToolContext['index'],
+        store: registry as unknown as ToolContext['store'],
+      });
+    }
 
     it('throws PROJECT_NOT_FOUND when project not in config', async () => {
       const ctx = makeCtx({ config: makeConfig(tmpDir) });
       await expect(mod.execute({ project: 'UNKNOWN' }, ctx)).rejects.toThrow(McpTasksError);
     });
 
-    it('runs reconciler and returns rebuilt count', async () => {
-      // projectConfig.path is the project root; task-rebuild-index appends tasksDirName
-      const agentTasksDir = path.join(tmpDir, 'agent-tasks');
-      fs.mkdirSync(agentTasksDir, { recursive: true });
+    it('reconciles a GLOBAL-storage project from storageDir, not <path>/agent-tasks (MCPAT-062)', async () => {
+      // Global markdown lives in storageDir; the OLD code looked in <path>/agent-tasks → count 0.
+      const config = makeConfig(path.join(tmpDir, 'global'), [{ prefix: 'GLOB', path: path.join(tmpDir, 'glob-root'), storage: 'global' }]);
+      const ctx = await buildCtx(config);
+      const store = ctx.store.getStoreForPrefix('GLOB');
+      store.createTask({ project: 'GLOB', title: 'g1', type: 'chore', priority: 'low', why: 'x' });
+      const t2 = store.createTask({ project: 'GLOB', title: 'g2', type: 'chore', priority: 'low', why: 'x' });
 
-      const config = makeConfig(tmpDir, [{ prefix: 'TEST', path: tmpDir, storage: 'local' }]);
-      const { SqliteIndex } = await import('../../../src/store/sqlite-index.js');
-      const dbPath = path.join(tmpDir, 'tasks.db');
-      const idx = new SqliteIndex(dbPath);
-      idx.init();
-
-      const ctx = makeCtx({
-        config,
-        index: idx as unknown as ToolContext['index'],
-      });
-
-      const result = await mod.execute({ project: 'TEST' }, ctx);
-      const parsed = JSON.parse(result.content[0].text) as { rebuilt: boolean; count: number };
+      const result = await mod.execute({ project: 'GLOB' }, ctx);
+      const parsed = JSON.parse(result.content[0].text) as { rebuilt: boolean; count: number; projects: Record<string, number> };
       expect(parsed.rebuilt).toBe(true);
-      expect(typeof parsed.count).toBe('number');
+      expect(parsed.count).toBe(2);
+      expect(parsed.projects.GLOB).toBe(2);
+      expect(ctx.index.getTask(t2.id)).not.toBeNull();
+    });
 
-      idx.close();
+    it('reconciles a LOCAL-storage project from <path>/agent-tasks (no regression)', async () => {
+      const config = makeConfig(path.join(tmpDir, 'global'), [{ prefix: 'LOC', path: path.join(tmpDir, 'loc'), storage: 'local' }]);
+      const ctx = await buildCtx(config);
+      ctx.store.getStoreForPrefix('LOC').createTask({ project: 'LOC', title: 'l1', type: 'chore', priority: 'low', why: 'x' });
+      const result = await mod.execute({ project: 'LOC' }, ctx);
+      const parsed = JSON.parse(result.content[0].text) as { count: number };
+      expect(parsed.count).toBe(1);
+    });
+
+    it('no-arg reconciles EVERY configured project with per-project counts', async () => {
+      const config = makeConfig(path.join(tmpDir, 'global'), [
+        { prefix: 'GLOB', path: path.join(tmpDir, 'glob-root'), storage: 'global' },
+        { prefix: 'LOC', path: path.join(tmpDir, 'loc'), storage: 'local' },
+      ]);
+      const ctx = await buildCtx(config);
+      ctx.store.getStoreForPrefix('GLOB').createTask({ project: 'GLOB', title: 'g1', type: 'chore', priority: 'low', why: 'x' });
+      ctx.store.getStoreForPrefix('LOC').createTask({ project: 'LOC', title: 'l1', type: 'chore', priority: 'low', why: 'x' });
+      const result = await mod.execute({}, ctx);
+      const parsed = JSON.parse(result.content[0].text) as { count: number; projects: Record<string, number> };
+      expect(parsed.count).toBe(2);
+      expect(parsed.projects.GLOB).toBe(1);
+      expect(parsed.projects.LOC).toBe(1);
     });
   });
 });
