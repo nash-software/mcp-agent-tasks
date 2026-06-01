@@ -67,3 +67,19 @@ markdown so they still self-heal; a project with index rows but no markdown is l
 keeps index-only test harnesses valid — they seed the index without markdown.)
 
 **AC6:** a project whose tasks dir has index rows but no `.md` files keeps its index on boot (not pruned).
+
+## 8. Codex flip-flop resolution (r1 vs r2 — per-file error handling)
+
+Codex round 1 said "narrow the per-file catch to known ingest errors, rethrow systemic"; round 2 said the
+opposite — "narrowing reintroduces single-file abort risk; skip ALL per-file errors, handle systemic at the
+boundary." Resolved on technical evidence (handoff §7, don't oscillate):
+
+- **Decision: skip ALL per-file errors and continue** (round 2 + the spec's original intent). The per-file
+  loop is per-file resilience by definition.
+- **Why this is data-safe** (refutes round 1's silent-data-loss fear): `pruneOrphans` is **markdown-driven**
+  — it removes only index rows whose id has no markdown file, independent of what a given reconcile pass
+  ingested. So even a pass that skips every file cannot delete markdown-backed rows.
+- **Systemic safety at the boundary**: `reconcileIndexOnBoot`'s outer try/catch keeps the last-known index
+  on any whole-reconcile failure; a corrupt/unusable DB surfaces when `pruneOrphans`/queries throw there.
+- **Observability** (honours round 1's fallback ask): reconcile logs each `SKIPPED <file>` plus a summary
+  `skipped N of M file(s)` so a systemic failure masquerading as mass-skips is visible in logs.
