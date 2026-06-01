@@ -141,10 +141,14 @@ describe('TaskPanel.tsx — structure', () => {
       expect(src).toContain('handleTransition(primary)');
     });
 
-    it('footer has schedule toggle button (Commit/Remove today)', () => {
+    it('footer has schedule toggle button (icon-based, retains commitLabel/today logic)', () => {
+      // Logic is still computed (for aria-label via todayAriaLabel), even though text moved to aria/title
       expect(src).toContain('commitLabel');
       expect(src).toContain('Commit today');
       expect(src).toContain('Remove today');
+      // Icon-based today toggle uses lucide CalendarCheck/CalendarPlus
+      expect(src).toContain('CalendarPlus');
+      expect(src).toContain('CalendarCheck');
     });
 
     it('footer has Hermes sign-off button (P4-06a: wired, conditionally disabled)', () => {
@@ -257,7 +261,7 @@ describe('TaskPanel.tsx — structure', () => {
   });
 });
 
-// ── MCPAT-061: Bundle B — Block + Promote + grouped footer ────────────────────
+// ── MCPAT-061/064: Bundle B + split button + Claim + lucide icons ────────────
 describe('TaskPanel.tsx — MCPAT-061 status-action footer', () => {
   it('imports the pure status-action engine', () => {
     expect(src).toMatch(/from '\.\.\/lib\/task-actions'/);
@@ -266,11 +270,44 @@ describe('TaskPanel.tsx — MCPAT-061 status-action footer', () => {
     }
   });
 
-  it('renders a "Move to…" menu of the secondary targets', () => {
-    expect(src).toContain('Move to');
+  it('renders a caret-driven menu of the secondary targets (split button)', () => {
+    // The secondary menu is now anchored under the split button's caret segment
     expect(src).toContain('secondary.length > 0');
     expect(src).toContain('role="menu"');
     expect(src).toContain('secondary.map');
+    // Caret uses ChevronDown lucide icon; no more "Move to…" text label
+    expect(src).toContain('ChevronDown');
+    expect(src).not.toContain('Move to…');
+  });
+
+  it('split button: primary uses rounded-l and caret uses rounded-r rounded-l-none', () => {
+    expect(src).toContain('rounded-l');
+    expect(src).toContain('rounded-r rounded-l-none');
+  });
+
+  it('caret button has aria-haspopup="menu" and aria-expanded on moveMenuOpen', () => {
+    expect(src).toContain('aria-haspopup="menu"');
+    expect(src).toContain('aria-expanded={moveMenuOpen}');
+  });
+
+  it('todo status uses Claim as the primary (handleClaim, not handleTransition)', () => {
+    expect(src).toContain("task.status === 'todo'");
+    expect(src).toContain('handleClaim');
+    // JSX text nodes have surrounding whitespace; match the label text directly
+    expect(src).toContain('Claim');
+    // Ensure "Claim" appears as JSX button content (aria-label check)
+    expect(src).toContain('aria-label="Claim task"');
+  });
+
+  it('handleClaim performs optimistic update and calls claimTask from api', () => {
+    expect(src).toContain('async function handleClaim');
+    expect(src).toContain('claimTask');
+    // Optimistic pattern: snapshot + rollback
+    expect(src).toContain("status: 'in_progress' as TaskStatus, claimed_by:");
+  });
+
+  it('imports claimTask from ../api', () => {
+    expect(src).toMatch(/claimTask.*from '\.\.\/api'|from '\.\.\/api'.*claimTask/s);
   });
 
   it('Block opens an inline reason input rather than firing blind', () => {
@@ -289,6 +326,29 @@ describe('TaskPanel.tsx — MCPAT-061 status-action footer', () => {
   it('command actions (Hermes/ACR) survive as icon buttons with accessible labels', () => {
     expect(src).toContain('aria-label="Sign off task to Hermes"');
     expect(src).toContain('aria-label="Dispatch task to ACR"');
+  });
+
+  it('lucide icons used: Send (Hermes), Bot (ACR), Trash2 (Delete), CalendarPlus (no emoji)', () => {
+    expect(src).toContain('Send');
+    expect(src).toContain('Bot');
+    expect(src).toContain('Trash2');
+    expect(src).toContain('CalendarPlus');
+    // No emoji remnants
+    expect(src).not.toContain('⚡');
+    expect(src).not.toContain('▲');
+  });
+
+  it('Delete is an icon button (Trash2) in un-armed state, not text "Delete"', () => {
+    // The un-armed delete renders Trash2 icon, not text "Delete" in a button
+    expect(src).toContain('<Trash2 size={14}');
+    // Text "Delete" should NOT appear as standalone button label anymore
+    expect(src).not.toMatch(/<button[^>]*>\s*Delete\s*<\/button>/);
+  });
+
+  it('assignee badge renders claimed_by with User icon in detail mode', () => {
+    expect(src).toContain('task.claimed_by');
+    expect(src).toContain('User');
+    expect(src).toContain('{task.claimed_by}');
   });
 
   it('menu closes on outside click via mousedown (not keydown — Enter/Esc stay App-global)', () => {
