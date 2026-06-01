@@ -1863,13 +1863,24 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           sendJson(res, 409, { error: 'NOT_CLAIMABLE', message: `Cannot claim a task in status '${task.status}'` });
           return;
         }
-        const now = new Date().toISOString();
         const claimant = userInfo().username || 'me';
+        // Idempotent no-op: already mine and active — return unchanged (no timestamp/transition churn). codex F2.
+        if (task.claimed_by === claimant && task.status === 'in_progress') {
+          sendJson(res, 200, task);
+          return;
+        }
+        const now = new Date().toISOString();
         const movingToInProgress = task.status === 'todo';
         const transition = movingToInProgress
           ? { from: 'todo' as TaskStatus, to: 'in_progress' as TaskStatus, at: now, reason: 'Claimed' }
           : null;
 
+        // Snapshot the fields we mutate so we can restore the in-memory task if persistence fails — never
+        // leave runtime state diverged from markdown/index on a 500 (codex F1).
+        const prev = {
+          status: task.status, claimed_by: task.claimed_by, claimed_at: task.claimed_at,
+          updated: task.updated, last_activity: task.last_activity, transitions: task.transitions,
+        };
         task.claimed_by = claimant;
         task.claimed_at = now;
         task.updated = now;
@@ -1890,6 +1901,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           }
         });
         if (!persisted) {
+          Object.assign(task, prev); // roll back the in-memory mutation
           sendJson(res, 500, { error: 'PERSIST_FAILED', message: 'could not durably persist claim' });
           return;
         }

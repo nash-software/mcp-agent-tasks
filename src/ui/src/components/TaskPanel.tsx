@@ -205,8 +205,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   const today = new Date().toISOString().slice(0, 10)
   const isScheduledToday = task?.scheduled_for === today
-  // commitLabel is used as the hover title on the today icon button (MCPAT-064: text → icon, title kept)
-  const commitLabel = isScheduledToday ? 'Remove today' : 'Commit today'
+  // Today icon button label (MCPAT-064: text → icon; this drives both tooltip + aria-label).
   const todayAriaLabel = isScheduledToday ? 'Remove from today' : 'Add to today'
 
   // MCPAT-061 — generic status transition (subsumes the old Start/Done buttons). Optimistic status flip
@@ -968,7 +967,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
           <button
             onClick={() => void handleScheduleToggle()}
             className="h-7 w-7 inline-flex items-center justify-center rounded bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
-            title={commitLabel}
+            title={todayAriaLabel}
             aria-label={todayAriaLabel}
           >
             {isScheduledToday

@@ -87,3 +87,22 @@ before commits; no `Co-Authored-By`.
 ## 8. Out of scope
 - Unclaim/release button, reassign-to-other-user, an assignee filter. (Single-user claim only for now.)
 - Touching `task_claim` MCP tool / `ctx.sessionId` semantics.
+
+## 9. Codex round 1 + security resolution
+
+- **F1 (HIGH, fixed):** claim now snapshots the mutated fields and rolls back the in-memory task on a
+  `persistTaskDurable` failure (returns 500 without leaving runtime state diverged from markdown/index).
+- **F2 (MED, fixed):** claim is a true no-op when already `claimed_by === me && status === 'in_progress'` —
+  early-returns the task unchanged (no timestamp/transition churn).
+- **F3 (MED, DISMISSED):** codex wanted the optimistic update to also set `claimed_by`. Kept **status-only**
+  optimistic: the client doesn't know the server's OS username, and faking one flashes a placeholder
+  (`…you…`) before the real name lands. `claimed_by` populates from the server response on the (instant,
+  local) invalidate. Adding a whoami/identity endpoint just to pre-fill a name is over-engineering for a
+  single-user dashboard. Spec §4.2 reflects status-only optimistic.
+- **F4 (LOW, fixed):** today toggle tooltip + aria-label both use "Add to today" / "Remove from today"
+  (dropped the legacy `commitLabel` "Commit today" string).
+- **F5 (MED, fixed):** the idempotency test now asserts `claimed_at`/`updated`/transition-count are unchanged
+  on a same-user re-claim, not just 200 + status.
+- **Security:** scanner PASS (0 blockers/warnings). `:id` is lookup-only (never reaches a fs path),
+  `claimed_by` is server-side (`os.userInfo`), no body read, transitions capped. INFO: claim hardcodes the
+  valid `todo→in_progress` edge rather than delegating to `isValidTransition` — maintenance note, not a risk.

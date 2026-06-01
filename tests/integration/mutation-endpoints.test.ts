@@ -29,6 +29,8 @@ interface TaskShape {
   estimate_hours?: number;
   block_reason?: string;
   claimed_by?: string | null;
+  claimed_at?: string | null;
+  updated?: string;
   transitions?: Array<{ from: string; to: string; at: string; reason?: string }>;
 }
 
@@ -348,10 +350,17 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(back?.claimed_by).toBeTruthy();
   });
 
-  it('MCPAT-064: re-claiming an already-claimed in_progress task is idempotent (200, stays in_progress)', async () => {
+  it('MCPAT-064: re-claiming an already-claimed in_progress task is a true no-op (timestamps + transitions unchanged)', async () => {
+    const first = await (await fetch(`${baseUrl}/api/tasks/MUT-006/claim`, { method: 'POST' })).json() as TaskShape;
+    const txCount = first.transitions?.length ?? 0;
     const res = await fetch(`${baseUrl}/api/tasks/MUT-006/claim`, { method: 'POST' });
     expect(res.status).toBe(200);
-    expect((await res.json() as TaskShape).status).toBe('in_progress');
+    const second = await res.json() as TaskShape;
+    expect(second.status).toBe('in_progress');
+    // codex F2/F5: no churn on a same-user re-claim.
+    expect(second.claimed_at).toBe(first.claimed_at);
+    expect(second.updated).toBe(first.updated);
+    expect(second.transitions?.length ?? 0).toBe(txCount);
   });
 
   it('MCPAT-064: claiming an unknown task → 404', async () => {

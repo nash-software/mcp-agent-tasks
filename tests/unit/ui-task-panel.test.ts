@@ -141,11 +141,11 @@ describe('TaskPanel.tsx — structure', () => {
       expect(src).toContain('handleTransition(primary)');
     });
 
-    it('footer has schedule toggle button (icon-based, retains commitLabel/today logic)', () => {
-      // Logic is still computed (for aria-label via todayAriaLabel), even though text moved to aria/title
-      expect(src).toContain('commitLabel');
-      expect(src).toContain('Commit today');
-      expect(src).toContain('Remove today');
+    it('footer has schedule toggle button (icon-based, "Add/Remove from today" label)', () => {
+      // Text moved to an icon button; tooltip + aria-label use the spec wording (MCPAT-064 codex F4).
+      expect(src).toContain('todayAriaLabel');
+      expect(src).toContain('Add to today');
+      expect(src).toContain('Remove from today');
       // Icon-based today toggle uses lucide CalendarCheck/CalendarPlus
       expect(src).toContain('CalendarPlus');
       expect(src).toContain('CalendarCheck');
