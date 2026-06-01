@@ -101,11 +101,14 @@ export class Reconciler {
         count++;
         changed++;
       } catch (err) {
-        // Skip ANY file the reconciler can't ingest — corrupt frontmatter, invalid enum (e.g. a bad
-        // `priority`), a SQLite CHECK-constraint failure, etc. One poison record must not abort the whole
-        // project's reconcile (MCPAT-065 — previously only SCHEMA_MISMATCH was skipped and everything else
-        // rethrew, taking down the entire pass). Surface it loudly so it gets fixed; markdown stays the
-        // source of truth.
+        // Skip a single poison FILE — corrupt frontmatter, schema mismatch, invalid enum (e.g. a bad
+        // `priority` that trips a SQLite CHECK constraint). One bad record must not abort the whole
+        // project's reconcile (MCPAT-065). But only swallow recognised per-file INGEST errors; rethrow
+        // systemic failures (IO, corruption, BUSY, programming bugs) so they fail loud rather than being
+        // masked as a skip and silently producing a partial index (codex F1).
+        const code = (err && typeof err === 'object' && 'code' in err) ? String((err as { code?: unknown }).code) : '';
+        const isIngestError = err instanceof McpTasksError || code.startsWith('SQLITE_CONSTRAINT');
+        if (!isIngestError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[reconciler] SKIPPED ${file} (${this.project}): ${msg}`);
         continue;

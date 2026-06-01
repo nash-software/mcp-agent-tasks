@@ -576,8 +576,9 @@ function reconcileIndexOnBoot(pi: ProjectIndex): void {
     reconciler.reconcile();
     reconciler.pruneOrphans();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[serve-ui] reconcile-on-boot skipped for ${pi.prefix}: ${msg}`);
+    // Keep the last-known index for this project and carry on booting. Log full context (prefix, dir,
+    // stack) so a systemic self-heal failure is diagnosable rather than silent (codex F2).
+    console.error(`[serve-ui] reconcile-on-boot FAILED for ${pi.prefix} (tasksDir=${pi.tasksDir}) — serving last-known index:`, err);
   }
 }
 
