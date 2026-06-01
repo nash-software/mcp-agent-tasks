@@ -43,8 +43,10 @@ Fuse the primary button + the "Move to…" caret into ONE split control:
 - `aria-haspopup="menu"` / `aria-expanded` on the caret.
 
 ### 4.2 Claim handler + assignee
-- `handleClaim()` — optimistic (mirror `handleTransition`): snapshot, optimistically set
-  `status:'in_progress'` + `claimed_by` on the cached task, `await claimTask(id)`, invalidate, rollback on error.
+- `handleClaim()` — optimistic (mirror `handleTransition`): snapshot, optimistically set **`status:'in_progress'`
+  only** on the cached task (NOT `claimed_by` — see §9 F3: the client doesn't know the server's username, so
+  `claimed_by` is filled from the server response on invalidate, avoiding a placeholder flash), `await
+  claimTask(id)`, invalidate, rollback on error.
 - **Assignee badge**: when `task.claimed_by` is set, show a small `lucide User` + the name near the header
   meta row (detail mode). Reuse existing chip styling.
 
