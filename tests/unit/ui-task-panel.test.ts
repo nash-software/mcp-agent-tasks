@@ -302,8 +302,9 @@ describe('TaskPanel.tsx — MCPAT-061 status-action footer', () => {
   it('handleClaim performs optimistic update and calls claimTask from api', () => {
     expect(src).toContain('async function handleClaim');
     expect(src).toContain('claimTask');
-    // Optimistic pattern: snapshot + rollback
-    expect(src).toContain("status: 'in_progress' as TaskStatus, claimed_by:");
+    // Optimistic: flip status to in_progress (claimed_by comes from the server response — not faked).
+    expect(src).toContain("status: 'in_progress' as TaskStatus");
+    expect(src).toContain('getQueriesData'); // snapshot for rollback
   });
 
   it('imports claimTask from ../api', () => {

@@ -243,7 +243,9 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   }
 
   // "Claim" — takes ownership of a todo task (sets claimed_by, transitions todo→in_progress).
-  // Optimistic: snapshot → flip status+claimed_by → POST /claim → invalidate; roll back on error.
+  // Optimistic: flip status so the task moves lists immediately; claimed_by (the real OS username) is
+  // filled by the server response on invalidate — we don't fake it client-side to avoid a flash of a
+  // placeholder name. Roll back on error.
   async function handleClaim(): Promise<void> {
     if (!task) return
     const id = task.id
@@ -251,7 +253,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
       Array.isArray(old)
         ? old.map(t => (t.id === id
-            ? { ...t, status: 'in_progress' as TaskStatus, claimed_by: '…you…' }
+            ? { ...t, status: 'in_progress' as TaskStatus }
             : t))
         : old,
     )
