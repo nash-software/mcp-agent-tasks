@@ -101,6 +101,20 @@ export function fetchToday(targetMinutes?: number): Promise<TodayResponse> {
   return get<TodayResponse>(`/api/today${params}`)
 }
 
+/** Claim a task for the local dashboard user (MCPAT-064): sets claimed_by and, from todo, moves it to
+ *  in_progress. Throws on non-2xx so an optimistic mutation rolls back. */
+export async function claimTask(id: string): Promise<Task> {
+  const res = await fetch(`/api/tasks/${id}/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText })) as { error?: string; message?: string }
+    throw new Error(err.message ?? err.error ?? `Claim failed: ${res.status}`)
+  }
+  return res.json() as Promise<Task>
+}
+
 export async function scheduleTask(id: string, date: string | null): Promise<Task> {
   const res = await fetch(`/api/tasks/${id}/schedule`, {
     method: 'POST',

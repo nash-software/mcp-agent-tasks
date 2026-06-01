@@ -28,6 +28,9 @@ interface TaskShape {
   title: string;
   estimate_hours?: number;
   block_reason?: string;
+  claimed_by?: string | null;
+  claimed_at?: string | null;
+  updated?: string;
   transitions?: Array<{ from: string; to: string; at: string; reason?: string }>;
 }
 
@@ -119,6 +122,16 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
       claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
       children: [], dependencies: [], subtasks: [], git: { commits: [] },
       transitions: [], files: [], body: '', file_path: 'MUT-005.md',
+    });
+
+    // MUT-006: todo (MCPAT-064 — Claim)
+    idx.upsertTask({
+      schema_version: 1, id: 'MUT-006', title: 'Claimable task', type: 'feature',
+      status: 'todo', priority: 'medium', project: 'MUT', tags: [], complexity: 1,
+      complexity_manual: false, why: '', created: ts, updated: ts, last_activity: ts,
+      claimed_by: null, claimed_at: null, claim_ttl_hours: 4, parent: null,
+      children: [], dependencies: [], subtasks: [], git: { commits: [] },
+      transitions: [], files: [], body: '', file_path: 'MUT-006.md',
     });
 
     idx.close();
@@ -319,6 +332,47 @@ describe('P4-01 — task mutation endpoints (PATCH + /transition)', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as { error: string };
     expect(body.error).toMatch(/INVALID_FIELD/);
+  });
+
+  // ── MCPAT-064: POST /api/tasks/:id/claim ─────────────────────────────────
+
+  it('MCPAT-064: claiming a todo task sets claimed_by and moves it to in_progress', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-006/claim`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const task = await res.json() as TaskShape;
+    expect(task.status).toBe('in_progress');
+    expect(typeof task.claimed_by).toBe('string');
+    expect(task.claimed_by).toBeTruthy();
+    // re-read confirms persistence
+    const tasks = await (await fetch(`${baseUrl}/api/tasks`)).json() as TaskShape[];
+    const back = tasks.find(t => t.id === 'MUT-006');
+    expect(back?.status).toBe('in_progress');
+    expect(back?.claimed_by).toBeTruthy();
+  });
+
+  it('MCPAT-064: re-claiming an already-claimed in_progress task is a true no-op (timestamps + transitions unchanged)', async () => {
+    const first = await (await fetch(`${baseUrl}/api/tasks/MUT-006/claim`, { method: 'POST' })).json() as TaskShape;
+    const txCount = first.transitions?.length ?? 0;
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-006/claim`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const second = await res.json() as TaskShape;
+    expect(second.status).toBe('in_progress');
+    // codex F2/F5: no churn on a same-user re-claim.
+    expect(second.claimed_at).toBe(first.claimed_at);
+    expect(second.updated).toBe(first.updated);
+    expect(second.transitions?.length ?? 0).toBe(txCount);
+  });
+
+  it('MCPAT-064: claiming an unknown task → 404', async () => {
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-999/claim`, { method: 'POST' });
+    expect(res.status).toBe(404);
+  });
+
+  it('MCPAT-064: claiming a non-claimable status → 409 NOT_CLAIMABLE', async () => {
+    // MUT-005 was promoted to 'approved' earlier — not a claimable (todo/in_progress) status.
+    const res = await fetch(`${baseUrl}/api/tasks/MUT-005/claim`, { method: 'POST' });
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe('NOT_CLAIMABLE');
   });
 
   // ── PATCH /api/tasks/:id ─────────────────────────────────────────────────

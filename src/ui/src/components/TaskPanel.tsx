@@ -17,10 +17,11 @@
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { Send, Bot, Trash2, CalendarPlus, CalendarCheck, ChevronDown, User } from 'lucide-react'
 import type { Task, PanelState, TaskStatus, TaskPriority, TaskArea, TaskType } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime } from '../lib/time'
-import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask } from '../api'
+import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask, claimTask } from '../api'
 import { useMilestones } from '../hooks/useMilestones'
 import { milestoneProject } from '../lib/milestone'
 import { primaryTarget, secondaryTargets, transitionLabel, requiresReason, targetTone } from '../lib/task-actions'
@@ -107,7 +108,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const [tagInput, setTagInput]               = useState<string>('')
   // Two-step delete: first click arms, second click within the panel confirms (guard, overview §9).
   const [confirmDelete, setConfirmDelete]     = useState<boolean>(false)
-  // MCPAT-061 — "Move to…" status menu + inline Block reason input. blockDraft non-null => reason input shown.
+  // MCPAT-061/064 — secondary-targets menu (split-button caret) + inline Block reason input. blockDraft non-null => reason input shown.
   const [moveMenuOpen, setMoveMenuOpen]       = useState<boolean>(false)
   const [blockDraft, setBlockDraft]           = useState<string | null>(null)
   const moveMenuRef = useRef<HTMLDivElement>(null)
@@ -148,7 +149,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
     }
   }, [isOpen, task, onClose])
 
-  // MCPAT-061 — close the "Move to…" menu on an outside click (mousedown, not keydown — Enter/Esc stay
+  // MCPAT-061/064 — close the secondary-targets menu on an outside click (mousedown, not keydown — Enter/Esc stay
   // App-global per P1-02). Discards any half-typed Block reason.
   useEffect(() => {
     if (!moveMenuOpen) return
@@ -204,7 +205,8 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
   const today = new Date().toISOString().slice(0, 10)
   const isScheduledToday = task?.scheduled_for === today
-  const commitLabel = isScheduledToday ? 'Remove today' : 'Commit today'
+  // Today icon button label (MCPAT-064: text → icon; this drives both tooltip + aria-label).
+  const todayAriaLabel = isScheduledToday ? 'Remove from today' : 'Add to today'
 
   // MCPAT-061 — generic status transition (subsumes the old Start/Done buttons). Optimistic status flip
   // (so the task moves between lists immediately), rollback + error on failure. Terminal moves (done/closed)
@@ -237,6 +239,31 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   // "Block" — collects a reason (persisted to block_reason server-side) then transitions to blocked.
   async function handleBlock(reason: string): Promise<void> {
     await handleTransition('blocked', reason.trim() || undefined)
+  }
+
+  // "Claim" — takes ownership of a todo task (sets claimed_by, transitions todo→in_progress).
+  // Optimistic: flip status so the task moves lists immediately; claimed_by (the real OS username) is
+  // filled by the server response on invalidate — we don't fake it client-side to avoid a flash of a
+  // placeholder name. Roll back on error.
+  async function handleClaim(): Promise<void> {
+    if (!task) return
+    const id = task.id
+    const snapshot = queryClient.getQueriesData<Task[]>({ queryKey: ['tasks'] })
+    queryClient.setQueriesData<Task[]>({ queryKey: ['tasks'] }, (old) =>
+      Array.isArray(old)
+        ? old.map(t => (t.id === id
+            ? { ...t, status: 'in_progress' as TaskStatus }
+            : t))
+        : old,
+    )
+    try {
+      await claimTask(id)
+      await invalidateCaches()
+      setErrorMsg(null)
+    } catch (err) {
+      for (const [key, data] of snapshot) queryClient.setQueryData(key, data)
+      surfaceError(err)
+    }
   }
 
   // (Reopen/Resume for closed tasks is now handled by the engine: closed → primary 'Reopen' (todo) +
@@ -423,7 +450,7 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const areaDotClass   = (task?.area ? AREA_DOT[task.area] : undefined) ?? 'bg-ink-muted'
 
   // MCPAT-061 — status moves are engine-driven (one source of truth, mirrors the server state machine):
-  // a single primary forward step + the remaining valid targets in the "Move to…" menu. The server is
+  // a single primary forward step + the remaining valid targets in the caret dropdown. The server is
   // authoritative — a 409 rolls the optimistic flip back (handleTransition).
   const primary   = task ? primaryTarget(task.status) : null
   const secondary = task ? secondaryTargets(task.status) : []
@@ -602,6 +629,14 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                 >
                   {task.estimate_hours != null ? `${task.estimate_hours}h` : '+ est'}
                 </button>
+              )}
+
+              {/* Assignee badge — detail mode: show claimed_by when set (MCPAT-064) */}
+              {!isPeek && task.claimed_by && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-muted">
+                  <User size={12} aria-hidden />
+                  {task.claimed_by}
+                </span>
               )}
             </div>
 
@@ -833,31 +868,46 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <div className="flex-shrink-0 border-t border-surface-3 px-4 py-3 space-y-2">
-        {/* Action buttons row — MCPAT-061 (V4+V3): [ status: primary + Move to… ] · [ commands ] · [ Delete ] */}
+        {/* Action buttons row — MCPAT-064: split button (primary │ caret▾) · icon commands · trash delete */}
         <div className="flex items-center gap-2">
-          {/* ── Status group: one primary forward step + a "Move to…" menu of the rest ── */}
+          {/* ── Split button: primary action + caret for secondary targets ── */}
           {task && primary && (
-            <button
-              onClick={() => void handleTransition(primary)}
-              className={`px-3 py-1.5 rounded text-xs font-medium transition-colors duration-100 ${TONE_BTN[targetTone(primary)]}`}
-              aria-label={`${transitionLabel(task.status, primary)} task`}
-            >
-              {transitionLabel(task.status, primary)}
-            </button>
-          )}
+            <div className="relative inline-flex" ref={moveMenuRef}>
+              {/* Primary segment */}
+              {task.status === 'todo' ? (
+                <button
+                  onClick={() => void handleClaim()}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors duration-100 ${secondary.length > 0 ? 'rounded-l rounded-r-none' : 'rounded'} ${TONE_BTN['blue']}`}
+                  aria-label="Claim task"
+                >
+                  Claim
+                </button>
+              ) : (
+                <button
+                  onClick={() => void handleTransition(primary)}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors duration-100 ${secondary.length > 0 ? 'rounded-l rounded-r-none' : 'rounded'} ${TONE_BTN[targetTone(primary)]}`}
+                  aria-label={`${transitionLabel(task.status, primary)} task`}
+                >
+                  {transitionLabel(task.status, primary)}
+                </button>
+              )}
 
-          {task && secondary.length > 0 && (
-            <div className="relative" ref={moveMenuRef}>
-              <button
-                onClick={() => { setMoveMenuOpen(o => !o); setBlockDraft(null) }}
-                className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
-                aria-haspopup="menu"
-                aria-expanded={moveMenuOpen}
-                aria-label="Move task to another status"
-              >
-                Move to…<span aria-hidden className="ml-1 text-[9px] opacity-70">▾</span>
-              </button>
+              {/* Caret segment — only when there are secondary targets */}
+              {secondary.length > 0 && (
+                <button
+                  onClick={() => { setMoveMenuOpen(o => !o); setBlockDraft(null) }}
+                  className={`px-1.5 py-1.5 rounded-r rounded-l-none border-l border-black/20 text-xs font-medium transition-colors duration-100 ${
+                    task.status === 'todo' ? TONE_BTN['blue'] : TONE_BTN[targetTone(primary)]
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={moveMenuOpen}
+                  aria-label="More status actions"
+                >
+                  <ChevronDown size={14} aria-hidden />
+                </button>
+              )}
 
+              {/* Move-to dropdown menu — anchored under the split control */}
               {moveMenuOpen && (
                 <div
                   role="menu"
@@ -912,18 +962,24 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
           {/* divider */}
           <span aria-hidden className="mx-0.5 h-5 w-px bg-surface-3" />
 
-          {/* ── Command group: schedule toggle (text) + Hermes/ACR as icon buttons ── */}
+          {/* ── Command group: today toggle (icon) + Hermes (Send icon) + ACR (Bot icon) ── */}
+          {/* Today toggle — CalendarCheck when scheduled, CalendarPlus when not */}
           <button
             onClick={() => void handleScheduleToggle()}
-            className="px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
+            className="h-7 w-7 inline-flex items-center justify-center rounded bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
+            title={todayAriaLabel}
+            aria-label={todayAriaLabel}
           >
-            {commitLabel}
+            {isScheduledToday
+              ? <CalendarCheck size={14} aria-hidden />
+              : <CalendarPlus size={14} aria-hidden />
+            }
           </button>
           {/* Sign off to Hermes — gated: cannot re-sign an already-signed task (epic §9) */}
           <button
             onClick={() => void handleSignOff()}
             disabled={task?.agent_status === 'scheduled'}
-            className={`h-7 w-7 inline-flex items-center justify-center rounded text-sm transition-colors duration-100 ${
+            className={`h-7 w-7 inline-flex items-center justify-center rounded transition-colors duration-100 ${
               task?.agent_status === 'scheduled'
                 ? 'bg-surface-2 text-ink-faint opacity-50 cursor-not-allowed'
                 : 'bg-surface-2 text-ink-2 hover:bg-surface-3'
@@ -931,26 +987,26 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
             title={task?.agent_status === 'scheduled' ? 'Already signed off to Hermes' : 'Sign off to Hermes'}
             aria-label="Sign off task to Hermes"
           >
-            <span aria-hidden>⚡</span>
+            <Send size={14} aria-hidden />
           </button>
           {/* Dispatch to ACR */}
           <button
             onClick={() => void handleDispatchAcr()}
-            className="h-7 w-7 inline-flex items-center justify-center rounded text-sm bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
+            className="h-7 w-7 inline-flex items-center justify-center rounded bg-surface-2 text-ink-2 hover:bg-surface-3 transition-colors duration-100"
             title="Dispatch to ACR"
             aria-label="Dispatch task to ACR"
           >
-            <span aria-hidden>▲</span>
+            <Bot size={14} aria-hidden />
           </button>
 
-          {/* Delete — guarded two-step, fenced right (overview §9). P5-04 */}
+          {/* Delete — guarded two-step, fenced right (overview §9). P5-04 / MCPAT-064 */}
           {!confirmDelete ? (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="ml-auto px-3 py-1.5 rounded text-xs font-medium bg-surface-2 text-status-red/80 hover:bg-status-red/10 hover:text-status-red transition-colors duration-100"
+              className="ml-auto h-7 w-7 inline-flex items-center justify-center rounded bg-surface-2 text-status-red/80 hover:bg-status-red/10 hover:text-status-red transition-colors duration-100"
               aria-label="Delete task"
             >
-              Delete
+              <Trash2 size={14} aria-hidden />
             </button>
           ) : (
             <span className="ml-auto inline-flex items-center gap-1.5">
