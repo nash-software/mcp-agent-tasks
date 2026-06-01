@@ -57,3 +57,13 @@ Windows: kill `dist/server` holders before tsup; `git checkout .handbook/` befor
 - Perf: reconcile-on-boot adds a markdown scan per project at startup (bounded — hundreds of files is fast).
   If it ever becomes a concern, gate behind a flag; default-on for correctness now.
 - Does NOT change the `task_rebuild_index` MCP tool's global-store gap (separate bug, MCPAT-062).
+
+## 7. Has-markdown guard (added during build)
+
+`reconcileIndexOnBoot` only reconciles+prunes when the project's tasks dir **contains at least one `.md`
+file**. Rationale: an empty or markdown-less dir is ambiguous (a brand-new project, or a transiently
+missing/unmounted directory) — pruning the index to nothing there would be destructive. EXTR/COND have real
+markdown so they still self-heal; a project with index rows but no markdown is left untouched. (This also
+keeps index-only test harnesses valid — they seed the index without markdown.)
+
+**AC6:** a project whose tasks dir has index rows but no `.md` files keeps its index on boot (not pruned).

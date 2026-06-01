@@ -101,12 +101,14 @@ export class Reconciler {
         count++;
         changed++;
       } catch (err) {
-        // Skip corrupt files — log and continue
-        if (err instanceof McpTasksError && err.code === 'SCHEMA_MISMATCH') {
-          // Silently skip corrupt files during reconciliation
-          continue;
-        }
-        throw err;
+        // Skip ANY file the reconciler can't ingest — corrupt frontmatter, invalid enum (e.g. a bad
+        // `priority`), a SQLite CHECK-constraint failure, etc. One poison record must not abort the whole
+        // project's reconcile (MCPAT-065 — previously only SCHEMA_MISMATCH was skipped and everything else
+        // rethrew, taking down the entire pass). Surface it loudly so it gets fixed; markdown stays the
+        // source of truth.
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[reconciler] SKIPPED ${file} (${this.project}): ${msg}`);
+        continue;
       }
     }
 
