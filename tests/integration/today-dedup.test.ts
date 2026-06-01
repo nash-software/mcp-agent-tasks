@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startUiServer, type UiServerHandle } from '../../src/server-ui.js';
 import { SqliteIndex } from '../../src/store/sqlite-index.js';
+import { MilestoneRepository } from '../../src/store/milestone-repository.js';
 import type { Task } from '../../src/types/task.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,10 +41,16 @@ describe('MCPAT-066 — /api/today dedup across shared global index', () => {
     idx.init();
     idx.ensureProject('GA');
     idx.ensureProject('GB');
-    idx.upsertTask(seedTask('GA-001', 'GA'));                                  // unscheduled candidate
+    const at = new Date().toISOString();
+    // GA-001 carries a transition so it shows up in /api/activity (transitions table).
+    idx.upsertTask(seedTask('GA-001', 'GA', { transitions: [{ from: 'todo', to: 'in_progress', at }] }));
     idx.upsertTask(seedTask('GB-002', 'GB'));                                  // unscheduled candidate
     const today = new Date().toISOString().slice(0, 10);
     idx.upsertTask(seedTask('GA-003', 'GA', { scheduled_for: today }));        // committed today
+    // A milestone in the shared db → /api/milestones must not multiply it across global projects.
+    new MilestoneRepository(idx.getRawDb()).createMilestone({
+      id: 'GA-M1', project: 'GA', title: 'Milestone One', status: 'open', created: at,
+    });
     idx.close();
 
     const configPath = path.join(tempDir, 'config.json');
@@ -86,5 +93,23 @@ describe('MCPAT-066 — /api/today dedup across shared global index', () => {
   it('committed (scheduled today) contains the task exactly once', async () => {
     const r = await (await fetch(`${baseUrl}/api/today`)).json() as { committed: TaskShape[] };
     expect(r.committed.filter(t => t.id === 'GA-003').length).toBe(1);
+  });
+
+  it('/api/milestones does not multiply across shared global indexes (codex F1)', async () => {
+    const ms = await (await fetch(`${baseUrl}/api/milestones`)).json() as Array<{ id: string }>;
+    expect(ms.filter(m => m.id === 'GA-M1').length).toBe(1);
+  });
+
+  it('/api/activity does not multiply across shared global indexes (codex F1)', async () => {
+    const act = await (await fetch(`${baseUrl}/api/activity`)).json() as Array<{ task_id: string }>;
+    expect(act.filter(a => a.task_id === 'GA-001').length).toBe(1);
+  });
+
+  it('/api/tasks stays project-scoped and dup-free (codex F2 — non-regression)', async () => {
+    const ga = await (await fetch(`${baseUrl}/api/tasks?project=GA`)).json() as TaskShape[];
+    const gaIds = ga.map(t => t.id).sort();
+    expect(gaIds).toEqual(['GA-001', 'GA-003']); // only GA, each once
+    const gb = await (await fetch(`${baseUrl}/api/tasks?project=GB`)).json() as TaskShape[];
+    expect(gb.map(t => t.id)).toEqual(['GB-002']);
   });
 });
