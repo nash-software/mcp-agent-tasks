@@ -629,27 +629,32 @@ export class SqliteIndex {
     };
   }
 
-  getTasksByScheduledDate(date: string): Task[] {
+  // MCPAT-066: optional `project` filter. The dashboard opens several global-storage projects that SHARE
+  // one underlying index db; without scoping, aggregating these unscoped queries across each projectIndex
+  // returns the shared db's rows once per global project (duplicate task ids in /api/today).
+  getTasksByScheduledDate(date: string, project?: string): Task[] {
     const rows = this.db.prepare(`
       SELECT * FROM tasks
-      WHERE scheduled_for = ?
+      WHERE scheduled_for = @date
+        AND (@project IS NULL OR project = @project)
       ORDER BY
         CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
         title ASC
-    `).all(date) as TaskRow[];
+    `).all({ date, project: project ?? null }) as TaskRow[];
     return rows.map(r => this.rowToTask(r));
   }
 
-  getCandidates(limit: number): Task[] {
+  getCandidates(limit: number, project?: string): Task[] {
     const rows = this.db.prepare(`
       SELECT * FROM tasks
       WHERE (status = 'todo' OR status = 'in_progress')
         AND scheduled_for IS NULL
+        AND (@project IS NULL OR project = @project)
       ORDER BY
         CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 END,
         title ASC
-      LIMIT ?
-    `).all(limit) as TaskRow[];
+      LIMIT @limit
+    `).all({ limit, project: project ?? null }) as TaskRow[];
     return rows.map(r => this.rowToTask(r));
   }
 
@@ -665,14 +670,17 @@ export class SqliteIndex {
     return rows.map(r => this.rowToTask(r));
   }
 
-  getRecentActivity(limit: number = 50): Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }> {
+  getRecentActivity(limit: number = 50, project?: string): Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }> {
+    // MCPAT-066: optional project scope — global-storage projects share one index db, so an unscoped
+    // aggregation across projectIndexes would repeat the shared db's rows once per global project.
     return this.db.prepare(`
       SELECT tr.task_id, t.title, tr.from_status, tr.to_status, tr.at, tr.reason
       FROM transitions tr
       JOIN tasks t ON t.id = tr.task_id
+      WHERE (@project IS NULL OR t.project = @project)
       ORDER BY tr.at DESC
-      LIMIT ?
-    `).all(limit) as Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }>;
+      LIMIT @limit
+    `).all({ limit, project: project ?? null }) as Array<{ task_id: string; title: string; from_status: string; to_status: string; at: string; reason: string | null }>;
   }
 
   claimTask(id: string, sessionId: string, ttlHours: number): boolean {
