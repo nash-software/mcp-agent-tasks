@@ -217,7 +217,9 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
   }, [])
 
   // Artifacts carry no `area` — matchFilter derives it from the project via areaMap.
-  const filtered = artifacts.filter(a => matchFilter(filter, a.project, undefined, areaMap))
+  // Non-task surface: pass partial { project } — task-only dimensions will exclude artifacts
+  // when those dimensions are active (intentional per MCPAT-069 spec Failure Modes).
+  const filtered = artifacts.filter(a => matchFilter(filter, { project: a.project }, areaMap))
 
   // AC-2: explicit client-side sort by staleDays descending — never rely on API ordering
   const sorted = sortByStaleDesc(filtered)

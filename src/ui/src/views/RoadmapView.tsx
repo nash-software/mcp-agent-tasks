@@ -216,8 +216,10 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
 
   // Milestones carry no `area`; filter by the milestone's own project (derived from its ID),
   // with area resolved from that project via the shared areaMap.
+  // Non-task surface: pass partial { project } — task-only dimensions will exclude milestones
+  // when those dimensions are active (intentional per MCPAT-069 spec Failure Modes).
   const visibleMilestones = milestones.filter(ms =>
-    matchFilter(filter, milestoneProject(ms), undefined, areaMap),
+    matchFilter(filter, { project: milestoneProject(ms) }, areaMap),
   )
 
   return (

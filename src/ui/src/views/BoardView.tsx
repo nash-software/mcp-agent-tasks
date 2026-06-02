@@ -20,6 +20,7 @@ import { BoardCard } from '../components/BoardCard'
 import { ViewHeader } from '../components/ViewHeader'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 import { BOARD_STATUSES, COLUMN_LABEL, isValidBoardTransition } from '../lib/transitions'
+import { sortTasks, type SortKey, type SortDir } from '../lib/sort'
 
 // ── Droppable column wrapper ───────────────────────────────────────────────
 
@@ -61,12 +62,14 @@ function DroppableColumn({ status, children, isValidTarget, activeStatus }: Drop
 interface Props {
   filter: Filter
   areaMap?: Record<string, Area>
+  /** MCPAT-069 Phase C: sort applied within each board column. */
+  sort?: { key: SortKey; dir: SortDir }
   onOpenPanel: (panel: PanelState) => void
 }
 
-export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
+export function BoardView({ filter, areaMap = {}, sort, onOpenPanel }: Props): React.JSX.Element {
   const { tasks: allTasks, isLoading, error } = useTasks()
-  const tasks = allTasks.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
+  const tasks = allTasks.filter(t => matchFilter(filter, t, areaMap))
 
   // Track which task is being dragged (for DragOverlay rendering)
   const [activeTask, setActiveTask] = useState<Task | null>(null)
@@ -262,7 +265,9 @@ export function BoardView({ filter, areaMap = {}, onOpenPanel }: Props): React.J
           className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
         >
           {BOARD_STATUSES.map(status => {
-            const colTasks = tasks.filter((t: Task) => t.status === status)
+            // MCPAT-069 C4: sort within each column; column-by-status layout unchanged
+            const colFiltered = tasks.filter((t: Task) => t.status === status)
+            const colTasks = sort ? sortTasks(colFiltered, sort.key, sort.dir) : colFiltered
             const isValidTarget = activeTask !== null
               ? isValidBoardTransition(activeTask.status, status)
               : true

@@ -22,7 +22,9 @@ export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): Reac
 
   // Activity rows expose a task id but no `project` field — derive the prefix with projectOfId,
   // then matchFilter (area resolved via areaMap).
-  const filtered = activity.filter(e => matchFilter(filter, projectOfId(e.task_id), undefined, areaMap))
+  // Non-task surface: pass partial { project } — task-only dimensions will exclude activity entries
+  // when those dimensions are active (intentional per MCPAT-069 spec Failure Modes).
+  const filtered = activity.filter(e => matchFilter(filter, { project: projectOfId(e.task_id) }, areaMap))
 
   if (isLoading) {
     return (

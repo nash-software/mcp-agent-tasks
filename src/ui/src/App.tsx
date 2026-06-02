@@ -18,14 +18,17 @@ import { CompletedView } from './views/CompletedView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
+import { useMilestones } from './hooks/useMilestones'
 import { useCaptureOverlay } from './hooks/useCaptureOverlay'
 import { useGlobalKeyboard } from './hooks/useGlobalKeyboard'
 import { NAV } from './lib/nav'
-import type { ViewId, PanelState, Task, TaskPriority, TaskArea, Density } from './types'
+import type { ViewId, PanelState, Task, TaskPriority, TaskArea, Density, TaskType, TaskStatus } from './types'
 import { localToday } from './lib/format'
 import { fetchProjects, type ProjectEntry, signoffTask, dispatchToAcr } from './api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
+import { SortControl } from './components/SortControl'
+import { type SortKey, type SortDir } from './lib/sort'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
 
@@ -61,30 +64,85 @@ function readStoredView(): ViewId {
   return (raw && VALID_VIEWS.includes(raw as ViewId)) ? (raw as ViewId) : 'today'
 }
 
-/** Read the persisted filter, falling back to EMPTY_FILTER on missing / corrupt / legacy JSON. */
+/** Read the persisted filter, falling back to EMPTY_FILTER on missing / corrupt / legacy JSON.
+ * MCPAT-069 B7: spread EMPTY_FILTER first so an old {projects,areas} blob produces a full Filter
+ * with new dims defaulted (never undefined). Each new dim is validated against its allowed set.
+ */
 function readStoredFilter(): Filter {
   try {
     const raw = localStorage.getItem('lifeos-filter')
     if (!raw) return EMPTY_FILTER
     const parsed = JSON.parse(raw) as unknown
-    if (
-      parsed && typeof parsed === 'object' &&
-      Array.isArray((parsed as { projects?: unknown }).projects) &&
-      Array.isArray((parsed as { areas?: unknown }).areas)
-    ) {
-      const p = parsed as { projects: unknown[]; areas: unknown[] }
-      return {
-        projects: p.projects.filter((x): x is string => typeof x === 'string'),
-        areas: p.areas.filter((x): x is TaskArea =>
-          x === 'client' || x === 'personal' || x === 'outsource' || x === 'internal'),
-      }
+    if (!parsed || typeof parsed !== 'object') return EMPTY_FILTER
+    const p = parsed as Record<string, unknown>
+    // Validate each dimension individually; missing or invalid → default from EMPTY_FILTER
+    const validAreas = (v: unknown): TaskArea[] =>
+      Array.isArray(v)
+        ? (v as unknown[]).filter((x): x is TaskArea =>
+            x === 'client' || x === 'personal' || x === 'outsource' || x === 'internal')
+        : []
+    const validStrings = (v: unknown): string[] =>
+      Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === 'string') : []
+    const validTypes = (v: unknown): TaskType[] =>
+      Array.isArray(v)
+        ? (v as unknown[]).filter((x): x is TaskType =>
+            x === 'feature' || x === 'bug' || x === 'chore' || x === 'spike' ||
+            x === 'refactor' || x === 'spec' || x === 'plan')
+        : []
+    const validStatuses = (v: unknown): TaskStatus[] =>
+      Array.isArray(v)
+        ? (v as unknown[]).filter((x): x is TaskStatus =>
+            x === 'todo' || x === 'in_progress' || x === 'done' || x === 'blocked' ||
+            x === 'archived' || x === 'draft' || x === 'approved' || x === 'closed')
+        : []
+    const validPriorities = (v: unknown): TaskPriority[] =>
+      Array.isArray(v)
+        ? (v as unknown[]).filter((x): x is TaskPriority =>
+            x === 'critical' || x === 'high' || x === 'medium' || x === 'low')
+        : []
+    const validScheduled = (v: unknown): Filter['scheduled'] =>
+      (v === 'today' || v === 'week' || v === 'overdue' || v === 'none') ? v : null
+    const validWindow = (v: unknown): '24h' | '7d' | '30d' | null =>
+      (v === '24h' || v === '7d' || v === '30d') ? v : null
+
+    return {
+      ...EMPTY_FILTER,
+      projects: validStrings(p['projects']),
+      areas: validAreas(p['areas']),
+      types: validTypes(p['types']),
+      statuses: validStatuses(p['statuses']),
+      priorities: validPriorities(p['priorities']),
+      milestones: validStrings(p['milestones']),
+      attention: typeof p['attention'] === 'boolean' ? p['attention'] : false,
+      scheduled: validScheduled(p['scheduled']),
+      createdWithin: validWindow(p['createdWithin']),
+      updatedWithin: validWindow(p['updatedWithin']),
     }
-    return EMPTY_FILTER
   } catch {
     return EMPTY_FILTER
   }
 }
 
+/** Read the persisted sort, falling back to the default on missing / corrupt JSON. */
+function readStoredSort(): { key: SortKey; dir: SortDir } {
+  const VALID_KEYS: SortKey[] = ['priority', 'created', 'updated', 'scheduled', 'title', 'complexity', 'estimate']
+  const VALID_DIRS: SortDir[] = ['asc', 'desc']
+  try {
+    const raw = localStorage.getItem('lifeos-sort')
+    if (!raw) return { key: 'priority', dir: 'asc' }
+    const parsed = JSON.parse(raw) as unknown
+    if (
+      parsed && typeof parsed === 'object' &&
+      VALID_KEYS.includes((parsed as { key?: unknown }).key as SortKey) &&
+      VALID_DIRS.includes((parsed as { dir?: unknown }).dir as SortDir)
+    ) {
+      return parsed as { key: SortKey; dir: SortDir }
+    }
+    return { key: 'priority', dir: 'asc' }
+  } catch {
+    return { key: 'priority', dir: 'asc' }
+  }
+}
 
 export function App(): React.JSX.Element {
   const [view, setView]             = useState<ViewId>(readStoredView)
@@ -96,6 +154,7 @@ export function App(): React.JSX.Element {
   const [focusMode, setFocusMode]   = useState(false)
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
+  const [sort, setSort]             = useState<{ key: SortKey; dir: SortDir }>(readStoredSort)
   const [density, setDensity]       = useState<Density>(readStoredDensity)
   // P2-03 — transient seed: capture bar hands text to Brain Dump through this state
   const [brainDumpSeed, setBrainDumpSeed] = useState<BrainDumpSeed | null>(null)
@@ -123,6 +182,9 @@ export function App(): React.JSX.Element {
   useEffect(() => { localStorage.setItem('lifeos-view', view) }, [view])
   useEffect(() => { localStorage.setItem('lifeos-filter', JSON.stringify(filter)) }, [filter])
   useEffect(() => {
+    try { localStorage.setItem('lifeos-sort', JSON.stringify(sort)) } catch { /* noop */ }
+  }, [sort])
+  useEffect(() => {
     try {
       localStorage.setItem('lifeos-favs', JSON.stringify(favorites))
     } catch {
@@ -137,9 +199,14 @@ export function App(): React.JSX.Element {
     setDensity(d)
   }, [])
 
+  const handleSortChange = useCallback((key: SortKey, dir: SortDir): void => {
+    setSort({ key, dir })
+  }, [])
+
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
   const { artifacts } = useArtifacts()
+  const { milestones } = useMilestones()
   const { data: projectEntries = [] } = useQuery<ProjectEntry[]>({
     queryKey: ['projects'],
     queryFn: fetchProjects,
@@ -204,6 +271,50 @@ export function App(): React.JSX.Element {
         ? f.areas.filter(a => a !== area)
         : [...f.areas, area],
     }))
+  }, [])
+
+  const toggleType = useCallback((type: TaskType): void => {
+    setFilter(f => ({
+      ...f,
+      types: f.types.includes(type) ? f.types.filter(t => t !== type) : [...f.types, type],
+    }))
+  }, [])
+
+  const toggleStatus = useCallback((status: TaskStatus): void => {
+    setFilter(f => ({
+      ...f,
+      statuses: f.statuses.includes(status) ? f.statuses.filter(s => s !== status) : [...f.statuses, status],
+    }))
+  }, [])
+
+  const togglePriority = useCallback((priority: TaskPriority): void => {
+    setFilter(f => ({
+      ...f,
+      priorities: f.priorities.includes(priority) ? f.priorities.filter(p => p !== priority) : [...f.priorities, priority],
+    }))
+  }, [])
+
+  const toggleMilestone = useCallback((milestoneId: string): void => {
+    setFilter(f => ({
+      ...f,
+      milestones: f.milestones.includes(milestoneId) ? f.milestones.filter(m => m !== milestoneId) : [...f.milestones, milestoneId],
+    }))
+  }, [])
+
+  const toggleAttention = useCallback((): void => {
+    setFilter(f => ({ ...f, attention: !f.attention }))
+  }, [])
+
+  const setScheduled = useCallback((v: Filter['scheduled']): void => {
+    setFilter(f => ({ ...f, scheduled: v }))
+  }, [])
+
+  const setCreatedWithin = useCallback((v: Filter['createdWithin']): void => {
+    setFilter(f => ({ ...f, createdWithin: v }))
+  }, [])
+
+  const setUpdatedWithin = useCallback((v: Filter['updatedWithin']): void => {
+    setFilter(f => ({ ...f, updatedWithin: v }))
   }, [])
 
   const clearFilter = useCallback((): void => { setFilter(EMPTY_FILTER) }, [])
@@ -512,22 +623,35 @@ export function App(): React.JSX.Element {
       <main className="main">
         {/* Global filter bar — shown above all five filterable views (P2-01) */}
         {FILTERABLE_VIEWS.has(view) && (
-          <FilterBar
-            filter={filter}
-            projects={filterProjects}
-            favorites={favorites}
-            projectCounts={projectCounts}
-            onToggleProject={toggleProject}
-            onToggleArea={toggleArea}
-            onToggleFav={toggleFav}
-            onClear={clearFilter}
-          />
+          <div className="filter-bar-row">
+            <FilterBar
+              filter={filter}
+              projects={filterProjects}
+              milestones={milestones}
+              favorites={favorites}
+              projectCounts={projectCounts}
+              onToggleProject={toggleProject}
+              onToggleArea={toggleArea}
+              onToggleFav={toggleFav}
+              onToggleType={toggleType}
+              onToggleStatus={toggleStatus}
+              onTogglePriority={togglePriority}
+              onToggleMilestone={toggleMilestone}
+              onToggleAttention={toggleAttention}
+              onSetScheduled={setScheduled}
+              onSetCreatedWithin={setCreatedWithin}
+              onSetUpdatedWithin={setUpdatedWithin}
+              onClear={clearFilter}
+            />
+            <SortControl sort={sort} onChange={handleSortChange} />
+          </div>
         )}
         <div className="main-inner" data-width={(FULL_WIDTH_VIEWS.has(view) || (focusMode && view === 'today')) ? 'full' : undefined}>
           {view === 'today'     && (
             <TodayView
               filter={filter}
               areaMap={areaMap}
+              sort={sort}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSel}
               onOpenDetail={(task) => setPanel({ mode: 'detail', taskId: task.id })}
@@ -536,7 +660,7 @@ export function App(): React.JSX.Element {
               onToggleFocus={() => setFocusMode(f => !f)}
             />
           )}
-          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
+          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} sort={sort} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesView onOpenPanel={(task) => setPanel({ mode: 'detail', taskId: task.id })} />}
           {view === 'braindump' && (
             <BrainDumpView

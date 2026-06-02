@@ -67,6 +67,7 @@ export interface Task {
   block_reason?: string  // epic §4 — shown when status==='blocked'
   tags?: string[]        // epic §4 alias for labels
   agent_status?: 'scheduled' | 'running' | 'done'  // P2-05: Hermes sign-off gate
+  triage_note?: string   // MCPAT-069 B8: flagged-draft signal (backend already emits it)
   // P4-02: sprint-closure fields
   closed_at?: number        // epoch ms — when the batch close ran
   close_batch?: string      // batch id stamped by POST /api/tasks/close-batch
