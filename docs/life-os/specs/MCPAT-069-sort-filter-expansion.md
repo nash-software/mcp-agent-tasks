@@ -234,9 +234,11 @@ Date presets (all relative to injected `now`, local-day boundaries via `lib/form
       `PRI_RANK` order — when sort key is `priority` the result equals today's behavior). Board: sorts
       **within each status column** (the column-by-status layout is unchanged; only intra-column order
       follows `sortTasks`). Roadmap and Activity **keep their intrinsic order** (milestone grouping /
-      reverse-chronological) and explicitly ignore the sort control — this is stated in the UI/spec,
-      not a silent omission. Today's hero + capacity remain computed over the unfiltered, unsorted set
-      (P2-01 AC3 preserved).
+      reverse-chronological). The Sort control is rendered **only on sortable views** (`SORTABLE_VIEWS` =
+      today, board) and **hidden** on Roadmap/Activity/Artifacts — a shown-but-ignored control is itself
+      the silent omission to avoid, so it is omitted rather than disabled. (Decision MCPAT-069-D2, revised
+      from "shown but marked ignored" per the Codex review + product sign-off.) Today's hero + capacity
+      remain computed over the unfiltered, unsorted set (P2-01 AC3 preserved).
 
 ### Phase D — Date-preset filters
 
@@ -356,10 +358,13 @@ fully-formed `Filter`, never `undefined` fields (which would break exhaustive ch
 - **Unknown / closed milestone id in a persisted filter.** A milestone the popover no longer lists
   (closed, deleted) still filters by raw id and renders an active chip with the id — no crash, no
   popover break (B6). The user can remove the chip to recover.
-- **Non-task surfaces under task-only dimensions.** Artifacts/Activity rows have no `type`/`status`/
-  `priority`/`scheduled_for`. Under an active task-only dimension they **fail** that dimension (excluded)
-  — consistent with P2-01's `area == null` guard. Document this so it's intentional, not a surprise empty
-  state; the FilterBar (with active chips + Clear) stays visible so the user can recover.
+- **Non-task surfaces under task-only dimensions.** Artifacts/Activity rows and Roadmap milestones have
+  no `type`/`status`/`priority`/`scheduled_for`. They filter by **project + area ONLY**, via the
+  dedicated `matchProjectArea()` matcher — task-level dimensions are N/A to these rows and are ignored,
+  so an active task-level filter never blanks the whole surface. (Decision MCPAT-069-D1: revised from the
+  original "exclude under task-only dims" after the Codex cross-model review flagged the empty-state as a
+  regression — a status filter blanking the entire Roadmap is worse UX than showing project/area-relevant
+  rows. RoadmapView additionally honours an explicit `milestones` filter against the milestone's own id.)
 - **Missing sortable values.** `null`/absent `scheduled_for` / `complexity` / `estimate_hours` sort
   **last** (nulls-last) regardless of direction, never `NaN`-comparison garbage that destabilizes the
   sort. Tie-break by id to keep the order deterministic.
