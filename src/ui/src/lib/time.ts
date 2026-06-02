@@ -12,3 +12,20 @@ export function relativeTime(iso: string): string {
   if (months < 12) return `${months}mo ago`
   return `${Math.floor(months / 12)}y ago`
 }
+
+/**
+ * Absolute local timestamp for tooltips — e.g. "2 Jun 2026, 14:30".
+ * Used as the `title` on relative-time labels so the exact moment is one hover away.
+ * Returns the raw ISO string unchanged if it can't be parsed.
+ */
+export function absoluteTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}

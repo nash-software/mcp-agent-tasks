@@ -312,7 +312,9 @@ export function TodayView({
             Nothing committed yet — commit something from below.
           </div>
         ) : (
-          <div className="space-y-2">
+          // Hairline dividers between rows — matches the handoff's artifact/ACR list convention
+          // (.row + .row { border-top: 1px solid color-mix(srgb, --s3 50%, transparent) }).
+          <div className="divide-y divide-surface-3/50">
             {committedList.map(task => (
               <TaskCard
                 key={task.id}
@@ -353,7 +355,7 @@ export function TodayView({
             <span className="font-mono text-ink-faint">{draftTasks.length}</span>
           </button>
           {needsCallOpen && (
-            <div>
+            <div className="divide-y divide-surface-3/50">
               {draftTasks.map(task => (
                 <TaskCard
                   key={task.id}
@@ -391,6 +393,7 @@ export function TodayView({
                     <span className="text-xs font-mono text-ink-faint">{tasks.length}</span>
                   </div>
                   {/* Candidate rows */}
+                  <div className="divide-y divide-surface-3/50">
                   {tasks.map(task => (
                     <TaskCard
                       key={task.id}
@@ -401,6 +404,7 @@ export function TodayView({
                       onCommit={() => handleCommit(task)}
                     />
                   ))}
+                  </div>
                 </div>
               ))}
             </div>
