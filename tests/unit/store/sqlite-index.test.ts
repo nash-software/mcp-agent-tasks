@@ -498,4 +498,106 @@ describe('SqliteIndex', () => {
       expect(retrieved!.auto_captured).toBeUndefined();
     });
   });
+
+  // ── MCPAT-068: files child table (AC-6) ─────────────────────────────────────
+  describe('MCPAT-068 — files child table (AC-6)', () => {
+    it('stores and returns files from getTask (not hardcoded [])', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({
+        files: ['src/store/sqlite-index.ts', 'src/types/task.ts'],
+      });
+      idx.upsertTask(task);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved).not.toBeNull();
+      expect(retrieved!.files).toHaveLength(2);
+      expect(retrieved!.files).toContain('src/store/sqlite-index.ts');
+      expect(retrieved!.files).toContain('src/types/task.ts');
+    });
+
+    it('returns an empty array when no files are set', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({ files: [] });
+      idx.upsertTask(task);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved!.files).toHaveLength(0);
+    });
+
+    it('listTasks() also returns files (not just getTask)', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({ files: ['src/a.ts', 'src/b.ts'] });
+      idx.upsertTask(task);
+
+      const listed = idx.listTasks({ project: 'TEST' }).find(t => t.id === 'TEST-001');
+      expect(listed).toBeDefined();
+      expect(listed!.files).toEqual(['src/a.ts', 'src/b.ts']);
+    });
+
+    it('preserves file order (sort_order)', () => {
+      ensureProject(idx, 'TEST');
+      const ordered = ['a/first.ts', 'b/second.ts', 'c/third.ts'];
+      const task = makeTask({ files: ordered });
+      idx.upsertTask(task);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved!.files).toEqual(ordered);
+    });
+
+    it('replaces files on second upsert', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({ files: ['old/file.ts'] });
+      idx.upsertTask(task);
+
+      const updated = { ...task, files: ['new/file.ts', 'new/other.ts'] };
+      idx.upsertTask(updated);
+
+      const retrieved = idx.getTask('TEST-001');
+      expect(retrieved!.files).toHaveLength(2);
+      expect(retrieved!.files).toContain('new/file.ts');
+      expect(retrieved!.files).not.toContain('old/file.ts');
+    });
+
+    it('deleteTask leaves no orphan rows in task_files', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({
+        files: ['src/foo.ts', 'src/bar.ts'],
+      });
+      idx.upsertTask(task);
+
+      // Confirm rows exist before delete
+      const before = idx.getTask('TEST-001');
+      expect(before!.files).toHaveLength(2);
+
+      idx.deleteTask('TEST-001');
+
+      // Task should be gone
+      const after = idx.getTask('TEST-001');
+      expect(after).toBeNull();
+
+      // No orphan files rows (verify via re-insert + re-fetch won't resurrect old rows)
+      const task2 = makeTask({ id: 'TEST-001', files: [] });
+      idx.upsertTask(task2);
+      const after2 = idx.getTask('TEST-001');
+      expect(after2!.files).toHaveLength(0);
+    });
+
+    it('listTasks returns files for tasks that have them', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({
+        files: ['src/a.ts', 'src/b.ts'],
+      });
+      idx.upsertTask(task);
+
+      const tasks = idx.listTasks({ project: 'TEST' });
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0].files).toHaveLength(2);
+      expect(tasks[0].files).toContain('src/a.ts');
+    });
+
+    it('init() is idempotent with files table present (no crash on re-init)', () => {
+      // Re-running init() on an existing DB with the files table must not throw
+      expect(() => idx.init()).not.toThrow();
+    });
+  });
 });

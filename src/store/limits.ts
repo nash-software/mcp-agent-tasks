@@ -10,6 +10,8 @@
 export const MAX_TRANSITIONS = 100;
 export const MAX_COMMITS = 50;
 export const MAX_TAGS = 50;
+/** Maximum number of file paths stored per task (prevents index bloat). */
+export const MAX_FILES = 200;
 
 /**
  * Maximum SQLite index file size in bytes (100 MiB).
