@@ -633,3 +633,7 @@
 ## [HIGH] NoteStore.search() — Full-Text Search
 
 ## [HIGH] NoteStore.linkTask() — Task Linking
+
+## [HIGH] POST /api/capture/infer validation and LLM fallback
+
+## [HIGH] POST /api/capture/note endpoint validation and project fallback
