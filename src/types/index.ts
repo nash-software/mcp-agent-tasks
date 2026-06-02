@@ -3,3 +3,4 @@ export * from './errors.js';
 export * from './config.js';
 export * from './tools.js';
 export * from './transitions.js';
+export * from './note.js';
