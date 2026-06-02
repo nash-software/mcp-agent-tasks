@@ -1007,10 +1007,10 @@ export class SqliteIndex {
     return rows.map(r => this.rowToNote(r));
   }
 
-  linkNoteToTask(noteId: string, taskId: string): void {
+  linkNoteToTask(noteId: string, taskId: string, updatedAt: string): void {
     const result = this.db.prepare(
-      `UPDATE notes SET task_id = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).run(taskId, noteId) as { changes: number };
+      `UPDATE notes SET task_id = ?, updated_at = ? WHERE id = ?`,
+    ).run(taskId, updatedAt, noteId) as { changes: number };
     if (result.changes === 0) {
       throw new McpTasksError('NOTE_NOT_FOUND', `Note not found: ${noteId}`);
     }

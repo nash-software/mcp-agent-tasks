@@ -95,10 +95,11 @@ export class NoteStore {
 
     this.validateTaskExists(taskId);
 
-    this.sqliteIndex.linkNoteToTask(noteId, taskId);
+    const now = new Date().toISOString();
+    this.sqliteIndex.linkNoteToTask(noteId, taskId, now);
 
     existing.task_id = taskId;
-    existing.updated_at = new Date().toISOString();
+    existing.updated_at = now;
 
     const notesDir = this.resolveNotesDir(existing.project);
     this.writeMarkdown(existing, notesDir);
