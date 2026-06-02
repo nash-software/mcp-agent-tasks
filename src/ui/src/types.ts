@@ -4,6 +4,19 @@ export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
 export type TaskArea = 'client' | 'personal' | 'outsource' | 'internal'
 export type MilestoneStatus = 'open' | 'closed'
 
+/** A reference link from one task to another (mirrors src/types/task.ts TaskReference). */
+export interface TaskReference {
+  type: 'closes' | 'blocks' | 'related'
+  id: string
+}
+
+/** A subtask entry for display in the TaskPanel checklist (mirrors src/types/task.ts SubtaskEntry). */
+export interface Subtask {
+  id: string
+  title: string
+  status: TaskStatus
+}
+
 export interface GitPr {
   number: number
   url?: string
@@ -41,6 +54,10 @@ export interface Task {
   git?: GitInfo
   transitions?: Transition[]
   complexity?: number
+  dependencies?: string[]
+  references?: TaskReference[]
+  subtasks?: Subtask[]
+  files?: string[]
   auto_captured?: boolean
   area?: TaskArea
   scheduled_for?: string | null
