@@ -52,7 +52,9 @@ describe('P4-05 B4 — committed-today row opens the peek panel', () => {
 describe('P4-05 B5 — row separation + readable status history', () => {
   it('committed list has visible row separation', () => {
     const src = read('views/TodayView.tsx');
-    expect(src).toMatch(/space-y-2"[\s\S]*committedList\.map/);
+    // MCPAT-067: row separation moved from space-y-2 gaps to hairline dividers
+    // (divide-y divide-surface-3/50 == the handoff's color-mix(srgb,--s3 50%,transparent)).
+    expect(src).toMatch(/divide-y[\s\S]*committedList\.map/);
   });
   it('status history uses readable text-sm / space-y-3', () => {
     const src = read('components/TaskPanel.tsx');

@@ -12,7 +12,7 @@
 
 ## [HIGH] Validation uses sentinel Sets (VALID_TYPES, VALID_PRIORITIES) for enum enforcement
 
-## [HIGH] Action button endpoints
+## [HIGH] GET /api/projects and /api/config endpoints for action buttons
 
 ## [HIGH] build-task-summary script output and idempotency
 
@@ -24,7 +24,7 @@
 
 ## [HIGH] Reconciler reads milestones.yaml
 
-## [HIGH] rebuild-index --prune-orphans behavior
+## [HIGH] Rebuild index via Reconciler with orphan pruning
 
 ## [HIGH] Rebuild SQLite index from markdown files
 
@@ -96,13 +96,13 @@
 
 ## [HIGH] TaskFactory — scheduled_for null initialization and area resolution
 
-## [HIGH] POST /api/capture/quick — input validation and response
+## [HIGH] POST /api/capture/quick — endpoint logic
 
-## [HIGH] Quick capture — #PREFIX pattern extraction for routing
+## [HIGH] background routing — #prefix extraction (isolated)
 
-## [HIGH] Quick capture — LLM spawn fallback and prompt building
+## [HIGH] background routing — LLM spawn on failure (isolated)
 
-## [HIGH] CaptureOverlay — React component and hook structure
+## [HIGH] CaptureOverlay — component and hook structure
 
 ## [HIGH] SqliteIndex.getTasksByScheduledDate — date-filtered task retrieval
 
@@ -114,25 +114,25 @@
 
 ## [HIGH] Task schedule endpoint date validation
 
-## [HIGH] TodayView component structure and rendering
+## [HIGH] TodayView.tsx — source structure
 
-## [HIGH] TodayView — capacity gauge conditional color logic
+## [HIGH] CapacityGauge.tsx — zone colour logic (source analysis)
 
-## [HIGH] useToday — hook implementation with polling and helpers
+## [HIGH] useToday hook implementation with TanStack Query and polling
 
-## [HIGH] api.ts — today endpoint client functions
+## [HIGH] api.ts — today endpoints
 
-## [HIGH] App.tsx — TodayView tab routing and default
+## [HIGH] App.tsx — TodayView integration
 
-## [HIGH] Header.tsx — today tab in navigation order
+## [HIGH] Header.tsx — today tab
 
 ## [HIGH] POST /api/capture/braindump endpoint validation
 
-## [HIGH] braindump JSON extraction logic with area field fallback
+## [HIGH] braindump JSON extraction with area field fallback
 
-## [HIGH] POST /api/capture/commit endpoint task creation
+## [HIGH] POST /api/capture/commit
 
-## [HIGH] POST /api/acr/dispatch endpoint validation and offline handling
+## [HIGH] POST /api/acr/dispatch validation and offline handling
 
 ## [HIGH] GET /api/artifacts endpoint
 
@@ -142,12 +142,418 @@
 
 ## [HIGH] Artifact JSONL file persistence
 
-## [HIGH] GET /api/acr/status — online path
+## [HIGH] GET /api/acr/status online response
 
-## [HIGH] GET /api/acr/status — offline path
+## [HIGH] GET /api/acr/status offline graceful fallback
 
 ## [HIGH] GET /api/brain/search — online path
 
 ## [HIGH] GET /api/brain/search — offline path
 
 ## [HIGH] GET /api/brain/search — validation
+
+## [HIGH] lib/format.ts — fmtElapsed
+
+## [HIGH] HeroTask.tsx — source structure
+
+## [HIGH] TaskCard.tsx — source structure
+
+## [HIGH] TaskPanel.tsx — structure.AC1 — width driven by panel.mode
+
+## [HIGH] TaskPanel transform-only slide animation
+
+## [HIGH] TaskPanel onPromote prop for peek detail promotion
+
+## [HIGH] TaskPanel onClose prop
+
+## [HIGH] TaskPanel status history detail-only rendering
+
+## [HIGH] TaskPanel header and footer structure
+
+## [HIGH] TaskPanel design-token colour application
+
+## [HIGH] TaskPanel absolute positioning and undefined task handling
+
+## [HIGH] TaskPanel.tsx — undefined task fallback
+
+## [HIGH] TaskPanel optional sections conditional rendering
+
+## [HIGH] App.tsx — TaskPanel integration
+
+## [HIGH] TaskPanel.tsx — structure.types.ts — epic §4 field additions
+
+## [HIGH] sortByStaleDesc sorts artifacts to non-increasing staleDays preserving ties
+
+## [HIGH] staleBadgeColor maps staleDays to green (≤7), amber (≤21), red thresholds
+
+## [HIGH] header counts logic — unvisited artifacts
+
+## [HIGH] Staleness threshold constants
+
+## [HIGH] fuzzy() — subsequence matching and scoring
+
+## [HIGH] highlight() — text highlighting with mark elements
+
+## [HIGH] Hermes backend endpoints (P2-04)
+
+## [HIGH] MarkdownStore writes and reads agent_status frontmatter identically
+
+## [HIGH] SqliteIndex round-trips agent_status and block_reason through upsert + getTask
+
+## [HIGH] task.schema.json — agent_status + block_reason field definitions
+
+## [HIGH] filter.ts matchFilter accepts empty filter and combines project/area dimensions
+
+## [HIGH] filterActive filter status detection
+
+## [HIGH] areaOfProject area map resolution
+
+## [HIGH] projectOfId splits task ID on first dash for prefix
+
+## [HIGH] FilterBar.tsx — structure and source analysis
+
+## [HIGH] App.tsx — filter localStorage persistence round-trip
+
+## [HIGH] App.tsx — areaMap built via useMemo (no module-global)
+
+## [HIGH] lib/filter.ts — pure API (no module-global areaMap)
+
+## [HIGH] App.tsx — command palette Filter group labels (spec §4)
+
+## [HIGH] getDraftTriageThreshold defaults to 0.8 with env override and clamping
+
+## [HIGH] parseTriageResponse JSON extraction from LLM output
+
+## [HIGH] applyTriageResult auto-promotion and flagging logic
+
+## [HIGH] FilterBar.tsx — star toggle (AC-1)
+
+## [HIGH] FilterBar.tsx — favourite quick-chips (AC-4)
+
+## [HIGH] matchSkill returns first skill with matching substring in title or tags
+
+## [HIGH] isSoftware detects software keywords via word boundaries in title/tags/why
+
+## [HIGH] Triage rule 1: skill match wins automatable bucket
+
+## [HIGH] Triage rule 2: commitment keywords and critical priority route to signoff
+
+## [HIGH] Triage rule 3: cadence keywords and ritual tag route to recurring
+
+## [HIGH] Triage rule 4: research verbs (audit, report, scrape, digest) route to research
+
+## [HIGH] Triage rule 5: fallback to manual for non-matching tasks
+
+## [HIGH] triage bucket classification first-match-wins precedence
+
+## [HIGH] fmtSaved formats minutes to Nm or hours with one decimal
+
+## [HIGH] sortByStaleDesc client-side sort guard
+
+## [HIGH] toggleFav logic
+
+## [HIGH] projectCounts logic
+
+## [HIGH] Prune stale favorites not in known projects
+
+## [HIGH] App favourites state initialization and persistence
+
+## [HIGH] Nav.tsx — Favourites group rendering (AC-2)
+
+## [HIGH] App.tsx BrainDumpSeed state management and handoff orchestration
+
+## [HIGH] CaptureOverlay expand affordances (Shift+Enter, icon button)
+
+## [HIGH] BrainDumpView seedNonce effect keying (consume side)
+
+## [HIGH] P2-06: triage is pure function re-evaluating on skill changes
+
+## [HIGH] P2-06: tasks with pending proposals excluded from triage results
+
+## [HIGH] BoardCard multi-line title clamping
+
+## [HIGH] P3-01 — density-driven row height
+
+## [HIGH] Per-view content width configuration
+
+## [HIGH] P3-01 — density switcher
+
+## [HIGH] P3-01 — Board cards
+
+## [HIGH] P3-01 — density-driven row height
+
+## [HIGH] App sets data-width on .main-inner, per-view width constraints
+
+## [HIGH] P3-01 — density switcher
+
+## [HIGH] Page padding density variable
+
+## [HIGH] P3-01 — Today focus toggle + row action discoverability
+
+## [HIGH] SqliteIndex — child-array caps (bloat prevention)
+
+## [HIGH] SqliteIndex — WAL / pragma hardening
+
+## [HIGH] ensureHealthyIndex — self-heal
+
+## [HIGH] SqliteIndex — body_hash (incremental reconcile mechanism)
+
+## [HIGH] SqliteIndex — body_hash (incremental reconcile mechanism)
+
+## [HIGH] SqliteIndex — deleteTask leaves no orphan child rows
+
+## [HIGH] SqliteIndex body_hash column migration for existing databases
+
+## [HIGH] P4-01: POST /transition and PATCH endpoints with validation
+
+## [HIGH] Favourites persistence round-trip validation
+
+## [HIGH] App.tsx — areaMap built via useMemo (no module-global setAreaMap)
+
+## [HIGH] lib/filter.ts — pure API (no module-global areaMap)
+
+## [HIGH] types.ts epic 4 field additions
+
+## [HIGH] P4-02: batch close all done tasks into closed state
+
+## [HIGH] EstimatePrompt.tsx — component structure
+
+## [HIGH] TodayView.tsx — estimate prompt integration (P4-04)
+
+## [HIGH] useToday.ts — scheduleWithEstimate helper
+
+## [HIGH] CapacityGauge.tsx unestimated hint
+
+## [HIGH] Capacity gauge colour zone logic and thresholds
+
+## [HIGH] TaskPanel width mode configuration
+
+## [HIGH] App TaskPanel integration
+
+## [HIGH] FilterBar favourite quick-chips
+
+## [HIGH] VALID_TRANSITIONS state machine
+
+## [HIGH] P4-05 B1 — platform-aware modifier key
+
+## [HIGH] P4-05 B5 — row separation + readable status history
+
+## [HIGH] EstimatePrompt.tsx component structure
+
+## [HIGH] TodayView.tsx estimate prompt integration
+
+## [HIGH] Capacity gauge colour thresholds — falsifiable (P4-04 AC 5)
+
+## [HIGH] BoardCard — multi-line title clamping
+
+## [HIGH] TaskCard density-driven row height
+
+## [HIGH] Density switcher persistence and labeling
+
+## [HIGH] Today focus toggle and row action discoverability
+
+## [HIGH] toggleFav logic for favorites
+
+## [HIGH] projectCounts calculation logic
+
+## [HIGH] Kanban board column state machine transitions
+
+## [HIGH] GET /api/brain/status — offline path
+
+## [HIGH] CaptureOverlay expand affordances (Shift+Enter and icon button)
+
+## [HIGH] BrainDumpView seedNonce effect keying prevents re-triggers
+
+## [HIGH] App.tsx — P2-03 braindump handoff wiring
+
+## [HIGH] projectOfId task ID prefix extraction
+
+## [HIGH] isValidBoardTransition enforces domain invariant state machine
+
+## [HIGH] P4-07 — PATCH /api/tasks/:id milestone field
+
+## [HIGH] rebuild-index via Reconciler
+
+## [HIGH] Hermes POST/DELETE signoff endpoints with agent_status scheduling and idempotency
+
+## [HIGH] agent_status MarkdownStore persistence
+
+## [HIGH] Artifact staleness color thresholds at 7 and 21 days
+
+## [HIGH] braindump JSON extraction with unknown area field fallback to internal
+
+## [HIGH] POST /api/capture/commit falls back to GEN or first available project for unknown project
+
+## [HIGH] POST /api/acr/dispatch
+
+## [HIGH] GET /api/brain/search — offline path
+
+## [HIGH] Triage bucket precedence: skill match > signoff > recurring > research > manual
+
+## [HIGH] P5-02 K1 — rerouteTask is markdown-first (no silent reconcile-revert)
+
+## [HIGH] P5-02 K2 — sanitizeForPrompt (prompt-injection defense)
+
+## [HIGH] P5-02 K2 — routing + braindump prompts are hardened
+
+## [HIGH] toggleFav logic algorithm
+
+## [HIGH] projectCounts calculation
+
+## [HIGH] Favourite pruning logic
+
+## [HIGH] Persistence round-trip guard
+
+## [HIGH] P5-03: PATCH area/tags/type with enum validation and length constraints
+
+## [HIGH] buildProjectsList
+
+## [HIGH] isCommittedBucket
+
+## [HIGH] ID-collision integrity detection and resolution
+
+## [HIGH] Main container — per-view content width
+
+## [HIGH] Density switcher and persistence
+
+## [HIGH] getDraftTriageThreshold LLM confidence threshold
+
+## [HIGH] parseTriageResponse LLM output extraction
+
+## [HIGH] applyTriageResult draft promotion and flagging
+
+## [HIGH] isValidBoardTransition — valid state machine transitions
+
+## [HIGH] staleBadgeColor — staleness boundary conditions and color mapping
+
+## [HIGH] POST /api/transition — status validation and error codes
+
+## [HIGH] PATCH /api/tasks/:id — area/tags/type field validation
+
+## [HIGH] P5-10: nextId skips past index max, createTask detects collisions, Reconciler repairs
+
+## [HIGH] Hermes backend signoff endpoints (P2-04)
+
+## [HIGH] POST /api/capture/braindump endpoint validation
+
+## [HIGH] P5-04 — New-task modal + guarded delete
+
+## [HIGH] braindump — JSON extraction logic (isolated)
+
+## [HIGH] POST /api/capture/commit endpoint contract
+
+## [HIGH] P5-05 — reopen closed + interactive Completed
+
+## [HIGH] P5-06 — capture context
+
+## [HIGH] isCommittedBucket
+
+## [HIGH] Capacity gauge colour zone thresholds
+
+## [HIGH] TodayView.tsx — estimate prompt integration (P4-04, AC 1, 3, 7)
+
+## [HIGH] P5-07 — mobile board
+
+## [HIGH] P5-08 — build hygiene
+
+## [HIGH] CaptureOverlay.tsx — expand affordances (produce side)
+
+## [HIGH] BrainDumpView.tsx — seed nonce effect keying (consumer side)
+
+## [HIGH] filter.ts matchFilter logic
+
+## [HIGH] filterActive and projectOfId utility predicates
+
+## [HIGH] isValidBoardTransition Kanban state machine
+
+## [HIGH] matchSkill triage skill detection
+
+## [HIGH] isSoftware keyword detection
+
+## [HIGH] triage automatable bucket (skill match rule 1)
+
+## [HIGH] triage signoff bucket (rule 2)
+
+## [HIGH] triage recurring bucket (rule 3)
+
+## [HIGH] triage research bucket (rule 4)
+
+## [HIGH] triage manual bucket (rule 5 fallback)
+
+## [HIGH] triage bucket classification precedence
+
+## [HIGH] fmtSaved time estimation formatting
+
+## [HIGH] triage re-evaluation on skill addition
+
+## [HIGH] P2-06 proposal queue exclusion
+
+## [HIGH] action button config API endpoints
+
+## [HIGH] P5-04 DELETE task + full-field POST validation
+
+## [HIGH] Hermes backend endpoints (P2-04)
+
+## [HIGH] P5-10 ID collision integrity and repair
+
+## [HIGH] P4-01 task mutation POST /transition endpoints
+
+## [HIGH] P4-02 batch close all done tasks
+
+## [HIGH] P5-03 PATCH area/tags/type field mutations
+
+## [HIGH] agent_status SQLite persistence and validation
+
+## [HIGH] sortByStaleDesc — client-side stable sort
+
+## [HIGH] staleBadgeColor — threshold boundaries (AC-3)
+
+## [HIGH] TaskPanel status-action footer engine
+
+## [HIGH] Phase 6 projects client API
+
+## [HIGH] writeConfig — atomic persistence with JSON round-trip validation
+
+## [HIGH] CaptureOverlay expand affordances (produce side)
+
+## [HIGH] BrainDumpView seed nonce effect keying
+
+## [HIGH] App.tsx P2-03 braindump handoff wiring
+
+## [HIGH] primaryTarget natural forward transition
+
+## [HIGH] secondaryTargets alternate transition options
+
+## [HIGH] transitionLabel from-aware action labels
+
+## [HIGH] P5-04 DELETE /api/tasks/:id + full-field POST create validation
+
+## [HIGH] PATCH milestone field assignment and clearing
+
+## [HIGH] isPathWithinRoots path traversal validation
+
+## [HIGH] ProjectsModal component structure
+
+## [HIGH] Nav settings cog button
+
+## [HIGH] App ProjectsModal integration
+
+## [HIGH] Nav Favourites group rendering
+
+## [HIGH] FilterBar PREFIX—Name project chip display
+
+## [HIGH] App filterProjects name field resolution
+
+## [HIGH] TodayView.tsx — estimate prompt integration
+
+## [HIGH] isValidTransition function
+
+## [HIGH] McpTasksError error class
+
+## [HIGH] FilterBar star toggle for favourites
+
+## [HIGH] MCPAT-065 reconcile-on-boot
+
+## [HIGH] App.tsx — TodayView integration
+
+## [HIGH] Header.tsx — today tab

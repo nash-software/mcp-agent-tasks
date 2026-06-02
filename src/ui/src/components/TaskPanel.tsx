@@ -20,7 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Send, Bot, Trash2, CalendarPlus, CalendarCheck, ChevronDown, User } from 'lucide-react'
 import type { Task, PanelState, TaskStatus, TaskPriority, TaskArea, TaskType } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
-import { relativeTime } from '../lib/time'
+import { relativeTime, absoluteTime } from '../lib/time'
 import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask, claimTask } from '../api'
 import { useMilestones } from '../hooks/useMilestones'
 import { milestoneProject } from '../lib/milestone'
@@ -834,6 +834,31 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                 />
               </div>
             </Section>
+
+            {/* Dates — created / last updated (provenance). Shown in both peek + detail so the
+                age of a ticket is always one glance away; exact timestamp on hover. */}
+            {(task.created || task.updated) && (
+              <Section title="Dates">
+                <div className="space-y-1 text-xs">
+                  {task.created && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-faint w-24 flex-shrink-0">Created</span>
+                      <span className="text-ink-2 tabular-nums" title={absoluteTime(task.created)}>
+                        {relativeTime(task.created)}
+                      </span>
+                    </div>
+                  )}
+                  {task.updated && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-ink-faint w-24 flex-shrink-0">Last updated</span>
+                      <span className="text-ink-2 tabular-nums" title={absoluteTime(task.updated)}>
+                        {relativeTime(task.updated)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Section>
+            )}
 
             {/* Status history — detail mode only */}
             {!isPeek && task.transitions && task.transitions.length > 0 && (
