@@ -557,3 +557,69 @@
 ## [HIGH] App.tsx — TodayView integration
 
 ## [HIGH] Header.tsx — today tab
+
+## [HIGH] GET /api/today endpoint deduplication across shared global index
+
+## [HIGH] filter.ts — attention predicate logic
+
+## [HIGH] filter.ts — scheduled date preset filtering
+
+## [HIGH] filter.ts — createdWithin time window filtering
+
+## [HIGH] filter.ts — updatedWithin time window filtering
+
+## [HIGH] Filter backward compatibility hydration for new dimensions
+
+## [HIGH] filter.ts — activeFilterCount dimension counter
+
+## [HIGH] SqliteIndex — files child table persistence (MCPAT-068)
+
+## [HIGH] TaskPanel.tsx — MCPAT-068 types structure
+
+## [HIGH] TaskPanel.tsx — Dependencies section (MCPAT-068 AC-2)
+
+## [HIGH] TaskPanel.tsx — References section (MCPAT-068 AC-3)
+
+## [HIGH] TaskPanel: Subtasks checklist section structure (AC-4)
+
+## [HIGH] TaskPanel: Files touched section structure (AC-5)
+
+## [HIGH] TaskPanel: Complexity badge styling and visibility (AC-7)
+
+## [HIGH] TaskPanel: Section visibility gating rules across peek/detail modes (AC-8)
+
+## [HIGH] filter.ts — OR logic for task types filter dimension
+
+## [HIGH] filter.ts — OR logic for task statuses filter dimension
+
+## [HIGH] matchProjectArea ignores task-level dimensions for non-task surfaces
+
+## [HIGH] matchFilter project and area dimension logic
+
+## [HIGH] matchFilter type and status dimensions
+
+## [HIGH] matchFilter attention predicate logic
+
+## [HIGH] matchFilter scheduled preset filtering
+
+## [HIGH] matchFilter createdWithin time-window filtering
+
+## [HIGH] matchFilter updatedWithin time-window filtering
+
+## [HIGH] filterActive multi-dimension active state detection
+
+## [HIGH] activeFilterCount counts active filter dimensions
+
+## [HIGH] sortTasks preserves input array immutability
+
+## [HIGH] sortTasks priority dimension ordering
+
+## [HIGH] sortTasks created/updated date ordering
+
+## [HIGH] sortTasks scheduled_for null handling
+
+## [HIGH] sortTasks title alphabetical collation
+
+## [HIGH] sortTasks complexity and estimate null value handling
+
+## [HIGH] sortTasks stable tie-breaking via task ID
