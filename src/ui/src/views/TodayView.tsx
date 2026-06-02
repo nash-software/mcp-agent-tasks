@@ -66,6 +66,8 @@ interface TodayViewProps {
   areaMap?: Record<string, Area>
   /** MCPAT-069 Phase C: sort applied to committed list + candidate queue. */
   sort?: { key: SortKey; dir: SortDir }
+  /** MCPAT-069: render-time clock injected by App so date-preset + attention filtering use one instant. */
+  now?: number
   selectedTaskId?: string | null
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
@@ -80,6 +82,7 @@ export function TodayView({
   filter,
   areaMap = {},
   sort,
+  now = Date.now(),
   selectedTaskId,
   onSelectTask,
   onOpenDetail,
@@ -134,15 +137,15 @@ export function TodayView({
     // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
     // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
     .filter(isCommittedBucket)
-    .filter(t => matchFilter(filter, t, areaMap))
+    .filter(t => matchFilter(filter, t, areaMap, now))
   const committedList = sort
     ? sortTasks(filteredCommitted, sort.key, sort.dir)
     : sortCommitted(filteredCommitted)
 
   // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
   const filteredCandidates = sort
-    ? sortTasks(candidates.filter(t => matchFilter(filter, t, areaMap)), sort.key, sort.dir)
-    : candidates.filter(t => matchFilter(filter, t, areaMap))
+    ? sortTasks(candidates.filter(t => matchFilter(filter, t, areaMap, now)), sort.key, sort.dir)
+    : candidates.filter(t => matchFilter(filter, t, areaMap, now))
   const candidatesByArea = groupByArea(filteredCandidates)
 
   // P4-04: Count committed (non-done) tasks with no estimate

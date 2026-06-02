@@ -64,12 +64,14 @@ interface Props {
   areaMap?: Record<string, Area>
   /** MCPAT-069 Phase C: sort applied within each board column. */
   sort?: { key: SortKey; dir: SortDir }
+  /** MCPAT-069: render-time clock injected by App so date-preset + attention filtering use one instant. */
+  now?: number
   onOpenPanel: (panel: PanelState) => void
 }
 
-export function BoardView({ filter, areaMap = {}, sort, onOpenPanel }: Props): React.JSX.Element {
+export function BoardView({ filter, areaMap = {}, sort, now = Date.now(), onOpenPanel }: Props): React.JSX.Element {
   const { tasks: allTasks, isLoading, error } = useTasks()
-  const tasks = allTasks.filter(t => matchFilter(filter, t, areaMap))
+  const tasks = allTasks.filter(t => matchFilter(filter, t, areaMap, now))
 
   // Track which task is being dragged (for DragOverlay rendering)
   const [activeTask, setActiveTask] = useState<Task | null>(null)

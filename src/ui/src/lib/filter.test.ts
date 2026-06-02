@@ -3,6 +3,7 @@ import {
   EMPTY_FILTER,
   STALE_DAYS,
   matchFilter,
+  matchProjectArea,
   filterActive,
   activeFilterCount,
   areaOfProject,
@@ -462,5 +463,46 @@ describe('filter.ts — projectOfId', () => {
   })
   it('returns the whole string for a bare id with no dash', () => {
     expect(projectOfId('orphan')).toBe('orphan')
+  })
+})
+
+// ── matchProjectArea (MCPAT-069 non-task-surface matcher) ─────────────────────
+
+describe('filter.ts — matchProjectArea (non-task surfaces)', () => {
+  it('applies the project dimension', () => {
+    const f: Filter = { ...EMPTY_FILTER, projects: ['COND'] }
+    expect(matchProjectArea(f, 'COND', undefined, DEFAULT_AREA_MAP)).toBe(true)
+    expect(matchProjectArea(f, 'HRLD', undefined, DEFAULT_AREA_MAP)).toBe(false)
+  })
+
+  it('applies the area dimension (explicit + derived via areaMap)', () => {
+    const f: Filter = { ...EMPTY_FILTER, areas: ['client'] }
+    expect(matchProjectArea(f, 'COND', undefined, DEFAULT_AREA_MAP)).toBe(true)   // COND→client
+    expect(matchProjectArea(f, 'ACR', undefined, DEFAULT_AREA_MAP)).toBe(false)   // ACR→internal
+    expect(matchProjectArea(f, 'ZZ', 'client', DEFAULT_AREA_MAP)).toBe(true)      // explicit area wins
+  })
+
+  it('IGNORES task-level dimensions so non-task surfaces are never blanked (MCPAT-069 regression fix)', () => {
+    // An active status/type/priority/milestone/attention/date filter must NOT exclude a milestone,
+    // activity row, or artifact — those surfaces carry no such fields. This is the bug Codex caught:
+    // the full matchFilter would return false here and empty the Roadmap/Activity/Artifacts views.
+    const taskDimsActive: Filter = {
+      ...EMPTY_FILTER,
+      statuses: ['in_progress'],
+      types: ['bug'],
+      priorities: ['high'],
+      milestones: ['m-1'],
+      attention: true,
+      scheduled: 'today',
+    }
+    expect(matchProjectArea(taskDimsActive, 'COND', undefined, DEFAULT_AREA_MAP)).toBe(true)
+    // Contrast: the full matcher DOES exclude a project-only object under those dims.
+    expect(matchFilter(taskDimsActive, { project: 'COND' }, DEFAULT_AREA_MAP)).toBe(false)
+  })
+
+  it('combines project + area but still ignores task dims', () => {
+    const f: Filter = { ...EMPTY_FILTER, projects: ['COND'], areas: ['client'], statuses: ['done'] }
+    expect(matchProjectArea(f, 'COND', undefined, DEFAULT_AREA_MAP)).toBe(true)
+    expect(matchProjectArea(f, 'ACR', undefined, DEFAULT_AREA_MAP)).toBe(false) // wrong area
   })
 })

@@ -5,7 +5,7 @@ import { useMilestones } from '../hooks/useMilestones'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone, updateTask } from '../api'
 import { ViewHeader } from '../components/ViewHeader'
-import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { type Filter, matchProjectArea, type Area } from '../lib/filter'
 import { milestoneProject } from '../lib/milestone'
 
 interface Props {
@@ -214,13 +214,15 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
     )
   }
 
-  // Milestones carry no `area`; filter by the milestone's own project (derived from its ID),
-  // with area resolved from that project via the shared areaMap.
-  // Non-task surface: pass partial { project } — task-only dimensions will exclude milestones
-  // when those dimensions are active (intentional per MCPAT-069 spec Failure Modes).
-  const visibleMilestones = milestones.filter(ms =>
-    matchFilter(filter, { project: milestoneProject(ms) }, areaMap),
-  )
+  // Milestones carry only a project (→ area). Apply the project + area dimensions ONLY — a milestone
+  // has no type/status/priority/date, so running the full matcher here would blank the entire roadmap
+  // whenever any task-level dimension is active (MCPAT-069 fix). An explicit milestone filter is
+  // honoured against the milestone's own id (the intuitive "show this milestone" behaviour).
+  const visibleMilestones = milestones.filter(ms => {
+    if (!matchProjectArea(filter, milestoneProject(ms), undefined, areaMap)) return false
+    if (filter.milestones.length > 0 && !filter.milestones.includes(ms.id)) return false
+    return true
+  })
 
   return (
     <div className="space-y-4">

@@ -134,10 +134,11 @@ function localDateOffset(now: number, offsetDays: number): string {
  * AND across dimensions, OR within each. Empty dimension = no constraint.
  *
  * MCPAT-069: signature changed from (filter, project, area?, areaMap) to
- * (filter, task: TaskLike, areaMap, now) to support new dimensions. Every call site
- * now passes a task-like object. Non-task surfaces pass { project } or
- * { project: projectOfId(id) }; they will be excluded under any task-only
- * dimension that is active (type/status/priority/date) — intentional per spec.
+ * (filter, task: TaskLike, areaMap, now) to support new dimensions. Task surfaces
+ * (Today, Board) pass a full task. NON-task surfaces (roadmap milestones, activity
+ * rows, artifacts) carry no type/status/priority/date fields and MUST use
+ * `matchProjectArea` instead — running the full matcher on them would blank the
+ * whole surface whenever a task-level dimension is active.
  *
  * @param filter  Active filter state.
  * @param task    Task-like object with at least `project`. May be a partial for non-task surfaces.
@@ -145,6 +146,26 @@ function localDateOffset(now: number, offsetDays: number): string {
  * @param now     Injected clock (epoch ms) for date-preset and attention staleness evaluation.
  *                Defaults to `Date.now()` — override in tests for deterministic assertions.
  */
+/**
+ * Project + area only — for NON-TASK surfaces (roadmap milestones, activity rows, artifacts) that
+ * carry no type/status/priority/date fields. Using the full `matchFilter` on them would exclude the
+ * entire surface whenever a task-level dimension is active (MCPAT-069 regression). Mirrors the P2-01
+ * project/area logic exactly.
+ */
+export function matchProjectArea(
+  filter: Filter,
+  project: string,
+  area: Area | undefined,
+  areaMap: Record<string, Area> = {},
+): boolean {
+  if (filter.projects.length && !filter.projects.includes(project)) return false
+  if (filter.areas.length) {
+    const a = area ?? areaOfProject(project, areaMap)
+    if (a == null || !filter.areas.includes(a)) return false
+  }
+  return true
+}
+
 export function matchFilter(
   filter: Filter,
   task: TaskLike,

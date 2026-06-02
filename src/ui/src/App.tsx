@@ -59,6 +59,10 @@ const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
   'today', 'board', 'roadmap', 'artifacts', 'activity',
 ])
 
+/** Views that actually apply the sort (MCPAT-069 C). Roadmap/Activity keep their intrinsic order,
+ *  so the Sort control is hidden there rather than shown-but-ignored (no silent omission). */
+const SORTABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>(['today', 'board'])
+
 function readStoredView(): ViewId {
   const raw = localStorage.getItem('lifeos-view')
   return (raw && VALID_VIEWS.includes(raw as ViewId)) ? (raw as ViewId) : 'today'
@@ -593,6 +597,10 @@ export function App(): React.JSX.Element {
     handleViewChange('braindump')
   }, [handleViewChange])
 
+  // MCPAT-069: a single render-time clock threaded into the task-surface views so every date-preset
+  // and attention-staleness check in one render evaluates against the same instant (no per-row skew).
+  const now = Date.now()
+
   return (
     <div className="app-shell" data-focus={focusMode ? 'true' : undefined} data-density={density}>
       {/* Global capture bar — always visible, spans all columns (P1-06) */}
@@ -643,7 +651,7 @@ export function App(): React.JSX.Element {
               onSetUpdatedWithin={setUpdatedWithin}
               onClear={clearFilter}
             />
-            <SortControl sort={sort} onChange={handleSortChange} />
+            {SORTABLE_VIEWS.has(view) && <SortControl sort={sort} onChange={handleSortChange} />}
           </div>
         )}
         <div className="main-inner" data-width={(FULL_WIDTH_VIEWS.has(view) || (focusMode && view === 'today')) ? 'full' : undefined}>
@@ -652,6 +660,7 @@ export function App(): React.JSX.Element {
               filter={filter}
               areaMap={areaMap}
               sort={sort}
+              now={now}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSel}
               onOpenDetail={(task) => setPanel({ mode: 'detail', taskId: task.id })}
@@ -660,7 +669,7 @@ export function App(): React.JSX.Element {
               onToggleFocus={() => setFocusMode(f => !f)}
             />
           )}
-          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} sort={sort} onOpenPanel={setPanel} />}
+          {view === 'board'     && <BoardView filter={filter} areaMap={areaMap} sort={sort} now={now} onOpenPanel={setPanel} />}
           {view === 'hermes'    && <HermesView onOpenPanel={(task) => setPanel({ mode: 'detail', taskId: task.id })} />}
           {view === 'braindump' && (
             <BrainDumpView
