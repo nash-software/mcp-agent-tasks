@@ -623,3 +623,13 @@
 ## [HIGH] sortTasks complexity and estimate null value handling
 
 ## [HIGH] sortTasks stable tie-breaking via task ID
+
+## [HIGH] NoteStore.create() — Note Creation with Validation
+
+## [HIGH] NoteStore.get() — Note Retrieval by ID
+
+## [HIGH] NoteStore.list() — Note Listing with Filtering and Sorting
+
+## [HIGH] NoteStore.search() — Full-Text Search
+
+## [HIGH] NoteStore.linkTask() — Task Linking
