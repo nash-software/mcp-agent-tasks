@@ -147,7 +147,7 @@ export interface BrainSearchResponse {
   offline?: boolean
 }
 
-export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity' | 'completed' | 'notes'
+export type ViewId = 'today' | 'board' | 'hermes' | 'braindump' | 'artifacts' | 'roadmap' | 'activity' | 'completed' | 'notes' | 'advisor'
 
 // P4-02: batch close response
 export interface BatchCloseResponse {
