@@ -41,6 +41,12 @@ import * as taskRebuildIndex from './tools/task-rebuild-index.js';
 import * as taskRegisterProject from './tools/task-register-project.js';
 import * as taskReconcileLegacy from './tools/task-reconcile-legacy.js';
 import * as taskMilestone from './tools/task-milestone.js';
+import * as noteCreate from './tools/note-create.js';
+import * as noteGet from './tools/note-get.js';
+import * as noteList from './tools/note-list.js';
+import * as noteSearch from './tools/note-search.js';
+import * as noteLinkTask from './tools/note-link-task.js';
+import { NoteStore } from './store/note-store.js';
 
 // Package version — imported as JSON
 import { createRequire } from 'node:module';
@@ -80,6 +86,11 @@ const TOOLS: ToolModule[] = [
   taskRegisterProject,
   taskReconcileLegacy,
   taskMilestone,
+  noteCreate,
+  noteGet,
+  noteList,
+  noteSearch,
+  noteLinkTask,
 ];
 
 const TOOL_MAP = new Map<string, ToolModule>(TOOLS.map(t => [t.name, t]));
@@ -129,6 +140,7 @@ async function main(): Promise<void> {
   const markdownStore = new MarkdownStore();
   const manifestWriter = new ManifestWriter();
   const milestoneRepo = new MilestoneRepository(sqliteIndex.getRawDb());
+  const noteStore = new NoteStore(sqliteIndex, config);
 
   // Build registry — one TaskStore per unique tasksDir
   const registry = new StoreRegistry(config, sqliteIndex, markdownStore, manifestWriter);
@@ -137,6 +149,7 @@ async function main(): Promise<void> {
     store: registry,
     registry,
     index: sqliteIndex,
+    notes: noteStore,
     sessionId,
     config,
     milestones: milestoneRepo,

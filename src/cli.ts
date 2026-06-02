@@ -15,6 +15,7 @@ import { ManifestWriter } from './store/manifest-writer.js';
 import { TaskStore } from './store/task-store.js';
 import { Reconciler } from './store/reconciler.js';
 import { planCollisionFixes, applyCollisionFixes, findReferences, type StoreRef } from './store/id-collision-fixer.js';
+import { NoteStore } from './store/note-store.js';
 
 // Extended update type to carry git link fields through the update path
 interface UpdateWithGit extends TaskUpdateInput {
@@ -1196,6 +1197,73 @@ program
 
     console.log('');
     console.log(dryRun ? 'Dry-run complete — no changes made.' : 'Install complete!');
+  });
+
+// ── notes ─────────────────────────────────────────────────────────────────────
+
+const notesCmd = program
+  .command('notes')
+  .description('Manage notes — distinct from tasks, for strategic context and ideas');
+
+notesCmd
+  .command('list')
+  .description('List notes')
+  .option('--project <prefix>', 'Filter by project prefix')
+  .option('--limit <n>', 'Max results', '50')
+  .action((options: { project?: string; limit: string }) => {
+    const config = loadConfig();
+    const dbPath = resolveServerDbPath(config.storageDir, config);
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    const noteStore = new NoteStore(idx, config);
+    const notes = noteStore.list({
+      project: options.project,
+      limit: parseInt(options.limit, 10) || 50,
+    });
+    if (notes.length === 0) {
+      console.log('(no notes found)');
+      idx.close();
+      return;
+    }
+    const rows = notes.map(n => ({
+      id: n.id,
+      project: n.project,
+      task_id: n.task_id ?? '',
+      tags: n.tags.join(','),
+      preview: n.body.slice(0, 60).replace(/\n/g, ' '),
+      created_at: n.created_at.slice(0, 10),
+    }));
+    console.log(formatTable(rows));
+    idx.close();
+  });
+
+notesCmd
+  .command('add <body>')
+  .description('Create a new note')
+  .option('--project <prefix>', 'Project prefix (defaults to GEN or first project)')
+  .option('--task <id>', 'Link to a task ID')
+  .option('--tags <tags>', 'Comma-separated tags')
+  .action((body: string, options: { project?: string; task?: string; tags?: string }) => {
+    const config = loadConfig();
+    const dbPath = resolveServerDbPath(config.storageDir, config);
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    const noteStore = new NoteStore(idx, config);
+    const defaultProject =
+      config.projects.find(p => p.prefix === 'GEN')?.prefix ??
+      config.projects[0]?.prefix ??
+      'GEN';
+    const note = noteStore.create(
+      {
+        body,
+        project: options.project,
+        task_id: options.task,
+        tags: options.tags ? options.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      },
+      defaultProject,
+    );
+    console.log(`✓ Created note ${note.id} in project ${note.project}`);
+    idx.close();
   });
 
 // ── parse ─────────────────────────────────────────────────────────────────────
