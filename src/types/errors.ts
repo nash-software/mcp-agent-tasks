@@ -1,5 +1,6 @@
 export type ErrorCode =
   | 'TASK_NOT_FOUND'
+  | 'NOTE_NOT_FOUND'
   | 'PROJECT_NOT_FOUND'
   | 'INVALID_TRANSITION'
   | 'CLAIM_CONFLICT'
