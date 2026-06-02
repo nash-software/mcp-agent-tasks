@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Trello, MessageSquare, Brain,
-  Package, Map, Activity, CheckCircle, StickyNote, type LucideIcon
+  Package, Map, Activity, CheckCircle, StickyNote, Lightbulb, type LucideIcon
 } from 'lucide-react'
 import type { ViewId } from '../types'
 
@@ -21,4 +21,5 @@ export const NAV: NavItem[] = [
   { id: 'activity',  label: 'Activity',   icon: Activity,        kbd: 7 },
   { id: 'completed', label: 'Completed',  icon: CheckCircle,     kbd: 8 },
   { id: 'notes',     label: 'Notes',      icon: StickyNote,      kbd: 9 },
+  { id: 'advisor',   label: 'Advisor',    icon: Lightbulb,       kbd: 0 },
 ]

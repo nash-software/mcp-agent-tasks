@@ -6,6 +6,7 @@ import type { NoteRecord, NoteCreateInput, NoteUpdateInput, NoteListInput } from
 import { MAX_NOTE_BODY_LENGTH, MAX_NOTE_TAGS } from '../types/note.js';
 import { McpTasksError } from '../types/errors.js';
 import type { SqliteIndex } from './sqlite-index.js';
+import { syncNoteToBrain } from '../lib/brain-sync.js';
 
 export class NoteStore {
   constructor(
@@ -58,6 +59,9 @@ export class NoteStore {
     this.sqliteIndex.upsertNote(note);
     this.writeMarkdown(note, notesDir);
 
+    // Fire-and-forget brain sync — does not block note creation
+    syncNoteToBrain(note, this.sqliteIndex);
+
     return note;
   }
 
@@ -83,6 +87,9 @@ export class NoteStore {
 
     this.sqliteIndex.upsertNote(existing);
     this.writeMarkdown(existing, notesDir);
+
+    // Fire-and-forget brain sync
+    syncNoteToBrain(existing, this.sqliteIndex);
 
     return existing;
   }

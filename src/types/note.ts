@@ -6,6 +6,7 @@ export interface NoteRecord {
   tags: string[];
   created_at: string;
   updated_at: string;
+  brain_sync_failed?: boolean;
 }
 
 export interface NoteCreateInput {

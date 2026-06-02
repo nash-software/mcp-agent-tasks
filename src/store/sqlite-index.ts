@@ -119,6 +119,7 @@ interface NoteRow {
   tags: string;
   created_at: string;
   updated_at: string;
+  brain_sync_failed: number;
 }
 
 export class SqliteIndex {
@@ -227,12 +228,19 @@ export class SqliteIndex {
         task_id TEXT,
         tags TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        brain_sync_failed INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project);
       CREATE INDEX IF NOT EXISTS idx_notes_task_id ON notes(task_id);
       CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
     `);
+    // Migration for existing DBs that have the notes table but lack brain_sync_failed
+    try {
+      this.db.exec('ALTER TABLE notes ADD COLUMN brain_sync_failed INTEGER NOT NULL DEFAULT 0');
+    } catch {
+      // Column already exists — expected on re-init
+    }
   }
 
   private rowToTask(row: TaskRow): Task {
@@ -1034,7 +1042,21 @@ export class SqliteIndex {
       tags,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      ...(row.brain_sync_failed ? { brain_sync_failed: true } : {}),
     };
+  }
+
+  markNoteBrainSyncFailed(id: string): void {
+    this.db.prepare(`UPDATE notes SET brain_sync_failed = 1 WHERE id = ?`).run(id);
+  }
+
+  clearNoteBrainSyncFailed(id: string): void {
+    this.db.prepare(`UPDATE notes SET brain_sync_failed = 0 WHERE id = ?`).run(id);
+  }
+
+  getNotesPendingBrainSync(): NoteRecord[] {
+    const rows = this.db.prepare(`SELECT * FROM notes WHERE brain_sync_failed = 1`).all() as NoteRow[];
+    return rows.map(r => this.rowToNote(r));
   }
 
   close(): void {

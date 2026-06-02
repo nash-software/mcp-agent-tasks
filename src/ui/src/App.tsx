@@ -16,6 +16,7 @@ import { FilterBar, type FilterBarProject } from './components/FilterBar'
 import { HermesView } from './views/HermesView'
 import { CompletedView } from './views/CompletedView'
 import { NotesView } from './views/NotesView'
+import { AdvisorView } from './views/AdvisorView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
@@ -685,6 +686,7 @@ export function App(): React.JSX.Element {
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
           {view === 'notes'     && <NotesView />}
+          {view === 'advisor'   && <AdvisorView />}
         </div>
       </main>
 
