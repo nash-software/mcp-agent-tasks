@@ -16,12 +16,13 @@
  *        Done button re-pointed to /transition (was /promote).
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
 import { Send, Bot, Trash2, CalendarPlus, CalendarCheck, ChevronDown, User } from 'lucide-react'
 import type { Task, PanelState, TaskStatus, TaskPriority, TaskArea, TaskType } from '../types'
 import { STATUS_DOT, PRIORITY_COLOR, AREA_DOT } from '../lib/tokens'
 import { relativeTime, absoluteTime } from '../lib/time'
-import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask, claimTask } from '../api'
+import { scheduleTask, transitionTask, updateTask, signoffTask, dispatchToAcr, deleteTask, claimTask, fetchNotes } from '../api'
+import type { NoteRecord } from '../api'
 import { useMilestones } from '../hooks/useMilestones'
 import { milestoneProject } from '../lib/milestone'
 import { primaryTarget, secondaryTargets, transitionLabel, requiresReason, targetTone } from '../lib/task-actions'
@@ -93,6 +94,15 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
   const taskId   = panel?.taskId ?? ''
   const isPeek   = mode === 'peek'
   const panelW   = isPeek ? 380 : 440
+
+  // Fetch notes linked to this task (shown in Related Notes section)
+  const linkedNotesQuery = useQuery({
+    queryKey: ['notes', 'task', taskId],
+    queryFn: (): Promise<NoteRecord[]> => taskId ? fetchNotes({ task_id: taskId, limit: 10 }) : Promise.resolve([]),
+    enabled: !!taskId && !isPeek,
+    staleTime: 60_000,
+  })
+  const linkedNotes = linkedNotesQuery.data ?? []
 
   // Inline error message for surfacing mutation rejections
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -971,6 +981,22 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                       : `#${i + 1}`;
                     return <FileRow key={filePath} label={label} path={filePath} />;
                   })}
+                </div>
+              </Section>
+            )}
+
+            {/* Related notes — detail mode only. Hidden when no linked notes. */}
+            {!isPeek && linkedNotes.length > 0 && (
+              <Section title={`Related notes · ${linkedNotes.length}`}>
+                <div className="space-y-1.5">
+                  {linkedNotes.map(note => (
+                    <div key={note.id} className="text-xs">
+                      <p className="text-ink-2 leading-snug">
+                        {note.body.slice(0, 80)}{note.body.length > 80 ? '…' : ''}
+                      </p>
+                      <span className="text-ink-faint">{relativeTime(note.created_at)}</span>
+                    </div>
+                  ))}
                 </div>
               </Section>
             )}

@@ -15,6 +15,7 @@ import { CommandPalette, type PaletteCommand } from './components/CommandPalette
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
 import { HermesView } from './views/HermesView'
 import { CompletedView } from './views/CompletedView'
+import { NotesView } from './views/NotesView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
@@ -683,6 +684,7 @@ export function App(): React.JSX.Element {
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
+          {view === 'notes'     && <NotesView />}
         </div>
       </main>
 
