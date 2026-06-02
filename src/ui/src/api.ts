@@ -147,6 +147,41 @@ export async function quickCapture(
   return res.json() as Promise<{ taskId: string; project: string }>
 }
 
+export interface InferResult {
+  intent: 'task' | 'note'
+  confidence: number
+}
+
+export async function inferCapture(text: string, context?: string): Promise<InferResult> {
+  try {
+    const res = await fetch('/api/capture/infer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(context ? { text, context } : { text }),
+    })
+    if (!res.ok) return { intent: 'task', confidence: 0 }
+    return res.json() as Promise<InferResult>
+  } catch {
+    return { intent: 'task', confidence: 0 }
+  }
+}
+
+export async function captureNote(
+  text: string,
+  project?: string,
+): Promise<{ noteId: string; project: string }> {
+  const res = await fetch('/api/capture/note', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, project }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `Note capture failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ noteId: string; project: string }>
+}
+
 export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }> {
   const res = await fetch('/api/config')
   if (!res.ok) return {}
