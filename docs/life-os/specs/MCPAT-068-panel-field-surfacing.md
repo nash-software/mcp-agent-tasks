@@ -90,10 +90,17 @@ and return `files` (AC-6) — without it, the Files section can never render and
       sections are **detail-only** (gated on `!isPeek`, matching Status-history at `TaskPanel.tsx:864`),
       keeping the 380px peek pane uncluttered; the **complexity badge** shows in **both** peek and detail
       (it lives in the always-visible metadata cluster). This split is asserted in the RTL test (AC-9).
-- [ ] **AC-9 — Render correctness (RTL).** Unit tests assert: each section renders its entries when the
-      array is populated; each section is **absent from the DOM** when the array is empty/undefined; the
-      subtasks count equals done/total; the four list sections do **not** render in `mode='peek'` but do
-      in `mode='detail'`; the complexity badge renders in both modes.
+- [ ] **AC-9 — Render correctness.** Tests assert: each section renders its entries when the array is
+      populated; each section is **absent** when the array is empty/undefined; the subtasks count equals
+      done/total; the four list sections render only under `mode='detail'` (not `peek`); the complexity
+      badge renders in both modes.
+      > **Test-strategy note (codex review, MCPAT-068):** the repo's vitest env is `node` with **no jsdom**
+      > — every UI test in this codebase is *source-inspection* (read the `.tsx`, assert on structure), not
+      > a true RTL mount (see the header of `tests/unit/ui-task-panel.test.ts`). These tests follow that
+      > convention. A real `@testing-library/react` + jsdom harness that mounts components and asserts the
+      > live DOM is a **project-wide follow-up** (it flips the global test environment), tracked separately —
+      > not bolted on inside this feature. Runtime behaviour here is additionally backed by the mandatory
+      > on-screen visual check (Testing, below).
 - [ ] **AC-10 — Gates pass.** `npm run type-check` (strict, `tsc -b` green, no `any`), `npm run build`
       (Vite + tsup), and `npm test` all green. Plus the visual check in Testing below.
 
