@@ -455,11 +455,11 @@ export class SqliteIndex {
       );
       (t.references ?? []).forEach(r => insertRef.run(t.id, r.id, r.type));
 
-      // Cap files to last MAX_FILES — mirrors child-array cap philosophy (handbook critical-rules)
+      // Cap files to the first MAX_FILES — mirrors child-array cap philosophy (handbook critical-rules)
       const insertFile = this.db.prepare(
         'INSERT OR IGNORE INTO task_files (task_id, path, sort_order) VALUES (?, ?, ?)',
       );
-      (t.files ?? []).slice(-MAX_FILES).forEach((fp, i) => insertFile.run(t.id, fp, i));
+      (t.files ?? []).slice(0, MAX_FILES).forEach((fp, i) => insertFile.run(t.id, fp, i));
     });
 
     upsertAll(task);
