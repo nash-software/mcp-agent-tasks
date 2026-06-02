@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Task, TaskStatus, Priority, Area, AgentStatus, SubtaskEntry, StatusTransition, CommitRef, GitLink, TaskReference } from '../types/task.js';
+import type { NoteRecord, NoteListInput } from '../types/note.js';
+import { MAX_NOTE_LIST_LIMIT, DEFAULT_NOTE_LIST_LIMIT, MAX_NOTE_SEARCH_RESULTS } from '../types/note.js';
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
 import { escapeRegExp } from '../util/escape-regexp.js';
@@ -109,6 +111,16 @@ interface ClaimChanges {
   changes: number;
 }
 
+interface NoteRow {
+  id: string;
+  body: string;
+  project: string;
+  task_id: string | null;
+  tags: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export class SqliteIndex {
   private db: Database.Database;
 
@@ -201,6 +213,25 @@ export class SqliteIndex {
       CREATE INDEX IF NOT EXISTS idx_task_refs_from ON task_references(from_id);
       CREATE INDEX IF NOT EXISTS idx_task_refs_to ON task_references(to_id);
       CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
+    `);
+
+    this.initNotesTable();
+  }
+
+  private initNotesTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id TEXT PRIMARY KEY,
+        body TEXT NOT NULL,
+        project TEXT NOT NULL,
+        task_id TEXT,
+        tags TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project);
+      CREATE INDEX IF NOT EXISTS idx_notes_task_id ON notes(task_id);
+      CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at);
     `);
   }
 
@@ -895,6 +926,115 @@ export class SqliteIndex {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[sqlite-index] vacuum failed: ${msg}`);
     }
+  }
+
+  // ── Notes ────────────────────────────────────────────────────────────────
+
+  /** Next numeric suffix for a note ID in the given project (e.g. MCPAT-N-3 → 3). */
+  nextNoteId(project: string): number {
+    const rows = this.db.prepare(`SELECT id FROM notes WHERE project = ?`).all(project) as { id: string }[];
+    const re = new RegExp(`^${escapeRegExp(project)}-N-(\\d+)$`);
+    let max = 0;
+    for (const r of rows) {
+      const m = re.exec(r.id);
+      if (m && m[1]) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+    return max + 1;
+  }
+
+  upsertNote(note: NoteRecord): void {
+    this.db.prepare(`
+      INSERT INTO notes (id, body, project, task_id, tags, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        body = excluded.body,
+        task_id = excluded.task_id,
+        tags = excluded.tags,
+        updated_at = excluded.updated_at
+    `).run(
+      note.id,
+      note.body,
+      note.project,
+      note.task_id,
+      JSON.stringify(note.tags),
+      note.created_at,
+      note.updated_at,
+    );
+  }
+
+  getNote(id: string): NoteRecord | null {
+    const row = this.db.prepare(`SELECT * FROM notes WHERE id = ?`).get(id) as NoteRow | undefined;
+    if (!row) return null;
+    return this.rowToNote(row);
+  }
+
+  listNotes(opts: NoteListInput = {}): NoteRecord[] {
+    const limit = Math.min(opts.limit ?? DEFAULT_NOTE_LIST_LIMIT, MAX_NOTE_LIST_LIMIT);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (opts.project) {
+      conditions.push('project = ?');
+      params.push(opts.project);
+    }
+    if (opts.task_id) {
+      conditions.push('task_id = ?');
+      params.push(opts.task_id);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const rows = this.db.prepare(`SELECT * FROM notes ${where} ORDER BY created_at DESC LIMIT ?`)
+      .all(...params, limit) as NoteRow[];
+
+    return rows.map(r => this.rowToNote(r));
+  }
+
+  searchNotes(q: string, project?: string): NoteRecord[] {
+    const like = `%${q.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+    let rows: NoteRow[];
+    if (project) {
+      rows = this.db.prepare(
+        `SELECT * FROM notes WHERE project = ? AND body LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?`,
+      ).all(project, like, MAX_NOTE_SEARCH_RESULTS) as NoteRow[];
+    } else {
+      rows = this.db.prepare(
+        `SELECT * FROM notes WHERE body LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?`,
+      ).all(like, MAX_NOTE_SEARCH_RESULTS) as NoteRow[];
+    }
+    return rows.map(r => this.rowToNote(r));
+  }
+
+  linkNoteToTask(noteId: string, taskId: string): void {
+    const result = this.db.prepare(
+      `UPDATE notes SET task_id = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).run(taskId, noteId) as { changes: number };
+    if (result.changes === 0) {
+      throw new McpTasksError('NOTE_NOT_FOUND', `Note not found: ${noteId}`);
+    }
+  }
+
+  private rowToNote(row: NoteRow): NoteRecord {
+    let tags: string[] = [];
+    try {
+      const parsed = JSON.parse(row.tags) as unknown;
+      if (Array.isArray(parsed)) {
+        tags = parsed.filter((t): t is string => typeof t === 'string');
+      }
+    } catch {
+      tags = [];
+    }
+    return {
+      id: row.id,
+      body: row.body,
+      project: row.project,
+      task_id: row.task_id,
+      tags,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
   }
 
   close(): void {
