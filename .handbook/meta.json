@@ -1,22 +1,22 @@
 {
   "schema_version": "1.5",
   "version": 1,
-  "last_updated": "2026-05-29T18:16:08.881Z",
-  "git_hash": "a8ee43b157902f6b37a8214b58f67a2083e00978",
+  "last_updated": "2026-06-01T12:59:07.617Z",
+  "git_hash": "ce4a2793cc99b827f37db5e63030e66b1a4ebecd",
   "source_hashes": {},
   "analyzed_files": 549,
   "node_counts": {
-    "pattern": 83,
+    "pattern": 85,
     "decision": 7,
     "flow": 11,
-    "rule": 204,
+    "rule": 339,
     "intent": 22,
     "component": 33,
     "change": 1,
     "assumption": 0
   },
   "total_edges": 0,
-  "queue_last_drained": "2026-05-29T18:16:08.881Z",
+  "queue_last_drained": "2026-06-01T12:59:07.617Z",
   "intermediate_prompt_hash": "c53debacc8e203c47e25a1998dcffb35",
-  "update_cycle_count": 12
+  "update_cycle_count": 13
 }
