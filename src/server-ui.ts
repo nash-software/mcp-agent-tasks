@@ -2420,6 +2420,83 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: GET /api/notes — list notes with optional project/task_id/limit filters
+      if (pathname === '/api/notes' && req.method === 'GET') {
+        const cfg = loadConfig();
+        const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+        if (!genIdx) { sendJson(res, 200, []); return; }
+        const noteStore = new NoteStore(genIdx.index, cfg);
+        const project = url.searchParams.get('project') ?? undefined;
+        const task_id = url.searchParams.get('task_id') ?? undefined;
+        const limitRaw = parseInt(url.searchParams.get('limit') ?? '50', 10);
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
+        const notes = noteStore.list({ project, task_id, limit });
+        sendJson(res, 200, notes);
+        return;
+      }
+
+      // API: GET /api/notes/:id — get single note
+      if (req.method === 'GET' && /^\/api\/notes\/[^/]+$/.test(pathname)) {
+        const id = decodeURIComponent(pathname.slice('/api/notes/'.length));
+        const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+        if (!genIdx) { sendJson(res, 404, { error: 'NOT_FOUND', message: 'No index available' }); return; }
+        const note = genIdx.index.getNote(id);
+        if (!note) { sendJson(res, 404, { error: 'NOTE_NOT_FOUND', message: `Note not found: ${id}` }); return; }
+        sendJson(res, 200, note);
+        return;
+      }
+
+      // API: PATCH /api/notes/:id — update note body/tags
+      if (req.method === 'PATCH' && /^\/api\/notes\/[^/]+$/.test(pathname)) {
+        const id = decodeURIComponent(pathname.slice('/api/notes/'.length));
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { body?: unknown; tags?: unknown };
+            const cfg = loadConfig();
+            const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+            if (!genIdx) { sendJson(res, 500, { error: 'NO_INDEX', message: 'No project index' }); return; }
+            const noteStore = new NoteStore(genIdx.index, cfg);
+
+            const updateFields: { body?: string; tags?: string[] } = {};
+            if (body.body !== undefined) {
+              if (typeof body.body !== 'string' || !body.body.trim()) {
+                sendJson(res, 400, { error: 'INVALID_FIELD', message: 'body must be a non-empty string' });
+                return;
+              }
+              if (body.body.length > 10_000) {
+                sendJson(res, 400, { error: 'TEXT_TOO_LONG', message: 'body must be 10 000 characters or fewer' });
+                return;
+              }
+              updateFields.body = body.body;
+            }
+            if (body.tags !== undefined) {
+              if (!Array.isArray(body.tags)) {
+                sendJson(res, 400, { error: 'INVALID_FIELD', message: 'tags must be an array' });
+                return;
+              }
+              updateFields.tags = (body.tags as unknown[]).filter((t): t is string => typeof t === 'string');
+            }
+
+            try {
+              const updated = noteStore.update(id, updateFields);
+              sendJson(res, 200, updated);
+            } catch (err) {
+              if (err instanceof Error && err.message.includes('NOTE_NOT_FOUND')) {
+                sendJson(res, 404, { error: 'NOTE_NOT_FOUND', message: `Note not found: ${id}` });
+              } else {
+                throw err;
+              }
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
       // API: brain dump — LLM task inference via claude CLI
       if (pathname === '/api/capture/braindump' && req.method === 'POST') {
         const chunks: Buffer[] = [];

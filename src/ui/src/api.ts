@@ -147,6 +147,51 @@ export async function quickCapture(
   return res.json() as Promise<{ taskId: string; project: string }>
 }
 
+// ── Notes ────────────────────────────────────────────────────────────────────
+
+export interface NoteRecord {
+  id: string
+  body: string
+  project: string
+  task_id: string | null
+  tags: string[]
+  created_at: string
+  updated_at: string
+  brain_sync_failed?: boolean
+}
+
+export interface NoteFilters {
+  project?: string
+  task_id?: string
+  limit?: number
+}
+
+export function fetchNotes(filters: NoteFilters = {}): Promise<NoteRecord[]> {
+  const params: Record<string, string | undefined> = {
+    project: filters.project,
+    task_id: filters.task_id,
+    limit: filters.limit?.toString(),
+  }
+  return get<NoteRecord[]>(`/api/notes${qs(params)}`)
+}
+
+export function fetchNote(id: string): Promise<NoteRecord> {
+  return get<NoteRecord>(`/api/notes/${encodeURIComponent(id)}`)
+}
+
+export async function updateNote(id: string, fields: { body?: string; tags?: string[] }): Promise<NoteRecord> {
+  const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `Update failed: ${res.status}`)
+  }
+  return res.json() as Promise<NoteRecord>
+}
+
 export interface InferResult {
   intent: 'task' | 'note'
   confidence: number
