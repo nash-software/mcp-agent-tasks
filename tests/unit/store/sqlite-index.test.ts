@@ -524,6 +524,16 @@ describe('SqliteIndex', () => {
       expect(retrieved!.files).toHaveLength(0);
     });
 
+    it('listTasks() also returns files (not just getTask)', () => {
+      ensureProject(idx, 'TEST');
+      const task = makeTask({ files: ['src/a.ts', 'src/b.ts'] });
+      idx.upsertTask(task);
+
+      const listed = idx.listTasks({ project: 'TEST' }).find(t => t.id === 'TEST-001');
+      expect(listed).toBeDefined();
+      expect(listed!.files).toEqual(['src/a.ts', 'src/b.ts']);
+    });
+
     it('preserves file order (sort_order)', () => {
       ensureProject(idx, 'TEST');
       const ordered = ['a/first.ts', 'b/second.ts', 'c/third.ts'];
