@@ -2,11 +2,13 @@ import type { SqliteIndex } from '../store/sqlite-index.js';
 import type { McpTasksConfig } from '../config/loader.js';
 import type { MilestoneRepository } from '../store/milestone-repository.js';
 import type { StoreRegistry } from '../store/store-registry.js';
+import type { NoteStore } from '../store/note-store.js';
 
 export interface ToolContext {
   store: StoreRegistry;
   registry: StoreRegistry;
   index: SqliteIndex;
+  notes: NoteStore;
   sessionId: string;
   config: McpTasksConfig;
   milestones: MilestoneRepository;
