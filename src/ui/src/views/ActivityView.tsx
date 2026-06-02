@@ -4,7 +4,7 @@ import { ViewHeader } from '../components/ViewHeader'
 import { useActivity } from '../hooks/useActivity'
 import { relativeTime } from '../lib/time'
 import { STATUS_DOT } from '../lib/tokens'
-import { type Filter, matchFilter, projectOfId, type Area } from '../lib/filter'
+import { type Filter, matchProjectArea, projectOfId, type Area } from '../lib/filter'
 
 interface Props {
   filter: Filter
@@ -20,9 +20,10 @@ function statusLabel(s: string): string {
 export function ActivityView({ filter, areaMap = {}, onOpenPanel }: Props): React.JSX.Element {
   const { activity, isLoading, error } = useActivity()
 
-  // Activity rows expose a task id but no `project` field — derive the prefix with projectOfId,
-  // then matchFilter (area resolved via areaMap).
-  const filtered = activity.filter(e => matchFilter(filter, projectOfId(e.task_id), undefined, areaMap))
+  // Activity rows expose a task id but no `project` field — derive the prefix with projectOfId.
+  // Non-task surface: filter by project + area ONLY (an activity row has no type/status/priority/
+  // date), so an active task-level dimension never blanks the activity feed (MCPAT-069 fix).
+  const filtered = activity.filter(e => matchProjectArea(filter, projectOfId(e.task_id), undefined, areaMap))
 
   if (isLoading) {
     return (

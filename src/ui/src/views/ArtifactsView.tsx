@@ -15,7 +15,7 @@ import { markArtifactOpened } from '../api'
 import { PrefixBadge } from '../components/atoms'
 import { ViewHeader } from '../components/ViewHeader'
 import type { ArtifactEntry, PanelState } from '../types'
-import { type Filter, matchFilter, type Area } from '../lib/filter'
+import { type Filter, matchProjectArea, type Area } from '../lib/filter'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -216,8 +216,9 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
     setTimeout(() => setToastMsg(null), 2200)
   }, [])
 
-  // Artifacts carry no `area` — matchFilter derives it from the project via areaMap.
-  const filtered = artifacts.filter(a => matchFilter(filter, a.project, undefined, areaMap))
+  // Artifacts carry only a project (→ area). Non-task surface: filter by project + area ONLY so an
+  // active task-level dimension (type/status/priority/date/attention) never blanks the list (MCPAT-069 fix).
+  const filtered = artifacts.filter(a => matchProjectArea(filter, a.project, undefined, areaMap))
 
   // AC-2: explicit client-side sort by staleDays descending — never rely on API ordering
   const sorted = sortByStaleDesc(filtered)
