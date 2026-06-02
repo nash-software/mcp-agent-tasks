@@ -459,7 +459,7 @@ export class SqliteIndex {
       const insertFile = this.db.prepare(
         'INSERT OR IGNORE INTO task_files (task_id, path, sort_order) VALUES (?, ?, ?)',
       );
-      (t.files ?? []).slice(0, MAX_FILES).forEach((fp, i) => insertFile.run(t.id, fp, i));
+      (t.files ?? []).slice(-MAX_FILES).forEach((fp, i) => insertFile.run(t.id, fp, i));
     });
 
     upsertAll(task);

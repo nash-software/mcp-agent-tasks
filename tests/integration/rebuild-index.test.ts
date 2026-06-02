@@ -114,6 +114,27 @@ describe('Rebuild index via Reconciler', () => {
     expect(secondaryIdx.getTask(task.id)?.agent_status).toBe('scheduled');
   });
 
+  it('files[] survives a DB delete + reconcile, repopulated from markdown (MCPAT-068 AC-6)', () => {
+    // task.files is markdown-sourced; the SQLite task_files child table is a rebuildable projection.
+    // A DB nuke + reconcile must re-derive files from the markdown frontmatter (not return []).
+    const task = store.createTask({ project: 'TEST', title: 'Touches files', type: 'feature', priority: 'high', why: 'y' });
+    const withFiles = { ...task, files: ['src/foo.ts', 'src/bar/baz.tsx', 'README.md'] };
+    new MarkdownStore().write(withFiles);
+    idx.upsertTask(withFiles);
+    expect(idx.getTask(task.id)?.files).toEqual(['src/foo.ts', 'src/bar/baz.tsx', 'README.md']);
+
+    // Nuke the DB and rebuild from markdown only.
+    idx.close();
+    fs.rmSync(dbPath);
+    secondaryIdx = new SqliteIndex(dbPath);
+    secondaryIdx.init();
+    const reconciler = new Reconciler(secondaryIdx, tasksDir, 'TEST');
+    reconciler.reconcile();
+
+    // files must be repopulated from markdown in original order — not an empty array.
+    expect(secondaryIdx.getTask(task.id)?.files).toEqual(['src/foo.ts', 'src/bar/baz.tsx', 'README.md']);
+  });
+
   it('pruneOrphans() removes stale index row when markdown file is deleted after reconcile', () => {
     // Create a task (writes markdown + inserts into SQLite)
     const task = store.createTask({ project: 'TEST', title: 'Soon Deleted', type: 'chore', priority: 'low', why: 'y' });
