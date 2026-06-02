@@ -631,6 +631,19 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                 </button>
               )}
 
+              {/* Complexity badge — shown in both peek and detail (AC-7, MCPAT-068).
+                  Renders whenever complexity != null (including 1 — genuinely trivial tasks
+                  should be visible; 0/null means truly unset). */}
+              {task.complexity != null && (
+                <span
+                  className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-2"
+                  title={`Complexity ${task.complexity}/10`}
+                  aria-label={`Complexity ${task.complexity} out of 10`}
+                >
+                  {task.complexity}/10
+                </span>
+              )}
+
               {/* Assignee badge — detail mode: show claimed_by when set (MCPAT-064) */}
               {!isPeek && task.claimed_by && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-surface-2 text-ink-muted">
@@ -884,6 +897,80 @@ export function TaskPanel({ panel, task, onClose, onPromote }: Props): React.JSX
                       </div>
                     </div>
                   ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Dependencies — detail mode only (AC-2, MCPAT-068).
+                IDs are display-only mono badges; no click navigation. */}
+            {!isPeek && task.dependencies && task.dependencies.length > 0 && (
+              <Section title="Dependencies">
+                <div className="flex flex-wrap gap-1.5">
+                  {task.dependencies.map((dep) => (
+                    <span
+                      key={dep}
+                      className="font-mono text-ink-2 bg-surface-2 px-1.5 py-0.5 rounded text-xs"
+                      title={`Depends on ${dep}`}
+                    >
+                      {dep}
+                    </span>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* References — detail mode only (AC-3, MCPAT-068).
+                Each row shows the ref type label + the target ID as a mono badge. */}
+            {!isPeek && task.references && task.references.length > 0 && (
+              <Section title="References">
+                <div className="space-y-1">
+                  {task.references.map((ref, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-ink-faint w-14 flex-shrink-0">{ref.type}</span>
+                      <span className="font-mono text-ink-2 bg-surface-2 px-1.5 py-0.5 rounded">
+                        {ref.id}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {/* Subtasks checklist — detail mode only (AC-4, MCPAT-068).
+                Section title carries done/total count; done rows are struck through. */}
+            {!isPeek && task.subtasks && task.subtasks.length > 0 && (() => {
+              const doneCount = task.subtasks.filter(s => s.status === 'done').length;
+              const totalCount = task.subtasks.length;
+              return (
+                <Section title={`Subtasks · ${doneCount}/${totalCount}`}>
+                  <div className="space-y-1">
+                    {task.subtasks.map((s) => (
+                      <div key={s.id} className="flex items-center gap-2 text-xs">
+                        <span className="flex-shrink-0" title={s.status}>
+                          {STATUS_DOT[s.status] ?? STATUS_DOT['todo']}
+                        </span>
+                        <span className={s.status === 'done' ? 'line-through text-ink-faint' : 'text-ink-2'}>
+                          {s.title}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              );
+            })()}
+
+            {/* Files touched — detail mode only (AC-5, MCPAT-068).
+                Label = parent directory of the path, or #N index if at root. */}
+            {!isPeek && task.files && task.files.length > 0 && (
+              <Section title="Files touched">
+                <div className="space-y-1">
+                  {task.files.map((filePath, i) => {
+                    const parts = filePath.replace(/\\/g, '/').split('/');
+                    const label = parts.length > 1
+                      ? parts[parts.length - 2]
+                      : `#${i + 1}`;
+                    return <FileRow key={filePath} label={label} path={filePath} />;
+                  })}
                 </div>
               </Section>
             )}

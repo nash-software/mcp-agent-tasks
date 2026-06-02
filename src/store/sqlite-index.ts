@@ -7,7 +7,7 @@ import type { Task, TaskStatus, Priority, Area, AgentStatus, SubtaskEntry, Statu
 import type { TaskStatsOutput, MilestoneBurndown } from '../types/tools.js';
 import { McpTasksError } from '../types/errors.js';
 import { escapeRegExp } from '../util/escape-regexp.js';
-import { MAX_TRANSITIONS, MAX_COMMITS, MAX_TAGS } from './limits.js';
+import { MAX_TRANSITIONS, MAX_COMMITS, MAX_TAGS, MAX_FILES } from './limits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -92,6 +92,12 @@ interface TagRow {
 interface DependencyRow {
   task_id: string;
   depends_on: string;
+}
+
+interface FilePathRow {
+  task_id: string;
+  path: string;
+  sort_order: number;
 }
 
 interface StatsRow {
@@ -184,9 +190,17 @@ export class SqliteIndex {
         FOREIGN KEY (from_id) REFERENCES tasks(id) ON DELETE CASCADE,
         CHECK (from_id != to_id)
       );
+      CREATE TABLE IF NOT EXISTS task_files (
+        task_id TEXT NOT NULL,
+        path TEXT NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (task_id, path),
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+      );
       CREATE INDEX IF NOT EXISTS idx_tasks_milestone ON tasks(milestone);
       CREATE INDEX IF NOT EXISTS idx_task_refs_from ON task_references(from_id);
       CREATE INDEX IF NOT EXISTS idx_task_refs_to ON task_references(to_id);
+      CREATE INDEX IF NOT EXISTS idx_task_files_task ON task_files(task_id);
     `);
   }
 
@@ -202,6 +216,10 @@ export class SqliteIndex {
     const dependencies = (
       this.db.prepare<string>('SELECT depends_on FROM dependencies WHERE task_id=?').all(row.id) as DependencyRow[]
     ).map(d => d.depends_on);
+
+    const files = (
+      this.db.prepare<string>('SELECT path FROM task_files WHERE task_id=? ORDER BY sort_order').all(row.id) as FilePathRow[]
+    ).map(f => f.path);
 
     const tags = (
       this.db.prepare<string>('SELECT tag FROM tags WHERE task_id=?').all(row.id) as TagRow[]
@@ -267,7 +285,7 @@ export class SqliteIndex {
       subtasks,
       git,
       transitions,
-      files: [],
+      files,
       body: row.body ?? '',
       file_path: row.file_path,
       ...(row.spec_file !== null ? { spec_file: row.spec_file } : {}),
@@ -402,6 +420,7 @@ export class SqliteIndex {
       this.db.prepare('DELETE FROM commits WHERE task_id=?').run(t.id);
       this.db.prepare('DELETE FROM children WHERE parent_id=?').run(t.id);
       this.db.prepare('DELETE FROM task_references WHERE from_id=?').run(t.id);
+      this.db.prepare('DELETE FROM task_files WHERE task_id=?').run(t.id);
 
       const insertSubtask = this.db.prepare(
         'INSERT INTO subtasks (id, parent_id, title, status, sort_order) VALUES (?, ?, ?, ?, ?)',
@@ -435,6 +454,12 @@ export class SqliteIndex {
         'INSERT OR IGNORE INTO task_references (from_id, to_id, ref_type) VALUES (?, ?, ?)',
       );
       (t.references ?? []).forEach(r => insertRef.run(t.id, r.id, r.type));
+
+      // Cap files to last MAX_FILES — mirrors child-array cap philosophy (handbook critical-rules)
+      const insertFile = this.db.prepare(
+        'INSERT OR IGNORE INTO task_files (task_id, path, sort_order) VALUES (?, ?, ?)',
+      );
+      (t.files ?? []).slice(0, MAX_FILES).forEach((fp, i) => insertFile.run(t.id, fp, i));
     });
 
     upsertAll(task);
@@ -459,6 +484,7 @@ export class SqliteIndex {
       // Both directions: the task may appear as parent OR child / from OR to.
       this.db.prepare('DELETE FROM children WHERE parent_id=? OR child_id=?').run(taskId, taskId);
       this.db.prepare('DELETE FROM task_references WHERE from_id=? OR to_id=?').run(taskId, taskId);
+      this.db.prepare('DELETE FROM task_files WHERE task_id=?').run(taskId);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
     });
     deleteCascade(id);

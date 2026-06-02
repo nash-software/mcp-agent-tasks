@@ -409,3 +409,193 @@ describe('types.ts — epic §4 field additions', () => {
     expect(typesSrc).toContain("mode: 'peek' | 'detail'");
   });
 });
+
+// ── MCPAT-068: Panel field surfacing — AC-1, AC-2..8, AC-9 ──────────────────
+describe('MCPAT-068 — types.ts: TaskReference + Subtask + new Task fields (AC-1)', () => {
+  const typesSrc = readUiFile('types.ts');
+
+  it('exports TaskReference interface with type union', () => {
+    expect(typesSrc).toContain('TaskReference');
+    expect(typesSrc).toContain("'closes' | 'blocks' | 'related'");
+  });
+
+  it('exports Subtask interface with id, title, status', () => {
+    expect(typesSrc).toContain('Subtask');
+    // Must contain id, title, and status fields
+    expect(typesSrc).toMatch(/interface Subtask[\s\S]*?id:/);
+    expect(typesSrc).toMatch(/interface Subtask[\s\S]*?title:/);
+    expect(typesSrc).toMatch(/interface Subtask[\s\S]*?status:/);
+  });
+
+  it('Task interface has optional dependencies field', () => {
+    expect(typesSrc).toContain('dependencies?: string[]');
+  });
+
+  it('Task interface has optional references field', () => {
+    expect(typesSrc).toContain('references?: TaskReference[]');
+  });
+
+  it('Task interface has optional subtasks field', () => {
+    expect(typesSrc).toContain('subtasks?: Subtask[]');
+  });
+
+  it('Task interface has optional files field', () => {
+    expect(typesSrc).toContain('files?: string[]');
+  });
+
+  it('complexity field already existed and is unchanged', () => {
+    expect(typesSrc).toContain('complexity?: number');
+  });
+
+  it('does not contain any as type annotation in the new types', () => {
+    // The new types must be exhaustive — no `any`
+    expect(typesSrc).not.toContain(': any');
+    expect(typesSrc).not.toContain('as any');
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: Dependencies section (AC-2)', () => {
+  it('renders a Section with title "Dependencies"', () => {
+    expect(src).toContain('Dependencies');
+  });
+
+  it('is gated on !isPeek (detail-only)', () => {
+    // The section must be wrapped in a !isPeek guard
+    expect(src).toMatch(/!isPeek.*Dependencies|Dependencies.*!isPeek/s);
+  });
+
+  it('uses mono badge class for dependency IDs', () => {
+    // IDs rendered with font-mono bg-surface-2 style
+    expect(src).toContain('font-mono text-ink-2 bg-surface-2 px-1.5 py-0.5 rounded');
+  });
+
+  it('is gated on task.dependencies?.length (absent when empty)', () => {
+    expect(src).toMatch(/task\.dependencies.*\.length/);
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: References section (AC-3)', () => {
+  it('renders a Section with title "References"', () => {
+    expect(src).toContain('References');
+  });
+
+  it('is gated on !isPeek (detail-only)', () => {
+    expect(src).toMatch(/!isPeek.*references|references.*!isPeek/s);
+  });
+
+  it('renders ref.type label in text-ink-faint', () => {
+    expect(src).toContain('ref.type');
+  });
+
+  it('renders ref.id as a mono badge', () => {
+    expect(src).toContain('ref.id');
+  });
+
+  it('is gated on task.references?.length (absent when empty)', () => {
+    expect(src).toMatch(/task\.references.*\.length/);
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: Subtasks checklist (AC-4)', () => {
+  it('renders a section whose title contains "Subtasks"', () => {
+    expect(src).toContain('Subtasks');
+  });
+
+  it('is gated on !isPeek (detail-only)', () => {
+    expect(src).toMatch(/!isPeek.*subtasks|subtasks.*!isPeek/s);
+  });
+
+  it('section title carries done/total count (doneCount/totalCount)', () => {
+    expect(src).toContain('doneCount');
+    expect(src).toContain('totalCount');
+    // Title pattern: "Subtasks · {done}/{total}"
+    expect(src).toContain('`Subtasks · ${doneCount}/${totalCount}`');
+  });
+
+  it('done count uses status === done predicate', () => {
+    expect(src).toContain("status === 'done'");
+  });
+
+  it('renders STATUS_DOT per row', () => {
+    expect(src).toContain('STATUS_DOT[s.status]');
+  });
+
+  it('done rows get line-through + text-ink-faint treatment', () => {
+    expect(src).toContain('line-through text-ink-faint');
+  });
+
+  it('is gated on task.subtasks?.length (absent when empty)', () => {
+    expect(src).toMatch(/task\.subtasks.*\.length/);
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: Files touched section (AC-5)', () => {
+  it('renders a Section with title "Files touched"', () => {
+    expect(src).toContain('Files touched');
+  });
+
+  it('is gated on !isPeek (detail-only)', () => {
+    expect(src).toMatch(/!isPeek.*Files touched|Files touched.*!isPeek/s);
+  });
+
+  it('renders FileRow for each file path', () => {
+    // The Files section must use FileRow (not a custom implementation)
+    expect(src).toContain('FileRow');
+  });
+
+  it('is gated on task.files?.length (absent when empty)', () => {
+    expect(src).toMatch(/task\.files.*\.length/);
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: Complexity badge (AC-7)', () => {
+  it('renders complexity badge in the metadata cluster', () => {
+    expect(src).toContain('task.complexity');
+    expect(src).toContain('/10');
+  });
+
+  it('badge is shown in BOTH peek and detail (not gated on !isPeek)', () => {
+    // The complexity badge must NOT be inside a !isPeek guard
+    // It lives in the always-visible metadata cluster (lines ~574-632)
+    // Validate: complexity badge code does not have !isPeek condition immediately wrapping it
+    // We verify it's outside of the !isPeek block by checking that complexity appears
+    // in the metadata cluster (before the "!isPeek && task.transitions" block)
+    const complexityIdx = src.indexOf('task.complexity != null');
+    const statusHistoryIdx = src.indexOf('Status history');
+    expect(complexityIdx).toBeGreaterThan(0);
+    expect(complexityIdx).toBeLessThan(statusHistoryIdx);
+  });
+
+  it('complexity badge styled with bg-surface-2 text-ink-2 text-xs rounded', () => {
+    // Must use the same badge style as sibling badges
+    expect(src).toContain('bg-surface-2 text-ink-2');
+  });
+
+  it('complexity badge is omitted when complexity is null/undefined', () => {
+    // The condition must check != null (renders for 0, 1, ..., 10)
+    expect(src).toContain('task.complexity != null');
+  });
+});
+
+describe('MCPAT-068 — TaskPanel: peek vs detail placement (AC-8)', () => {
+  it('four list sections all gated on !isPeek', () => {
+    // Count occurrences of !isPeek guarding each section
+    const depsMatch = src.match(/!isPeek.*?task\.dependencies/s);
+    const refsMatch = src.match(/!isPeek.*?task\.references/s);
+    const subtasksMatch = src.match(/!isPeek.*?task\.subtasks/s);
+    const filesMatch = src.match(/!isPeek.*?task\.files/s);
+    expect(depsMatch).not.toBeNull();
+    expect(refsMatch).not.toBeNull();
+    expect(subtasksMatch).not.toBeNull();
+    expect(filesMatch).not.toBeNull();
+  });
+
+  it('complexity badge is NOT gated on !isPeek', () => {
+    // Complexity must appear before any !isPeek block for sections
+    const complexityIdx = src.indexOf('complexity != null');
+    // The four sections start at "Status history" gating and below
+    const historyGateIdx = src.indexOf("!isPeek && task.transitions");
+    expect(complexityIdx).toBeGreaterThan(0);
+    expect(complexityIdx).toBeLessThan(historyGateIdx);
+  });
+});
