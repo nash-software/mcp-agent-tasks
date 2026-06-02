@@ -22,6 +22,7 @@ import type { Task, TaskArea, TaskPriority } from '../types'
 import { PRI_RANK } from '../lib/format'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 import { isCommittedBucket } from '../lib/today-buckets'
+import { sortTasks, type SortKey, type SortDir } from '../lib/sort'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -63,6 +64,8 @@ function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
 interface TodayViewProps {
   filter: Filter
   areaMap?: Record<string, Area>
+  /** MCPAT-069 Phase C: sort applied to committed list + candidate queue. */
+  sort?: { key: SortKey; dir: SortDir }
   selectedTaskId?: string | null
   onSelectTask?: (id: string | null) => void
   onOpenDetail?: (task: Task) => void
@@ -76,6 +79,7 @@ interface TodayViewProps {
 export function TodayView({
   filter,
   areaMap = {},
+  sort,
   selectedTaskId,
   onSelectTask,
   onOpenDetail,
@@ -124,16 +128,21 @@ export function TodayView({
   // AC3: filtering narrows the committed list + candidate queue ONLY — never the hero or
   // capacity gauge (hero is the single current focus; capacity is the whole day's load).
   // Committed list: all scheduled today excluding the hero, then matchFilter.
-  const committedList = sortCommitted(
-    committed
-      // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
-      // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
-      .filter(isCommittedBucket)
-      .filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
-  )
+  // MCPAT-069 C4: when a sort is provided, sortTasks replaces sortCommitted (done tasks always sink).
+  // When sort.key === 'priority', the result matches sortCommitted's PRI_RANK ordering.
+  const filteredCommitted = committed
+    // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
+    // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
+    .filter(isCommittedBucket)
+    .filter(t => matchFilter(filter, t, areaMap))
+  const committedList = sort
+    ? sortTasks(filteredCommitted, sort.key, sort.dir)
+    : sortCommitted(filteredCommitted)
 
   // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
-  const filteredCandidates = candidates.filter(t => matchFilter(filter, t.project ?? '', t.area, areaMap))
+  const filteredCandidates = sort
+    ? sortTasks(candidates.filter(t => matchFilter(filter, t, areaMap)), sort.key, sort.dir)
+    : candidates.filter(t => matchFilter(filter, t, areaMap))
   const candidatesByArea = groupByArea(filteredCandidates)
 
   // P4-04: Count committed (non-done) tasks with no estimate
