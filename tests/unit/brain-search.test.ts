@@ -15,6 +15,31 @@ import { startUiServer, type UiServerHandle } from '../../src/server-ui.js';
 
 const BRAIN_MCP_PATTERN = 'nash-vps.tail5c5009.ts.net:8093';
 
+// The real brain MCP server uses Streamable HTTP transport: requests need
+// Accept: application/json, text/event-stream; the initialize response carries an
+// mcp-session-id header; responses are SSE ("event: message\ndata: {json}").
+function sseResponse(payload: unknown, extraHeaders: Record<string, string> = {}): Response {
+  return new Response(`event: message\ndata: ${JSON.stringify(payload)}\n\n`, {
+    status: 200,
+    headers: { 'Content-Type': 'text/event-stream', ...extraHeaders },
+  });
+}
+
+/** Build a brain mock that completes the initialize → tools/call handshake. */
+function brainHandshake(toolResult: unknown): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return (_input, init) => {
+    const body = init?.body ? JSON.parse(init.body as string) as { method?: string } : {};
+    if (body.method === 'initialize') {
+      return Promise.resolve(sseResponse(
+        { jsonrpc: '2.0', id: 1, result: { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'brain', version: '1' } } },
+        { 'mcp-session-id': 'test-session-123' },
+      ));
+    }
+    // tools/call
+    return Promise.resolve(sseResponse({ jsonrpc: '2.0', id: 2, result: toolResult }));
+  };
+}
+
 /** Wrap globalThis.fetch: brain MCP calls (nash-vps Tailscale) get the mock;
  *  all other calls (to the test server) use the real fetch. */
 function stubBrainFetch(
@@ -103,31 +128,30 @@ describe('GET /api/brain/search — online path', () => {
   });
 
   it('returns results array when brain MCP responds (online path)', async () => {
-    const brainResults = [
-      { title: 'TypeScript tips', snippet: 'Use strict mode for safer code.', source: 'https://example.com/ts' },
-    ];
+    // brain_search tools/call result shape: { structuredContent: { result: [...] }, content, isError }
+    const toolResult = {
+      content: [{ type: 'text', text: '{}' }],
+      structuredContent: {
+        result: [
+          { rank: 1, source: 'web', path: 'notes/typescript-tips.md', snippet: 'Use strict mode for safer code.' },
+        ],
+      },
+      isError: false,
+    };
 
-    stubBrainFetch(realFetch, () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            result: { content: [{ text: JSON.stringify(brainResults) }] },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      ),
-    );
+    stubBrainFetch(realFetch, brainHandshake(toolResult));
 
     const res = await realFetch(`${baseUrl}/api/brain/search?q=typescript`);
     expect(res.status).toBe(200);
-    const body = await res.json() as { results: Array<{ title: string }>; query: string; offline?: boolean };
+    const body = await res.json() as { results: Array<{ title: string; snippet: string; source?: string }>; query: string; offline?: boolean };
     expect(body.offline).toBeUndefined();
     expect(body.query).toBe('typescript');
     expect(Array.isArray(body.results)).toBe(true);
     expect(body.results).toHaveLength(1);
-    expect(body.results[0].title).toBe('TypeScript tips');
+    // title derived from path basename (no extension) when no explicit title field
+    expect(body.results[0].title).toBe('typescript-tips');
+    expect(body.results[0].snippet).toBe('Use strict mode for safer code.');
+    expect(body.results[0].source).toBe('web');
   });
 });
 
@@ -280,17 +304,16 @@ describe('GET /api/brain/status — offline path', () => {
   });
 
   it('returns { online: true, latencyMs } when Brain responds to initialize', async () => {
+    // Real brain replies with an SSE body, not plain JSON.
     stubBrainFetch(realFetch, () =>
-      Promise.resolve(
-        new Response(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 1,
-            result: { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'brain', version: '1' } },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      ),
+      Promise.resolve(sseResponse(
+        {
+          jsonrpc: '2.0',
+          id: 1,
+          result: { protocolVersion: '2024-11-05', capabilities: {}, serverInfo: { name: 'brain', version: '1' } },
+        },
+        { 'mcp-session-id': 'test-session-123' },
+      )),
     );
 
     const res = await realFetch(`${baseUrl}/api/brain/status`);
