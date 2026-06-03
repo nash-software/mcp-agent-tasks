@@ -38,12 +38,17 @@ describe('POST /api/capture/infer', () => {
   let tempDir: string;
   let savedConfig: string | undefined;
   let savedDb: string | undefined;
+  let savedClaudeDisabled: string | undefined;
 
   beforeAll(async () => {
     const env = makeTempEnv();
     tempDir = env.tempDir;
     savedConfig = process.env['MCP_TASKS_CONFIG'];
     savedDb = process.env['MCP_TASKS_DB'];
+    savedClaudeDisabled = process.env['CLAUDE_CLI_DISABLED'];
+    // Force the claude-unavailable path so the test is deterministic and fast whether or not
+    // the claude CLI is installed on the host (otherwise infer actually spawns claude).
+    process.env['CLAUDE_CLI_DISABLED'] = '1';
     process.env['MCP_TASKS_CONFIG'] = env.configPath;
     process.env['MCP_TASKS_DB'] = path.join(tempDir, 'tasks.db');
     handle = await startUiServer({ port: 0 });
@@ -56,6 +61,8 @@ describe('POST /api/capture/infer', () => {
     else process.env['MCP_TASKS_CONFIG'] = savedConfig;
     if (savedDb === undefined) delete process.env['MCP_TASKS_DB'];
     else process.env['MCP_TASKS_DB'] = savedDb;
+    if (savedClaudeDisabled === undefined) delete process.env['CLAUDE_CLI_DISABLED'];
+    else process.env['CLAUDE_CLI_DISABLED'] = savedClaudeDisabled;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -82,19 +89,16 @@ describe('POST /api/capture/infer', () => {
   });
 
   it('returns fail-safe { intent: task, confidence: 0 } when LLM is unavailable', async () => {
-    // In CI, claude CLI may not be available — the endpoint falls back gracefully
+    // CLAUDE_CLI_DISABLED=1 (set in beforeAll) forces the unavailable path deterministically.
     const res = await fetch(`${baseUrl}/api/capture/infer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: 'Classify this text for testing' }),
     });
-    // Should always return 200 regardless of LLM availability
     expect(res.status).toBe(200);
     const data = await res.json() as { intent: string; confidence: number };
-    expect(['task', 'note']).toContain(data.intent);
-    expect(typeof data.confidence).toBe('number');
-    expect(data.confidence).toBeGreaterThanOrEqual(0);
-    expect(data.confidence).toBeLessThanOrEqual(1);
+    expect(data.intent).toBe('task');
+    expect(data.confidence).toBe(0);
   });
 });
 
