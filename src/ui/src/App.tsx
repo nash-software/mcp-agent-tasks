@@ -35,14 +35,21 @@ import { type SortKey, type SortDir } from './lib/sort'
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
 
 // ─── Density types + persistence ────────────────────────────────────────────
-const VALID_DENSITIES: Density[] = ['compact', 'cozy', 'spacious']
+const VALID_DENSITIES: Density[] = ['compact', 'balanced', 'airy']
+
+/** Migrate legacy stored values to the Phase-B density names. */
+function migrateDensity(raw: string): Density {
+  if (raw === 'cozy')     return 'balanced'
+  if (raw === 'spacious') return 'airy'
+  return VALID_DENSITIES.includes(raw as Density) ? (raw as Density) : 'balanced'
+}
 
 function readStoredDensity(): Density {
   try {
     const raw = localStorage.getItem('lifeos-density')
-    return (raw && VALID_DENSITIES.includes(raw as Density)) ? (raw as Density) : 'cozy'
+    return raw ? migrateDensity(raw) : 'balanced'
   } catch {
-    return 'cozy' // localStorage unavailable (SSR / sandboxed) — fall back to default
+    return 'balanced' // localStorage unavailable (SSR / sandboxed)
   }
 }
 
@@ -246,6 +253,22 @@ export function App(): React.JSX.Element {
     }
     return counts
   }, [allTasks])
+
+  const navCounts = useMemo((): Partial<Record<ViewId, number>> => {
+    const todayStr = localToday()
+    let todayCount = 0
+    let boardCount = 0
+    for (const t of allTasks) {
+      if (t.status === 'done' || t.status === 'closed' || t.status === 'archived') continue
+      if (t.scheduled_for === todayStr) todayCount++
+      if (t.status === 'todo' || t.status === 'in_progress') boardCount++
+    }
+    const counts: Partial<Record<ViewId, number>> = {}
+    if (todayCount > 0)      counts.today     = todayCount
+    if (boardCount > 0)      counts.board     = boardCount
+    if (artifacts.length > 0) counts.artifacts = artifacts.length
+    return counts
+  }, [allTasks, artifacts])
 
   const filterProjects = useMemo((): FilterBarProject[] => {
     const prefixes = new Set<string>()
@@ -565,8 +588,8 @@ export function App(): React.JSX.Element {
     // 7. Density group (P3-01)
     const densityOptions: { id: Density; label: string }[] = [
       { id: 'compact',  label: 'Density: Compact'  },
-      { id: 'cozy',     label: 'Density: Cozy'     },
-      { id: 'spacious', label: 'Density: Spacious' },
+      { id: 'balanced', label: 'Density: Cozy'     },
+      { id: 'airy',     label: 'Density: Spacious' },
     ]
     for (const opt of densityOptions) {
       cmds.push({
@@ -627,6 +650,7 @@ export function App(): React.JSX.Element {
         areaMap={areaMap}
         density={density}
         onDensityChange={setDensityPersisted}
+        navCounts={navCounts}
       />
 
       {/* main scroll region */}
