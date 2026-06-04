@@ -65,7 +65,7 @@ interface BrainDumpSeed {
 
 /** Views the global filter bar applies to (epic §4 — five filterable surfaces). */
 const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
-  'today', 'board', 'roadmap', 'artifacts', 'activity',
+  'today', 'board', 'roadmap', 'artifacts', 'activity', 'notes',
 ])
 
 /** Views that actually apply the sort (MCPAT-069 C). Roadmap/Activity keep their intrinsic order,
@@ -757,7 +757,7 @@ export function App(): React.JSX.Element {
           {view === 'roadmap'   && <RoadmapView filter={filter} areaMap={areaMap} />}
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
-          {view === 'notes'     && <NotesView />}
+          {view === 'notes'     && <NotesView filter={filter} areaMap={areaMap} focusCapture={capture.focusCapture} />}
           {view === 'advisor'   && <AdvisorView />}
         </div>
       </main>
