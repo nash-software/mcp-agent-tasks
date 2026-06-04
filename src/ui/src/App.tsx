@@ -73,12 +73,11 @@ const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
  *  MCPAT-070 Phase C: 'today' removed — Today has its own todaySort toolbar (4 keys, fixed dirs). */
 const SORTABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>(['board'])
 
-/** Read the persisted Today sort key, validating against the 4 allowed TodaySortKey values. */
+/** Read the persisted Today sort key, validating against the canonical TODAY_SORT_KEYS list. */
 function readStoredTodaySort(): TodaySortKey {
-  const VALID_TODAY_KEYS: TodaySortKey[] = ['priority', 'area', 'estimate', 'project']
   try {
     const raw = localStorage.getItem('lifeos-today-sort')
-    return (raw && VALID_TODAY_KEYS.includes(raw as TodaySortKey))
+    return (raw && (TODAY_SORT_KEYS as readonly string[]).includes(raw))
       ? (raw as TodaySortKey)
       : 'priority'
   } catch {
