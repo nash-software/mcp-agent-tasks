@@ -1,9 +1,29 @@
 /**
  * sortTasks unit tests — MCPAT-069 Phase C.
+ * taskCmp / sortWithDoneSink tests — MCPAT-070 Phase C.
  */
 import { describe, it, expect } from 'vitest'
 import type { Task } from '../types'
-import { sortTasks, type SortKey, type SortDir } from './sort'
+import {
+  sortTasks,
+  taskCmp,
+  AREA_ORDER,
+  TODAY_SORT_KEYS,
+  TODAY_SORT_KEY_LABEL,
+  type SortKey,
+  type SortDir,
+  type TodaySortKey,
+} from './sort'
+
+// ── Helper for TodayView done-sink logic ──────────────────────────────────────
+
+function sortWithDoneSink(tasks: Task[], cmp: (a: Task, b: Task) => number): Task[] {
+  return [...tasks].sort((a, b) => {
+    const doneDiff = (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0)
+    if (doneDiff !== 0) return doneDiff
+    return cmp(a, b)
+  })
+}
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -238,4 +258,206 @@ describe('sortTasks — all keys compile and run', () => {
       })
     }
   }
+})
+
+// ── Exported constants — MCPAT-070 Phase C ───────────────────────────────────
+
+describe('AREA_ORDER — canonical area sort constant', () => {
+  it('exports an array with all four area values', () => {
+    expect(Array.from(AREA_ORDER)).toEqual(['client', 'personal', 'internal', 'outsource'])
+  })
+
+  it('client comes before personal (lower index)', () => {
+    expect(AREA_ORDER.indexOf('client')).toBeLessThan(AREA_ORDER.indexOf('personal'))
+  })
+
+  it('personal comes before internal', () => {
+    expect(AREA_ORDER.indexOf('personal')).toBeLessThan(AREA_ORDER.indexOf('internal'))
+  })
+
+  it('internal comes before outsource', () => {
+    expect(AREA_ORDER.indexOf('internal')).toBeLessThan(AREA_ORDER.indexOf('outsource'))
+  })
+})
+
+describe('TODAY_SORT_KEYS — ordered list constant', () => {
+  it('exports the four expected keys in order', () => {
+    const expected: TodaySortKey[] = ['priority', 'area', 'estimate', 'project']
+    expect(Array.from(TODAY_SORT_KEYS)).toEqual(expected)
+  })
+
+  it('has exactly 4 keys (one per TodaySortKey variant)', () => {
+    expect(TODAY_SORT_KEYS.length).toBe(4)
+  })
+})
+
+describe('TODAY_SORT_KEY_LABEL — human-readable labels', () => {
+  it('has a non-empty label for every key in TODAY_SORT_KEYS', () => {
+    for (const key of TODAY_SORT_KEYS) {
+      expect(TODAY_SORT_KEY_LABEL[key]).toBeTruthy()
+      expect(typeof TODAY_SORT_KEY_LABEL[key]).toBe('string')
+    }
+  })
+
+  it('maps priority → Priority, area → Area, estimate → Estimate, project → Project', () => {
+    expect(TODAY_SORT_KEY_LABEL.priority).toBe('Priority')
+    expect(TODAY_SORT_KEY_LABEL.area).toBe('Area')
+    expect(TODAY_SORT_KEY_LABEL.estimate).toBe('Estimate')
+    expect(TODAY_SORT_KEY_LABEL.project).toBe('Project')
+  })
+})
+
+// ── taskCmp — MCPAT-070 Phase C ───────────────────────────────────────────────
+
+describe('taskCmp — priority', () => {
+  it('critical before high before medium before low', () => {
+    const tasks = [
+      makeTask({ id: 'D', title: 'D', priority: 'low' }),
+      makeTask({ id: 'B', title: 'B', priority: 'high' }),
+      makeTask({ id: 'A', title: 'A', priority: 'critical' }),
+      makeTask({ id: 'C', title: 'C', priority: 'medium' }),
+    ]
+    const result = [...tasks].sort(taskCmp('priority'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B', 'C', 'D'])
+  })
+
+  it('equal priority tiebreaks by id ascending', () => {
+    const tasks = [
+      makeTask({ id: 'Z', title: 'Z', priority: 'high' }),
+      makeTask({ id: 'A', title: 'A', priority: 'high' }),
+      makeTask({ id: 'M', title: 'M', priority: 'high' }),
+    ]
+    const result = [...tasks].sort(taskCmp('priority'))
+    expect(result.map(t => t.id)).toEqual(['A', 'M', 'Z'])
+  })
+})
+
+describe('taskCmp — area', () => {
+  it('client before personal before internal before outsource', () => {
+    const tasks = [
+      makeTask({ id: 'D', title: 'D', priority: 'high', area: 'outsource' }),
+      makeTask({ id: 'B', title: 'B', priority: 'high', area: 'personal' }),
+      makeTask({ id: 'C', title: 'C', priority: 'high', area: 'internal' }),
+      makeTask({ id: 'A', title: 'A', priority: 'high', area: 'client' }),
+    ]
+    const result = [...tasks].sort(taskCmp('area'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B', 'C', 'D'])
+  })
+
+  it('null area goes last', () => {
+    const tasks = [
+      makeTask({ id: 'X', title: 'X', priority: 'high', area: undefined }),
+      makeTask({ id: 'A', title: 'A', priority: 'high', area: 'client' }),
+    ]
+    const result = [...tasks].sort(taskCmp('area'))
+    expect(result[0].id).toBe('A')
+    expect(result[1].id).toBe('X')
+  })
+
+  it('same area: tiebreaks by priority then id', () => {
+    const tasks = [
+      makeTask({ id: 'B', title: 'B', priority: 'low',      area: 'client' }),
+      makeTask({ id: 'A', title: 'A', priority: 'critical',  area: 'client' }),
+    ]
+    const result = [...tasks].sort(taskCmp('area'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B'])
+  })
+})
+
+describe('taskCmp — estimate', () => {
+  it('largest estimate first (descending)', () => {
+    const tasks = [
+      makeTask({ id: 'C', title: 'C', priority: 'high', estimate_hours: 1 }),
+      makeTask({ id: 'A', title: 'A', priority: 'high', estimate_hours: 4 }),
+      makeTask({ id: 'B', title: 'B', priority: 'high', estimate_hours: 2 }),
+    ]
+    const result = [...tasks].sort(taskCmp('estimate'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('null estimate_hours goes last', () => {
+    const tasks = [
+      makeTask({ id: 'X', title: 'X', priority: 'high', estimate_hours: null }),
+      makeTask({ id: 'A', title: 'A', priority: 'high', estimate_hours: 2 }),
+    ]
+    const result = [...tasks].sort(taskCmp('estimate'))
+    expect(result[0].id).toBe('A')
+    expect(result[1].id).toBe('X')
+  })
+
+  it('equal estimate: tiebreaks by priority then id', () => {
+    const tasks = [
+      makeTask({ id: 'B', title: 'B', priority: 'low',      estimate_hours: 2 }),
+      makeTask({ id: 'A', title: 'A', priority: 'critical',  estimate_hours: 2 }),
+    ]
+    const result = [...tasks].sort(taskCmp('estimate'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B'])
+  })
+})
+
+describe('taskCmp — project', () => {
+  it('A→Z by ID prefix (chars before first dash)', () => {
+    const tasks = [
+      makeTask({ id: 'HBOOK-001', title: 'H', priority: 'high' }),
+      makeTask({ id: 'ACR-002',   title: 'A', priority: 'high' }),
+      makeTask({ id: 'COND-003',  title: 'C', priority: 'high' }),
+    ]
+    const result = [...tasks].sort(taskCmp('project'))
+    expect(result.map(t => t.id)).toEqual(['ACR-002', 'COND-003', 'HBOOK-001'])
+  })
+
+  it('same prefix: tiebreaks by priority then id', () => {
+    const tasks = [
+      makeTask({ id: 'COND-002', title: 'C2', priority: 'low' }),
+      makeTask({ id: 'COND-001', title: 'C1', priority: 'critical' }),
+    ]
+    const result = [...tasks].sort(taskCmp('project'))
+    expect(result.map(t => t.id)).toEqual(['COND-001', 'COND-002'])
+  })
+
+  it('id with no dash uses full id as prefix', () => {
+    // The implementation does: a.id.split('-')[0] ?? a.id
+    // An id without '-' still splits correctly to produce the full id as the prefix.
+    const tasks = [
+      makeTask({ id: 'ZEBRA', title: 'Z', priority: 'high' }),
+      makeTask({ id: 'ALPHA', title: 'A', priority: 'high' }),
+    ]
+    const result = [...tasks].sort(taskCmp('project'))
+    expect(result.map(t => t.id)).toEqual(['ALPHA', 'ZEBRA'])
+  })
+})
+
+// ── sortWithDoneSink — MCPAT-070 Phase C ─────────────────────────────────────
+
+describe('sortWithDoneSink', () => {
+  it('done tasks sink to bottom regardless of priority', () => {
+    const tasks = [
+      makeTask({ id: 'A', title: 'A', priority: 'critical', status: 'done' }),
+      makeTask({ id: 'B', title: 'B', priority: 'low',      status: 'todo' }),
+      makeTask({ id: 'C', title: 'C', priority: 'high',     status: 'in_progress' }),
+    ]
+    const result = sortWithDoneSink(tasks, taskCmp('priority'))
+    // C (high, non-done) before B (low, non-done) before A (critical but done)
+    expect(result.map(t => t.id)).toEqual(['C', 'B', 'A'])
+  })
+
+  it('non-done tasks ordered by comparator', () => {
+    const tasks = [
+      makeTask({ id: 'C', title: 'C', priority: 'medium', status: 'todo' }),
+      makeTask({ id: 'A', title: 'A', priority: 'critical', status: 'todo' }),
+      makeTask({ id: 'B', title: 'B', priority: 'high',   status: 'todo' }),
+    ]
+    const result = sortWithDoneSink(tasks, taskCmp('priority'))
+    expect(result.map(t => t.id)).toEqual(['A', 'B', 'C'])
+  })
+
+  it('multiple done tasks preserve relative order among themselves (by comparator)', () => {
+    const tasks = [
+      makeTask({ id: 'B', title: 'B', priority: 'low',  status: 'done' }),
+      makeTask({ id: 'A', title: 'A', priority: 'high', status: 'done' }),
+    ]
+    const result = sortWithDoneSink(tasks, taskCmp('priority'))
+    // Both done → they are tiebroken by priority comparator: A(high) before B(low)
+    expect(result.map(t => t.id)).toEqual(['A', 'B'])
+  })
 })

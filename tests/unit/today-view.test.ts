@@ -224,15 +224,18 @@ describe('TodayView.tsx — source structure', () => {
 
   it('sorts committed by PRI_RANK with done sinking to bottom', () => {
     const src = readUiFile('views/TodayView.tsx');
-    expect(src).toContain('PRI_RANK');
+    // MCPAT-070 Phase C: PRI_RANK moved into taskCmp in sort.ts; TodayView uses taskCmp + sortWithDoneSink.
+    // Done-sink behaviour is preserved via sortWithDoneSink; priority ordering via taskCmp.
+    expect(src).toContain('sortWithDoneSink');
     expect(src).toContain("status === 'done'");
   });
 
   it('groups candidates by area in fixed order', () => {
     const src = readUiFile('views/TodayView.tsx');
+    // MCPAT-070 Phase C: AREA_ORDER is imported from sort.ts (canonical source).
+    // The values 'client'/'outsource' are defined in sort.ts and imported here.
     expect(src).toContain('AREA_ORDER');
-    expect(src).toContain('client');
-    expect(src).toContain('outsource');
+    expect(src).toContain('groupByArea');
   });
 
   it('hero: renders in_progress task as hero (never two heroes)', () => {

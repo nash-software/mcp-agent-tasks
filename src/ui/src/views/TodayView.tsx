@@ -19,16 +19,13 @@ import { Minimize2, Maximize2 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchTasks } from '../api'
 import type { Task, TaskArea, TaskPriority } from '../types'
-import { PRI_RANK } from '../lib/format'
 import { type Filter, matchFilter, type Area } from '../lib/filter'
 import { isCommittedBucket } from '../lib/today-buckets'
-import { sortTasks, type SortKey, type SortDir } from '../lib/sort'
+import { taskCmp, type TodaySortKey, AREA_ORDER } from '../lib/sort'
 
 // ── Constants ────────────────────────────────────────────────────────────
 
 const DEFAULT_TARGET_MINUTES = 6 * 60 // 6 hours
-
-const AREA_ORDER: TaskArea[] = ['client', 'personal', 'internal', 'outsource']
 
 function readTargetMinutes(): number {
   const raw = localStorage.getItem('lifeos-target')
@@ -39,21 +36,24 @@ function readTargetMinutes(): number {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function sortCommitted(tasks: Task[]): Task[] {
+/**
+ * Sort tasks by a comparator, but always sink done tasks to the bottom.
+ * MCPAT-070 Phase C: replaces the old sortCommitted helper.
+ */
+function sortWithDoneSink(tasks: Task[], cmp: (a: Task, b: Task) => number): Task[] {
   return [...tasks].sort((a, b) => {
-    // Done tasks sink to the bottom
     const doneDiff = (a.status === 'done' ? 1 : 0) - (b.status === 'done' ? 1 : 0)
     if (doneDiff !== 0) return doneDiff
-    return PRI_RANK[a.priority] - PRI_RANK[b.priority]
+    return cmp(a, b)
   })
 }
 
-function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
+function groupByArea(tasks: Task[], cmp: (a: Task, b: Task) => number): Map<TaskArea, Task[]> {
   const map = new Map<TaskArea, Task[]>()
   for (const area of AREA_ORDER) {
     const group = tasks.filter(t => (t.area ?? 'internal') === area)
     if (group.length > 0) {
-      map.set(area, group.sort((a, b) => PRI_RANK[a.priority] - PRI_RANK[b.priority]))
+      map.set(area, [...group].sort(cmp))
     }
   }
   return map
@@ -64,8 +64,8 @@ function groupByArea(tasks: Task[]): Map<TaskArea, Task[]> {
 interface TodayViewProps {
   filter: Filter
   areaMap?: Record<string, Area>
-  /** MCPAT-069 Phase C: sort applied to committed list + candidate queue. */
-  sort?: { key: SortKey; dir: SortDir }
+  /** MCPAT-070 Phase C: Today-specific sort key (fixed directions, separate from board sort). */
+  todaySort?: TodaySortKey
   /** MCPAT-069: render-time clock injected by App so date-preset + attention filtering use one instant. */
   now?: number
   selectedTaskId?: string | null
@@ -81,7 +81,7 @@ interface TodayViewProps {
 export function TodayView({
   filter,
   areaMap = {},
-  sort,
+  todaySort,
   now = Date.now(),
   selectedTaskId,
   onSelectTask,
@@ -131,22 +131,20 @@ export function TodayView({
   // AC3: filtering narrows the committed list + candidate queue ONLY — never the hero or
   // capacity gauge (hero is the single current focus; capacity is the whole day's load).
   // Committed list: all scheduled today excluding the hero, then matchFilter.
-  // MCPAT-069 C4: when a sort is provided, sortTasks replaces sortCommitted (done tasks always sink).
-  // When sort.key === 'priority', the result matches sortCommitted's PRI_RANK ordering.
+  // MCPAT-070 Phase C: sortWithDoneSink + taskCmp replaces the old sortCommitted / sortTasks path.
+  // Done tasks always sink to the bottom regardless of sort key.
+  const activeCmp = taskCmp(todaySort ?? 'priority')
   const filteredCommitted = committed
     // isCommittedBucket excludes the hero (in_progress) and drafts so a task id never renders in
     // two Today buckets (which made selecting it highlight both rows). See lib/today-buckets.
     .filter(isCommittedBucket)
     .filter(t => matchFilter(filter, t, areaMap, now))
-  const committedList = sort
-    ? sortTasks(filteredCommitted, sort.key, sort.dir)
-    : sortCommitted(filteredCommitted)
+  const committedList = sortWithDoneSink(filteredCommitted, activeCmp)
 
-  // Candidates: scheduled_for == null && status === 'todo' (server already filters this)
-  const filteredCandidates = sort
-    ? sortTasks(candidates.filter(t => matchFilter(filter, t, areaMap, now)), sort.key, sort.dir)
-    : candidates.filter(t => matchFilter(filter, t, areaMap, now))
-  const candidatesByArea = groupByArea(filteredCandidates)
+  // Candidates: scheduled_for == null && status === 'todo' (server already filters this).
+  // Area-grouping structure is preserved — groupByArea groups by area, then sorts within each group.
+  const filteredCandidates = candidates.filter(t => matchFilter(filter, t, areaMap, now))
+  const candidatesByArea = groupByArea(filteredCandidates, activeCmp)
 
   // P4-04: Count committed (non-done) tasks with no estimate
   // Used for the capacity gauge "N unestimated" hint (AC 6)
