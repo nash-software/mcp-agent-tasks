@@ -19,10 +19,24 @@ describe('P5-05 — reopen closed + interactive Completed', () => {
   it('AC4: CompletedView rows are clickable and open the panel', () => {
     const src = readUi('views/CompletedView.tsx');
     expect(src).toContain('onOpenPanel');
-    // rows render a button (not an inert <li>) wired to open the panel
+    // rows render a button wired to open the panel
     expect(src).toMatch(/onClick=\{\(\) => onOpenPanel\(/);
     const app = readUi('App.tsx');
     expect(app).toContain('CompletedView onOpenPanel={setPanel}');
+  });
+
+  it('AC4-F: CompletedView rows use done-row DOM structure (Phase F restyle)', () => {
+    const src = readUi('views/CompletedView.tsx');
+    // done-row button wrapping each task
+    expect(src).toContain('done-row');
+    // green check chip
+    expect(src).toContain('done-check');
+    // strikethrough title
+    expect(src).toContain('done-title');
+    // timestamp
+    expect(src).toContain('done-when');
+    // batch grouping preserved — "burned" heading still present
+    expect(src).toContain('burned');
   });
 
   it('AC5/AC6: closed tasks offer Reopen/Resume via the engine, optimistic via transitionTask (MCPAT-061)', () => {
