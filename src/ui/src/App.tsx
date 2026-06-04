@@ -617,7 +617,7 @@ export function App(): React.JSX.Element {
         view={view}
         onViewChange={handleViewChange}
         onPaletteOpen={() => setCmdkOpen(true)}
-        onNewTask={() => setNewTaskOpen(true)}
+        onNewTask={() => capture.focusCapture('task')}
         onOpenProjects={() => setProjectsModalOpen(true)}
         favorites={favorites}
         projectCounts={projectCounts}
