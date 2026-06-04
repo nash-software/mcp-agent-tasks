@@ -162,8 +162,10 @@ export interface PanelState { mode: 'peek' | 'detail'; taskId: string }
 
 export type Engine = 'hermes' | 'n8n' | 'acr'
 
-/** UI density (P3-01) — drives the [data-density] CSS-var scale. */
-export type Density = 'compact' | 'cozy' | 'spacious'
+/** UI density (P3-01) — drives the [data-density] CSS-var scale.
+ *  Values: compact | balanced (default, was "cozy") | airy (was "spacious").
+ */
+export type Density = 'compact' | 'balanced' | 'airy'
 
 /** Skill — a reusable automation Hermes can run. */
 export interface Skill {

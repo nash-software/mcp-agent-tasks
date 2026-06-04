@@ -24,10 +24,11 @@
   }
 
   /* DENSITY_TEST_MARKER */
-  /* Density scale — default = cozy (40px). All density-aware vars live here.
+  /* Density scale — default = balanced/cozy (40px). All density-aware vars live here.
      Components MUST read these vars — never hardcode heights/padding/gaps. */
   .app-shell,
-  .app-shell[data-density="cozy"] {
+  .app-shell[data-density="cozy"],
+  .app-shell[data-density="balanced"] {
     --row-h: 40px;
     --row-px: 12px;
     --card-pad: 12px;
@@ -45,7 +46,8 @@
     --page-pad: 20px;
   }
 
-  .app-shell[data-density="spacious"] {
+  .app-shell[data-density="spacious"],
+  .app-shell[data-density="airy"] {
     --row-h: 46px;
     --row-px: 14px;
     --card-pad: 16px;
@@ -437,3 +439,22 @@
 .capture-input-wrap[data-mode="task"] .lead { color: var(--accent, #0070f3); }
 .capture-input-wrap[data-mode="note"] .lead { color: #f59e0b; }
 .capture-input-wrap[data-mode="infer"] .lead { color: var(--color-muted, #71717a); }
+
+/* ── Phase-3 Nav selectors (MCPAT-070-B) ─────────────────────────────────── */
+.nav-group { margin-bottom: 2px; }
+.nav-group-label { padding: 14px 10px 6px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-muted, #71717a); }
+.nav-group:first-child .nav-group-label { padding-top: 4px; }
+.nav-pinned { margin-top: 4px; }
+.nav-pinned .nav-group-label { padding: 12px 10px 6px; }
+.nav-foot { padding: 10px; border-top: 1px solid var(--color-surface-3, #27272a); margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.nav-foot-btn { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 10px; font-size: 12px; border-radius: 6px; border: 1px solid var(--color-surface-3, #27272a); background: transparent; color: var(--color-muted, #71717a); transition: background 100ms, color 100ms; cursor: pointer; }
+.nav-foot-btn:hover { background: var(--color-surface-2, #18181b); color: var(--color-text, #fafafa); }
+.nav-foot-btn.primary { background: var(--accent, #0070f3); color: #fff; border-color: transparent; }
+.nav-foot-btn.primary:hover { opacity: 0.9; }
+.nav-foot-btn kbd { margin-left: auto; font-size: 10px; opacity: 0.7; }
+.nav-density { display: flex; gap: 2px; padding: 3px; background: var(--color-surface-1, #09090b); border: 1px solid var(--color-surface-3, #27272a); border-radius: 6px; }
+.nd-btn { flex: 1; height: 24px; border-radius: 4px; font-size: 11px; color: var(--color-muted, #71717a); background: transparent; cursor: pointer; transition: background 100ms, color 100ms; }
+.nd-btn:hover { color: var(--color-text-2, #a1a1aa); }
+.nd-btn.on { background: var(--color-surface-2, #18181b); color: var(--color-text, #fafafa); }
+.nav-status { display: flex; gap: 16px; padding: 2px 4px; }
+.ns-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-muted, #71717a); }
