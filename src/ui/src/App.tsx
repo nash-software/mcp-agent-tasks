@@ -30,7 +30,7 @@ import { fetchProjects, type ProjectEntry, signoffTask, dispatchToAcr } from './
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 import { SortControl } from './components/SortControl'
-import { type SortKey, type SortDir } from './lib/sort'
+import { type SortKey, type SortDir, type TodaySortKey, TODAY_SORT_KEYS } from './lib/sort'
 
 const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
 
@@ -69,8 +69,22 @@ const FILTERABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>([
 ])
 
 /** Views that actually apply the sort (MCPAT-069 C). Roadmap/Activity keep their intrinsic order,
- *  so the Sort control is hidden there rather than shown-but-ignored (no silent omission). */
-const SORTABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>(['today', 'board'])
+ *  so the Sort control is hidden there rather than shown-but-ignored (no silent omission).
+ *  MCPAT-070 Phase C: 'today' removed — Today has its own todaySort toolbar (4 keys, fixed dirs). */
+const SORTABLE_VIEWS: ReadonlySet<ViewId> = new Set<ViewId>(['board'])
+
+/** Read the persisted Today sort key, validating against the 4 allowed TodaySortKey values. */
+function readStoredTodaySort(): TodaySortKey {
+  const VALID_TODAY_KEYS: TodaySortKey[] = ['priority', 'area', 'estimate', 'project']
+  try {
+    const raw = localStorage.getItem('lifeos-today-sort')
+    return (raw && VALID_TODAY_KEYS.includes(raw as TodaySortKey))
+      ? (raw as TodaySortKey)
+      : 'priority'
+  } catch {
+    return 'priority'
+  }
+}
 
 function readStoredView(): ViewId {
   const raw = localStorage.getItem('lifeos-view')
@@ -168,6 +182,7 @@ export function App(): React.JSX.Element {
   const [visibleIds, setVisibleIds] = useState<string[]>([])
   const [filter, setFilter]         = useState<Filter>(readStoredFilter)
   const [sort, setSort]             = useState<{ key: SortKey; dir: SortDir }>(readStoredSort)
+  const [todaySort, setTodaySort]   = useState<TodaySortKey>(readStoredTodaySort)
   const [density, setDensity]       = useState<Density>(readStoredDensity)
   // P2-03 — transient seed: capture bar hands text to Brain Dump through this state
   const [brainDumpSeed, setBrainDumpSeed] = useState<BrainDumpSeed | null>(null)
@@ -197,6 +212,9 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     try { localStorage.setItem('lifeos-sort', JSON.stringify(sort)) } catch { /* noop */ }
   }, [sort])
+  useEffect(() => {
+    try { localStorage.setItem('lifeos-today-sort', todaySort) } catch { /* noop */ }
+  }, [todaySort])
   useEffect(() => {
     try {
       localStorage.setItem('lifeos-favs', JSON.stringify(favorites))
@@ -655,8 +673,39 @@ export function App(): React.JSX.Element {
 
       {/* main scroll region */}
       <main className="main">
-        {/* Global filter bar — shown above all five filterable views (P2-01) */}
-        {FILTERABLE_VIEWS.has(view) && (
+        {/* Global filter bar — shown above all five filterable views (P2-01).
+            MCPAT-070 Phase C: Today gets its own .today-toolbar (FilterBar flex:1 + Today SortControl).
+            All other filterable views keep the shared .filter-bar-row with Board SortControl. */}
+        {FILTERABLE_VIEWS.has(view) && view === 'today' && (
+          <div className="today-toolbar">
+            <FilterBar
+              filter={filter}
+              projects={filterProjects}
+              milestones={milestones}
+              favorites={favorites}
+              projectCounts={projectCounts}
+              onToggleProject={toggleProject}
+              onToggleArea={toggleArea}
+              onToggleFav={toggleFav}
+              onToggleType={toggleType}
+              onToggleStatus={toggleStatus}
+              onTogglePriority={togglePriority}
+              onToggleMilestone={toggleMilestone}
+              onToggleAttention={toggleAttention}
+              onSetScheduled={setScheduled}
+              onSetCreatedWithin={setCreatedWithin}
+              onSetUpdatedWithin={setUpdatedWithin}
+              onClear={clearFilter}
+            />
+            <SortControl
+              sort={{ key: todaySort as unknown as SortKey, dir: 'asc' }}
+              onChange={(k) => setTodaySort(k as unknown as TodaySortKey)}
+              keys={TODAY_SORT_KEYS}
+              todayMode={true}
+            />
+          </div>
+        )}
+        {FILTERABLE_VIEWS.has(view) && view !== 'today' && (
           <div className="filter-bar-row">
             <FilterBar
               filter={filter}
@@ -685,7 +734,7 @@ export function App(): React.JSX.Element {
             <TodayView
               filter={filter}
               areaMap={areaMap}
-              sort={sort}
+              todaySort={todaySort}
               now={now}
               selectedTaskId={selectedTaskId}
               onSelectTask={setSel}
