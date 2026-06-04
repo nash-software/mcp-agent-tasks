@@ -17,6 +17,7 @@ import { AGENT_LOG_MAX, MAX_TRANSITIONS } from './store/limits.js';
 import type { Priority, Area, Task, TaskStatus, StatusTransition, TaskType } from './types/task.js';
 import { isValidTransition } from './types/transitions.js';
 import { buildProjectsList } from './projects-list.js';
+import { McpTasksError } from './types/errors.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -2622,6 +2623,56 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: POST /api/notes — create note (CRUD parity; capture path stays at /api/capture/note per D5)
+      if (pathname === '/api/notes' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const postBody = JSON.parse(Buffer.concat(chunks).toString()) as Record<string, unknown>;
+            const noteTitle = typeof postBody['title'] === 'string' ? postBody['title'].trim() : '';
+            if (!noteTitle) { sendError(res, 400, 'TITLE_REQUIRED'); return; }
+            if (noteTitle.length > 500) { sendError(res, 400, 'INVALID_TITLE'); return; }
+            const noteBodyStr = typeof postBody['body'] === 'string' ? postBody['body'] : '';
+            const noteTags = Array.isArray(postBody['tags'])
+              ? (postBody['tags'] as unknown[]).filter((t): t is string => typeof t === 'string')
+              : [];
+            const cfg = loadConfig();
+            const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+            if (!genIdx) { sendError(res, 500, 'NO_INDEX'); return; }
+            const noteStore2 = new NoteStore(genIdx.index, cfg);
+            const defaultProject = genIdx.prefix;
+            const newNote = noteStore2.create({ title: noteTitle, body: noteBodyStr, tags: noteTags }, defaultProject);
+            sendJson(res, 201, newNote);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: DELETE /api/notes/:id — delete note
+      if (req.method === 'DELETE' && /^\/api\/notes\/[^/]+$/.test(pathname)) {
+        const deleteId = decodeURIComponent(pathname.slice('/api/notes/'.length));
+        const cfg = loadConfig();
+        const genIdx = projectIndexes.find(p => p.prefix === 'GEN') ?? projectIndexes[0];
+        if (!genIdx) { sendError(res, 500, 'NO_INDEX'); return; }
+        const noteStore3 = new NoteStore(genIdx.index, cfg);
+        try {
+          noteStore3.delete(deleteId);
+          res.writeHead(204);
+          res.end();
+        } catch (err) {
+          if (err instanceof McpTasksError && err.code === 'NOTE_NOT_FOUND') {
+            sendError(res, 404, 'NOTE_NOT_FOUND');
+          } else {
+            sendError(res, 500, 'INTERNAL_ERROR');
+          }
+        }
         return;
       }
 
