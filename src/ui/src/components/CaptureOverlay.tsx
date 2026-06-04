@@ -10,15 +10,15 @@ import { Plus, Expand, Mic, MicOff, Check, Loader2, StickyNote, ListTodo, Sparkl
 import { quickCapture, inferCapture, captureNote, fetchProjects } from '../api'
 import type { InferResult } from '../api'
 import { useVoiceTranscribe } from '../hooks/useVoiceTranscribe'
+import type { CaptureMode } from '../hooks/useCaptureOverlay'
 
-type CaptureMode = 'infer' | 'task' | 'note'
 const CONFIDENCE_THRESHOLD = 0.7
 
 interface Props {
   /** Called with the current text when Shift+Enter or expand icon is clicked (P2-03 affordance). */
   onExpand: (text: string) => void
   /** Called by App to register the focus function so Ctrl+Space can target this input. */
-  registerFocus: (fn: () => void) => void
+  registerFocus: (fn: (mode?: CaptureMode) => void) => void
   /** Active project (single selected filter) — threaded to quickCapture as a routing bias (P5-06). */
   activeProject?: string
 }
@@ -29,7 +29,14 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
   const [flash, setFlash] = useState(false)
   const [noteFlash, setNoteFlash] = useState(false)
   const [acSelIdx, setAcSelIdx] = useState(0)
-  const [mode, setMode] = useState<CaptureMode>('infer')
+  const [mode, setMode] = useState<CaptureMode>(() => {
+    try {
+      const v = localStorage.getItem('lifeos-capmode')
+      return (v === 'task' || v === 'note' || v === 'infer') ? v : 'infer'
+    } catch {
+      return 'infer'
+    }
+  })
   const [nudge, setNudge] = useState<InferResult | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
@@ -55,9 +62,15 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Persist mode to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem('lifeos-capmode', mode) } catch { /* noop */ }
+  }, [mode])
+
   // Register focus callback with parent (App -> useGlobalKeyboard)
   useEffect(() => {
-    registerFocus(() => {
+    registerFocus((m?: CaptureMode) => {
+      if (m) { setMode(m); setNudge(null) }
       inputRef.current?.focus()
       inputRef.current?.select()
     })
