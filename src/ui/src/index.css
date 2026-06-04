@@ -306,6 +306,18 @@
   min-width: 0;
 }
 
+/* MCPAT-070 Phase C: Today-specific toolbar — FilterBar (flex:1) + Sort pinned right */
+.today-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+}
+.today-toolbar .filter-bar {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
 /* MCPAT-069: "More filters" disclosure inside the filter popover */
 .fp-more-disclosure { border-top: 1px solid var(--color-surface-3, #27272a); margin-top: 4px; padding-top: 4px; }
 .fp-more-toggle {
