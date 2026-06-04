@@ -7,18 +7,24 @@ export interface NoteRecord {
   created_at: string;
   updated_at: string;
   brain_sync_failed?: boolean;
+  title?: string;
+  pinned?: boolean;
 }
 
 export interface NoteCreateInput {
-  body: string;
+  body?: string;
   project?: string;
   task_id?: string;
   tags?: string[];
+  title?: string;
+  pinned?: boolean;
 }
 
 export interface NoteUpdateInput {
   body?: string;
   tags?: string[];
+  title?: string;
+  pinned?: boolean;
 }
 
 export interface NoteListInput {

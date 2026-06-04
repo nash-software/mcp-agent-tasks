@@ -32,7 +32,10 @@ export class NoteStore {
     const tags = input.tags ?? [];
     const task_id = input.task_id ?? null;
 
-    this.validateBody(body);
+    // Body is required unless a title is provided (title-only notes are valid)
+    if (!input.title) {
+      this.validateBody(body);
+    }
     this.validateTags(tags);
 
     if (task_id !== null) {
@@ -51,6 +54,8 @@ export class NoteStore {
       tags,
       created_at: now,
       updated_at: now,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
     };
 
     const notesDir = this.resolveNotesDir(project);
@@ -78,6 +83,12 @@ export class NoteStore {
     if (fields.tags !== undefined) {
       this.validateTags(fields.tags);
       existing.tags = fields.tags;
+    }
+    if (fields.title !== undefined) {
+      existing.title = fields.title;
+    }
+    if (fields.pinned !== undefined) {
+      existing.pinned = fields.pinned;
     }
 
     existing.updated_at = new Date().toISOString();
@@ -130,6 +141,21 @@ export class NoteStore {
     return this.sqliteIndex.searchNotes(q, project);
   }
 
+  delete(id: string): void {
+    const note = this.sqliteIndex.getNote(id);
+    if (!note) {
+      throw new McpTasksError('NOTE_NOT_FOUND', `Note not found: ${id}`);
+    }
+    const notesDir = this.resolveNotesDir(note.project);
+    const filePath = path.join(notesDir, `${note.id}.md`);
+    try {
+      fs.unlinkSync(filePath);
+    } catch {
+      // File may not exist — graceful
+    }
+    this.sqliteIndex.deleteNote(id);
+  }
+
   private validateBody(body: string): void {
     if (!body) {
       throw new McpTasksError('INVALID_FIELD', 'body is required and must not be empty');
@@ -161,7 +187,7 @@ export class NoteStore {
   }
 
   private writeMarkdown(note: NoteRecord, notesDir: string): void {
-    const frontmatter = {
+    const frontmatter: Record<string, unknown> = {
       id: note.id,
       project: note.project,
       task_id: note.task_id,
@@ -169,6 +195,12 @@ export class NoteStore {
       created_at: note.created_at,
       updated_at: note.updated_at,
     };
+    if (note.title !== undefined) {
+      frontmatter['title'] = note.title;
+    }
+    if (note.pinned !== undefined) {
+      frontmatter['pinned'] = note.pinned;
+    }
 
     const content = `---\n${yamlStringify(frontmatter).trimEnd()}\n---\n\n${note.body}\n`;
     const filePath = path.join(notesDir, `${note.id}.md`);
