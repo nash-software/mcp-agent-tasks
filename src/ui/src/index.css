@@ -401,3 +401,39 @@
 }
 .btn-sm-ghost:hover { background: var(--color-surface-2, #18181b); color: var(--color-text, #fafafa); }
 .btn-sm:disabled, .btn-sm-primary:disabled, .btn-sm-ghost:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Phase-3 capture-modes (MCPAT-070-p3a) ───────────────────────────────── */
+.capture-mode-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--color-muted, #71717a);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+  white-space: nowrap;
+}
+.mode-pill:hover {
+  background: var(--color-surface-2, #18181b);
+  color: var(--color-text-2, #a1a1aa);
+}
+.mode-pill.active {
+  background: var(--color-surface-2, #18181b);
+  border-color: var(--color-surface-3, #27272a);
+  color: var(--color-text, #fafafa);
+}
+.capture-input-wrap[data-mode="task"] .lead { color: var(--accent, #0070f3); }
+.capture-input-wrap[data-mode="note"] .lead { color: #f59e0b; }
+.capture-input-wrap[data-mode="infer"] .lead { color: var(--color-muted, #71717a); }
