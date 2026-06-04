@@ -412,7 +412,7 @@ export function App(): React.JSX.Element {
     focusMode,
     cmdkOpen,
     visibleIds,
-    focusCapture: capture.focus,
+    focusCapture: capture.focusCapture,
     handlers,
   })
 
@@ -481,7 +481,7 @@ export function App(): React.JSX.Element {
       label: 'Quick capture',
       sub: 'Focus capture bar',
       kbd: 'Ctrl+Space',
-      run: () => { capture.focus() },
+      run: () => { capture.focusCapture() },
     })
     cmds.push({
       id: 'create-new-task',
@@ -617,7 +617,7 @@ export function App(): React.JSX.Element {
         view={view}
         onViewChange={handleViewChange}
         onPaletteOpen={() => setCmdkOpen(true)}
-        onNewTask={() => setNewTaskOpen(true)}
+        onNewTask={() => capture.focusCapture('task')}
         onOpenProjects={() => setProjectsModalOpen(true)}
         favorites={favorites}
         projectCounts={projectCounts}

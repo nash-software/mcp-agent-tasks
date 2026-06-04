@@ -10,15 +10,15 @@ import { Plus, Expand, Mic, MicOff, Check, Loader2, StickyNote, ListTodo, Sparkl
 import { quickCapture, inferCapture, captureNote, fetchProjects } from '../api'
 import type { InferResult } from '../api'
 import { useVoiceTranscribe } from '../hooks/useVoiceTranscribe'
+import type { CaptureMode } from '../hooks/useCaptureOverlay'
 
-type CaptureMode = 'infer' | 'task' | 'note'
 const CONFIDENCE_THRESHOLD = 0.7
 
 interface Props {
   /** Called with the current text when Shift+Enter or expand icon is clicked (P2-03 affordance). */
   onExpand: (text: string) => void
   /** Called by App to register the focus function so Ctrl+Space can target this input. */
-  registerFocus: (fn: () => void) => void
+  registerFocus: (fn: (mode?: CaptureMode) => void) => void
   /** Active project (single selected filter) — threaded to quickCapture as a routing bias (P5-06). */
   activeProject?: string
 }
@@ -26,10 +26,16 @@ interface Props {
 export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props): React.JSX.Element {
   const [text, setText] = useState('')
   const [retryHint, setRetryHint] = useState(false)
-  const [flash, setFlash] = useState(false)
-  const [noteFlash, setNoteFlash] = useState(false)
+  const [flash, setFlash] = useState<{ text: string; icon: 'check' | 'note' } | null>(null)
   const [acSelIdx, setAcSelIdx] = useState(0)
-  const [mode, setMode] = useState<CaptureMode>('infer')
+  const [mode, setMode] = useState<CaptureMode>(() => {
+    try {
+      const v = localStorage.getItem('lifeos-capmode')
+      return (v === 'task' || v === 'note' || v === 'infer') ? v : 'infer'
+    } catch {
+      return 'infer'
+    }
+  })
   const [nudge, setNudge] = useState<InferResult | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const queryClient = useQueryClient()
@@ -55,9 +61,15 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  // Persist mode to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem('lifeos-capmode', mode) } catch { /* noop */ }
+  }, [mode])
+
   // Register focus callback with parent (App -> useGlobalKeyboard)
   useEffect(() => {
-    registerFocus(() => {
+    registerFocus((m?: CaptureMode) => {
+      if (m) { setMode(m); setNudge(null) }
       inputRef.current?.focus()
       inputRef.current?.select()
     })
@@ -91,8 +103,6 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
       setText('')
       setRetryHint(false)
       setNudge(null)
-      setFlash(true)
-      setTimeout(() => setFlash(false), 600)
       void queryClient.invalidateQueries({ queryKey: ['today'] })
       void queryClient.invalidateQueries({ queryKey: ['tasks'] })
     },
@@ -108,8 +118,6 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
       setText('')
       setRetryHint(false)
       setNudge(null)
-      setNoteFlash(true)
-      setTimeout(() => setNoteFlash(false), 1500)
       void queryClient.invalidateQueries({ queryKey: ['notes'] })
     },
     onError: () => {
@@ -117,11 +125,15 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
     },
   })
 
-  const executeCapture = useCallback((asMode: 'task' | 'note', trimmed: string): void => {
+  const executeCapture = useCallback((asMode: 'task' | 'note', trimmed: string, submittedFrom?: CaptureMode): void => {
     if (asMode === 'note') {
       noteMutation.mutate(trimmed)
+      setFlash({ text: 'Noted', icon: 'note' })
+      setTimeout(() => setFlash(null), 700)
     } else {
       captureMutation.mutate(trimmed)
+      setFlash({ text: submittedFrom === 'infer' ? 'Captured as task' : 'Captured', icon: 'check' })
+      setTimeout(() => setFlash(null), 700)
     }
   }, [captureMutation, noteMutation])
 
@@ -131,11 +143,11 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
     setRetryHint(false)
 
     if (mode === 'task') {
-      executeCapture('task', trimmed)
+      executeCapture('task', trimmed, mode)
       return
     }
     if (mode === 'note') {
-      executeCapture('note', trimmed)
+      executeCapture('note', trimmed, mode)
       return
     }
 
@@ -145,13 +157,13 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
         const result = await inferCapture(trimmed, activeProject)
         if (result.confidence >= CONFIDENCE_THRESHOLD) {
           setNudge(null)
-          executeCapture(result.intent, trimmed)
+          executeCapture(result.intent, trimmed, 'infer')
         } else {
           setNudge(result)
         }
       } catch {
         // Fallback: route as task
-        executeCapture('task', trimmed)
+        executeCapture('task', trimmed, 'infer')
       }
     })()
   }, [text, mode, activeProject, executeCapture])
@@ -250,7 +262,7 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
       </div>
 
       {/* Input row */}
-      <div className="capture-input-wrap">
+      <div className="capture-input-wrap" data-mode={mode}>
         <span className="lead" aria-hidden="true">
           <Plus size={15} />
         </span>
@@ -266,11 +278,11 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
           }}
           onKeyDown={handleKeyDown}
           placeholder={
-            mode === 'note'
-              ? 'Capture a thought or idea — Enter to save as Note'
+            mode === 'infer'
+              ? "Capture anything — I'll sort it into a task or note · ⇧Enter to expand · #project"
               : mode === 'task'
-              ? 'Capture a task — Enter to save · #project'
-              : 'Capture anything — Enter to save · ⇧Enter for Brain Dump · #project'
+              ? 'New task — Enter to add · #project to route it'
+              : 'Jot a note — Enter to save · #project'
           }
           className="capture-input"
           maxLength={mode === 'note' ? 10000 : 2000}
@@ -284,7 +296,7 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
             <button
               type="button"
               className="nudge-btn primary"
-              onClick={() => { const t = text.trim(); setNudge(null); executeCapture(nudge.intent, t) }}
+              onClick={() => { const t = text.trim(); setNudge(null); executeCapture(nudge.intent, t, 'infer') }}
             >
               Save as {nudge.intent}
             </button>
@@ -295,7 +307,7 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
                 const t = text.trim()
                 const flip = nudge.intent === 'task' ? 'note' : 'task'
                 setNudge(null)
-                executeCapture(flip, t)
+                executeCapture(flip, t, 'infer')
               }}
             >
               Save as {nudge.intent === 'task' ? 'note' : 'task'}
@@ -305,31 +317,24 @@ export function CaptureOverlay({ onExpand, registerFocus, activeProject }: Props
 
         {flash && (
           <span className="capture-flash" aria-live="polite">
-            <Check size={14} />
-            Captured
+            {flash.icon === 'note' ? <StickyNote size={14} /> : <Check size={14} />}
+            {flash.text}
           </span>
         )}
 
-        {noteFlash && !flash && (
-          <span className="capture-flash note-flash" aria-live="polite">
-            <Check size={14} />
-            Note saved
-          </span>
-        )}
-
-        {retryHint && !flash && !noteFlash && (
+        {retryHint && !flash && (
           <span className="capture-error" aria-live="polite">
             couldn't save — Enter to retry
           </span>
         )}
 
-        {voice.error && !flash && !noteFlash && !retryHint && (
+        {voice.error && !flash && !retryHint && (
           <span className="capture-error" aria-live="polite">
             {voice.error}
           </span>
         )}
 
-        {!flash && !noteFlash && !retryHint && !voice.error && !nudge && (
+        {!flash && !retryHint && !voice.error && !nudge && (
           <span className="capture-hint">
             <kbd>Ctrl</kbd>
             <kbd>Space</kbd>

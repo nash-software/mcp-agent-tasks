@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { NAV } from '../lib/nav'
 import type { ViewId, PanelState } from '../types'
+import type { CaptureMode } from './useCaptureOverlay'
 
 interface KeyboardHandlers {
   setView: (v: ViewId) => void
@@ -21,7 +22,7 @@ interface KeyboardDeps {
   focusMode: boolean
   cmdkOpen: boolean
   visibleIds: string[]
-  focusCapture: () => void
+  focusCapture: (mode?: CaptureMode) => void
   handlers: KeyboardHandlers
 }
 
