@@ -151,12 +151,14 @@ export async function quickCapture(
 
 export interface NoteRecord {
   id: string
+  title?: string
   body: string
   project: string
   task_id: string | null
   tags: string[]
   created_at: string
   updated_at: string
+  pinned?: boolean
   brain_sync_failed?: boolean
 }
 
@@ -225,6 +227,34 @@ export async function captureNote(
     throw new Error(err.message ?? `Note capture failed: ${res.status}`)
   }
   return res.json() as Promise<{ noteId: string; project: string }>
+}
+
+export async function createNote(input: {
+  title: string
+  body?: string
+  project?: string
+  tags?: string[]
+}): Promise<NoteRecord> {
+  const res = await fetch('/api/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? `Create note failed: ${res.status}`)
+  }
+  return res.json() as Promise<NoteRecord>
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const res = await fetch(`/api/notes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (res.status !== 204 && !res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error ?? `Delete note failed: ${res.status}`)
+  }
 }
 
 export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }> {
