@@ -4,7 +4,16 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { Task } from '../types'
-import { sortTasks, taskCmp, type SortKey, type SortDir } from './sort'
+import {
+  sortTasks,
+  taskCmp,
+  AREA_ORDER,
+  TODAY_SORT_KEYS,
+  TODAY_SORT_KEY_LABEL,
+  type SortKey,
+  type SortDir,
+  type TodaySortKey,
+} from './sort'
 
 // ── Helper for TodayView done-sink logic ──────────────────────────────────────
 
@@ -251,6 +260,53 @@ describe('sortTasks — all keys compile and run', () => {
   }
 })
 
+// ── Exported constants — MCPAT-070 Phase C ───────────────────────────────────
+
+describe('AREA_ORDER — canonical area sort constant', () => {
+  it('exports an array with all four area values', () => {
+    expect(Array.from(AREA_ORDER)).toEqual(['client', 'personal', 'internal', 'outsource'])
+  })
+
+  it('client comes before personal (lower index)', () => {
+    expect(AREA_ORDER.indexOf('client')).toBeLessThan(AREA_ORDER.indexOf('personal'))
+  })
+
+  it('personal comes before internal', () => {
+    expect(AREA_ORDER.indexOf('personal')).toBeLessThan(AREA_ORDER.indexOf('internal'))
+  })
+
+  it('internal comes before outsource', () => {
+    expect(AREA_ORDER.indexOf('internal')).toBeLessThan(AREA_ORDER.indexOf('outsource'))
+  })
+})
+
+describe('TODAY_SORT_KEYS — ordered list constant', () => {
+  it('exports the four expected keys in order', () => {
+    const expected: TodaySortKey[] = ['priority', 'area', 'estimate', 'project']
+    expect(Array.from(TODAY_SORT_KEYS)).toEqual(expected)
+  })
+
+  it('has exactly 4 keys (one per TodaySortKey variant)', () => {
+    expect(TODAY_SORT_KEYS.length).toBe(4)
+  })
+})
+
+describe('TODAY_SORT_KEY_LABEL — human-readable labels', () => {
+  it('has a non-empty label for every key in TODAY_SORT_KEYS', () => {
+    for (const key of TODAY_SORT_KEYS) {
+      expect(TODAY_SORT_KEY_LABEL[key]).toBeTruthy()
+      expect(typeof TODAY_SORT_KEY_LABEL[key]).toBe('string')
+    }
+  })
+
+  it('maps priority → Priority, area → Area, estimate → Estimate, project → Project', () => {
+    expect(TODAY_SORT_KEY_LABEL.priority).toBe('Priority')
+    expect(TODAY_SORT_KEY_LABEL.area).toBe('Area')
+    expect(TODAY_SORT_KEY_LABEL.estimate).toBe('Estimate')
+    expect(TODAY_SORT_KEY_LABEL.project).toBe('Project')
+  })
+})
+
 // ── taskCmp — MCPAT-070 Phase C ───────────────────────────────────────────────
 
 describe('taskCmp — priority', () => {
@@ -357,6 +413,17 @@ describe('taskCmp — project', () => {
     ]
     const result = [...tasks].sort(taskCmp('project'))
     expect(result.map(t => t.id)).toEqual(['COND-001', 'COND-002'])
+  })
+
+  it('id with no dash uses full id as prefix', () => {
+    // The implementation does: a.id.split('-')[0] ?? a.id
+    // An id without '-' still splits correctly to produce the full id as the prefix.
+    const tasks = [
+      makeTask({ id: 'ZEBRA', title: 'Z', priority: 'high' }),
+      makeTask({ id: 'ALPHA', title: 'A', priority: 'high' }),
+    ]
+    const result = [...tasks].sort(taskCmp('project'))
+    expect(result.map(t => t.id)).toEqual(['ALPHA', 'ZEBRA'])
   })
 })
 
