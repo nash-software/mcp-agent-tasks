@@ -470,3 +470,11 @@
 .nd-btn.on { background: var(--color-surface-2, #18181b); color: var(--color-text, #fafafa); }
 .nav-status { display: flex; gap: 16px; padding: 2px 4px; }
 .ns-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-muted, #71717a); }
+
+/* ── Phase F — done-row completed view restyle (MCPAT-070-F) ──────────────── */
+.done-row { display: flex; align-items: center; gap: 11px; min-height: var(--row-h); padding: 0 10px 0 12px; border-radius: 6px; cursor: pointer; transition: background 100ms; width: 100%; border: none; background: transparent; text-align: left; }
+.done-row:hover { background: var(--color-surface-1, #111113); }
+.done-row + .done-row { border-top: 1px solid color-mix(in srgb, var(--color-surface-3, #27272a) 50%, transparent); }
+.done-check { width: 18px; height: 18px; border-radius: 5px; background: color-mix(in srgb, #22c55e 16%, transparent); color: #22c55e; display: grid; place-items: center; flex-shrink: 0; }
+.done-title { flex: 1; font-size: 13.5px; color: var(--color-muted, #71717a); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--color-muted, #71717a) 50%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.done-when { font-size: 11px; color: #52525b; font-family: var(--font-mono, ui-monospace); }

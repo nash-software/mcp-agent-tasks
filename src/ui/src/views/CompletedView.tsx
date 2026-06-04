@@ -2,12 +2,14 @@
  * CompletedView — sprint-closure summary tab (P4-02).
  *
  * Renders closed tasks grouped by close_batch (falling back to closed_at date).
- * Each group shows: date heading, task count, total estimate_hours burned, and task titles.
+ * Each group shows: date heading, task count, total estimate_hours burned, and task rows.
  * Read-only. Empty state when no closed tasks exist.
  */
 import React from 'react'
+import { Check } from 'lucide-react'
 import { useTasks } from '../hooks/useTasks'
 import { ViewHeader } from '../components/ViewHeader'
+import { AreaDot, PrefixBadge } from '../components/atoms'
 import type { Task, PanelState } from '../types'
 
 interface Props {
@@ -32,6 +34,12 @@ function fmtDate(closedAt: number | string | undefined): string {
     month: 'short',
     day: 'numeric',
   })
+}
+
+/** Format epoch ms to a compact "Mon D" timestamp for the done-when chip. */
+function fmtWhen(closedAt: number | undefined): string {
+  if (!closedAt) return ''
+  return new Date(closedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 /** Extract a readable date label from a close_batch id like "close-2026-05-30T14:22:00.000Z" */
@@ -140,7 +148,7 @@ export function CompletedView({ onOpenPanel }: Props): React.JSX.Element {
             key={batch.batchId}
             className="bg-surface-1 rounded-lg p-4 space-y-3"
           >
-            {/* Batch heading */}
+            {/* Batch heading — date, task count, hours burned */}
             <div className="flex items-baseline gap-3">
               <h2 className="font-semibold text-ink" style={{ fontSize: 14 }}>
                 {batch.label}
@@ -158,30 +166,30 @@ export function CompletedView({ onOpenPanel }: Props): React.JSX.Element {
               )}
             </div>
 
-            {/* Task list */}
-            <ul className="space-y-1.5">
+            {/* Task rows — done-row restyle (Phase F) */}
+            <div>
               {batch.tasks.map(task => (
-                <li key={task.id}>
-                  {/* Clickable → opens the panel so a closed task can be inspected/reopened (P5-05) */}
-                  <button
-                    type="button"
-                    onClick={() => onOpenPanel({ mode: 'peek', taskId: task.id })}
-                    className="w-full flex items-center gap-2 text-sm text-ink-muted text-left rounded px-1 -mx-1 py-0.5 hover:bg-surface-2 hover:text-ink-2 transition-colors duration-100"
-                    aria-label={`Open ${task.id} — ${task.title}`}
-                  >
-                    {/* Closed indicator dot */}
-                    <span className="w-1.5 h-1.5 rounded-full bg-ink-faint flex-shrink-0" />
-                    <span className="flex-1 truncate" title={task.title}>{task.title}</span>
-                    <span className="text-ink-faint font-mono text-xs flex-shrink-0">{task.id}</span>
-                    {typeof task.estimate_hours === 'number' && task.estimate_hours > 0 && (
-                      <span className="text-ink-faint text-xs flex-shrink-0">
-                        {task.estimate_hours}h
-                      </span>
-                    )}
-                  </button>
-                </li>
+                <button
+                  key={task.id}
+                  type="button"
+                  className="done-row"
+                  onClick={() => onOpenPanel({ mode: 'peek', taskId: task.id })}
+                  aria-label={`Open ${task.id} — ${task.title}`}
+                >
+                  <span className="done-check">
+                    <Check size={13} />
+                  </span>
+                  <span className="done-title" title={task.title}>
+                    {task.title}
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {task.area && <AreaDot area={task.area} title={task.area} />}
+                    {task.project && <PrefixBadge project={task.project} />}
+                    <span className="done-when">{fmtWhen(task.closed_at)}</span>
+                  </div>
+                </button>
               ))}
-            </ul>
+            </div>
           </div>
         ))}
       </div>
