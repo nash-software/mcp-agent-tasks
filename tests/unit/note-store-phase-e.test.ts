@@ -49,6 +49,13 @@ describe('NoteStore Phase E — title + pinned fields', () => {
   })
 
   afterEach(() => {
+    // Close the DB connection before removing the temp dir — on Windows an open
+    // SQLite handle keeps tasks.db locked and rmSync throws EBUSY.
+    try {
+      sqliteIndex.close()
+    } catch {
+      // already closed / never opened — safe to ignore
+    }
     fs.rmSync(tempDir, { recursive: true, force: true })
   })
 
