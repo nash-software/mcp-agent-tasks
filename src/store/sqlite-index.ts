@@ -127,6 +127,23 @@ interface NoteRow {
 export class SqliteIndex {
   private db: Database.Database;
 
+  /**
+   * Monotone integer incremented whenever the ALTER TABLE migration block in
+   * init() adds a new column.  Stored in schema_meta under the key
+   * 'db_schema_version' (distinct from the task-format 'schema_version' which
+   * is mirrored into markdown frontmatter — do NOT reuse that key).
+   *
+   * When init() detects that the stored value already equals DB_SCHEMA_VERSION
+   * it skips the 14 ALTER TABLE probes entirely, shrinking the synchronous
+   * boot path (MCPAT-071 Step D).
+   *
+   * Bump this constant whenever you add a new ALTER TABLE migration below.
+   * Current version 1 covers: body_hash, spec_file, milestone, estimate_hours,
+   * plan_file, auto_captured, area, scheduled_for, agent_status, block_reason,
+   * triage_note, triage_confidence, closed_at, close_batch.
+   */
+  static readonly DB_SCHEMA_VERSION = 1;
+
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
@@ -163,34 +180,58 @@ export class SqliteIndex {
     const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schemaSql);
 
-    // Migration: add spec_file column to existing databases.
-    // Fresh databases get it from schema.sql above; existing ones need ALTER TABLE.
-    // SQLite serialises writes — concurrent init() calls are safe via try/catch.
-    const addColumnIfNotExists = (sql: string): void => {
-      try {
-        this.db.exec(sql);
-      } catch (err) {
-        if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
-          throw err;
-        }
-        // 'duplicate column name' means column already exists — expected on re-init
-      }
-    };
+    // Migration: add columns to existing databases that pre-date schema.sql additions.
+    // Fresh databases get all columns from schema.sql above; only older on-disk DBs need ALTER.
+    //
+    // MCPAT-071 Step D: gate the 14 ALTER probes behind db_schema_version so they
+    // are skipped on every boot after the first successful migration.  The key
+    // 'db_schema_version' lives in schema_meta and is DISTINCT from 'schema_version'
+    // (which is the task-format version mirrored into markdown frontmatter — do NOT
+    // reuse that key, see markdown-store.ts:94 and task-factory.ts:44).
+    //
+    // Fresh DBs: schema.sql creates the schema_meta table + 'schema_version' row but
+    // no 'db_schema_version' row, so stored_db_version is null and ALTERs run once,
+    // then db_schema_version is stamped. Subsequent inits skip the ALTERs.
+    //
+    // Legacy DBs: no 'db_schema_version' row → ALTERs run (idempotent), then stamped.
+    const storedVersionRow = this.db
+      .prepare<[], { value: string }>("SELECT value FROM schema_meta WHERE key='db_schema_version'")
+      .get();
+    const storedDbVersion = storedVersionRow ? parseInt(storedVersionRow.value, 10) : null;
 
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
-    addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL)");
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
-    addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL)");
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN closed_at INTEGER');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN close_batch TEXT');
+    if (storedDbVersion !== SqliteIndex.DB_SCHEMA_VERSION) {
+      // SQLite serialises writes — concurrent init() calls are safe via try/catch.
+      const addColumnIfNotExists = (sql: string): void => {
+        try {
+          this.db.exec(sql);
+        } catch (err) {
+          if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
+            throw err;
+          }
+          // 'duplicate column name' means column already exists — expected on re-init
+        }
+      };
+
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
+      addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL)");
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
+      addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL)");
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN closed_at INTEGER');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN close_batch TEXT');
+
+      // Stamp the current version so subsequent boots skip this block.
+      this.db.prepare(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('db_schema_version', ?)",
+      ).run(String(SqliteIndex.DB_SCHEMA_VERSION));
+    }
 
     // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
     this.db.exec(`

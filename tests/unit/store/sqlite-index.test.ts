@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import Database from 'better-sqlite3';
 import { SqliteIndex } from '../../../src/store/sqlite-index.js';
 import type { Task, TaskStatus, Priority } from '../../../src/types/task.js';
 
@@ -729,5 +730,89 @@ describe('SqliteIndex', () => {
       const ratio = pageCount > 0 ? freelist / pageCount : 0;
       expect(ratio).toBeLessThan(0.15);
     });
+  });
+});
+
+// ── MCPAT-071: Step D — db_schema_version gates ALTER probes ─────────────────
+describe('MCPAT-071 Step D — db_schema_version gates ALTER probes', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    dbPath = path.join(tmpDir, 'tasks.db');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('writes db_schema_version into schema_meta on first init()', () => {
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    const raw = idx.getRawDb();
+    const row = raw
+      .prepare("SELECT value FROM schema_meta WHERE key='db_schema_version'")
+      .get() as { value: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.value).toBe(String(SqliteIndex.DB_SCHEMA_VERSION));
+    idx.close();
+  });
+
+  it('skips ALTER TABLE probes on second init() when db_schema_version is current', () => {
+    // First init — writes all columns + version
+    const idx1 = new SqliteIndex(dbPath);
+    idx1.init();
+
+    // Spy on db.exec to count ALTER TABLE calls on second init
+    const raw = idx1.getRawDb();
+    let alterCount = 0;
+    const origExec = (raw.exec as (sql: string) => Database.Database).bind(raw);
+    raw.exec = (sql: string) => {
+      if (/ALTER TABLE tasks ADD COLUMN/i.test(sql)) alterCount++;
+      return origExec(sql);
+    };
+
+    // Second init on the same already-current DB — should skip ALTERs
+    idx1.init();
+    idx1.close();
+
+    expect(alterCount).toBe(0);
+  });
+
+  it('runs ALTER probes when db_schema_version row is missing (legacy DB)', () => {
+    // Build a DB, strip db_schema_version row to simulate legacy
+    const idx1 = new SqliteIndex(dbPath);
+    idx1.init();
+    idx1.getRawDb().exec("DELETE FROM schema_meta WHERE key='db_schema_version'");
+    idx1.close();
+
+    // Re-open — should re-run the ALTER probes and stamp the version
+    const idx2 = new SqliteIndex(dbPath);
+    idx2.init();
+    const raw = idx2.getRawDb();
+    const row = raw
+      .prepare("SELECT value FROM schema_meta WHERE key='db_schema_version'")
+      .get() as { value: string } | undefined;
+    expect(row).toBeDefined();
+    expect(row!.value).toBe(String(SqliteIndex.DB_SCHEMA_VERSION));
+    idx2.close();
+  });
+
+  it('fresh DB gets all expected columns after a single init()', () => {
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    const cols = (
+      idx.getRawDb().prepare('PRAGMA table_info(tasks)').all() as Array<{ name: string }>
+    ).map(c => c.name);
+    const expected = [
+      'body_hash', 'spec_file', 'milestone', 'estimate_hours', 'plan_file',
+      'auto_captured', 'area', 'scheduled_for', 'agent_status', 'block_reason',
+      'triage_note', 'triage_confidence', 'closed_at', 'close_batch',
+    ];
+    for (const col of expected) {
+      expect(cols, `expected column ${col}`).toContain(col);
+    }
+    idx.close();
   });
 });

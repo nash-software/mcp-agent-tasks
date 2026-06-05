@@ -78,16 +78,19 @@ describe('ensureHealthyIndex — self-heal', () => {
     idx.close();
 
     let rebuildCalled = false;
-    const result = ensureHealthyIndex(dbPath, {}, () => { rebuildCalled = true; });
+    const { result, index } = ensureHealthyIndex(dbPath, {}, () => { rebuildCalled = true; });
     expect(result).toBe('ok');
     expect(rebuildCalled).toBe(false);
+    // Healthy path returns an open index (Step D)
+    expect(index).not.toBeNull();
+    index!.close();
   });
 
   it('rebuilds a CORRUPT database from the markdown source', () => {
     // Write garbage where a valid SQLite db should be.
     fs.writeFileSync(dbPath, 'this is not a sqlite database at all\n'.repeat(50));
 
-    const result = ensureHealthyIndex(dbPath, {}, (fresh) => {
+    const { result, index } = ensureHealthyIndex(dbPath, {}, (fresh) => {
       fresh.nextId('TEST');
       fresh.upsertTask(makeTask('TEST-1'));
       fresh.upsertTask(makeTask('TEST-2'));
@@ -95,6 +98,8 @@ describe('ensureHealthyIndex — self-heal', () => {
     });
 
     expect(result).toBe('rebuilt');
+    // Rebuilt path returns null — caller must open their own SqliteIndex (Step D)
+    expect(index).toBeNull();
     expect(countTasks(dbPath)).toBe(3);
   });
 
@@ -107,7 +112,7 @@ describe('ensureHealthyIndex — self-heal', () => {
 
     // threshold of 1 byte forces the oversized path even on a tiny valid db.
     let rebuildCalled = false;
-    const result = ensureHealthyIndex(dbPath, { maxDbBytes: 1 }, (fresh) => {
+    const { result, index } = ensureHealthyIndex(dbPath, { maxDbBytes: 1 }, (fresh) => {
       rebuildCalled = true;
       fresh.nextId('TEST');
       fresh.upsertTask(makeTask('TEST-1'));
@@ -115,6 +120,8 @@ describe('ensureHealthyIndex — self-heal', () => {
 
     expect(result).toBe('rebuilt');
     expect(rebuildCalled).toBe(true);
+    // Rebuilt path returns null (Step D)
+    expect(index).toBeNull();
     expect(countTasks(dbPath)).toBe(1);
   });
 });
@@ -168,7 +175,7 @@ describe('ensureHealthyIndex — Step B ratio-based self-heal', () => {
     }
 
     let rebuildCalled = false;
-    const result = ensureHealthyIndex(
+    const { result } = ensureHealthyIndex(
       dbPath,
       { bloatRatio: 0.4, minPageFloor: 256 },
       (fresh) => {
@@ -189,11 +196,12 @@ describe('ensureHealthyIndex — Step B ratio-based self-heal', () => {
     idx.close();
 
     let rebuildCalled = false;
-    const result = ensureHealthyIndex(
+    const { result, index } = ensureHealthyIndex(
       dbPath,
       { bloatRatio: 0.4, minPageFloor: 256 },
       () => { rebuildCalled = true; },
     );
+    index?.close();
     expect(result).toBe('ok');
     expect(rebuildCalled).toBe(false);
   });
@@ -313,11 +321,13 @@ describe('SqliteIndex — body_hash column migration (existing DBs)', () => {
     rmDirSafe(tmpDir);
   });
 
-  it('re-adds body_hash on init() for a DB that lacks the column', () => {
-    // Build a DB, then simulate a legacy DB by dropping body_hash.
+  it('re-adds body_hash on init() for a legacy DB that lacks the column and db_schema_version', () => {
+    // Build a DB, then simulate a legacy DB by dropping body_hash AND removing
+    // db_schema_version so the migration block re-runs on next init().
     let idx = new SqliteIndex(dbPath);
     idx.init();
     idx.getRawDb().exec('ALTER TABLE tasks DROP COLUMN body_hash');
+    idx.getRawDb().exec("DELETE FROM schema_meta WHERE key='db_schema_version'");
     // Sanity: column is gone.
     const cols0 = (idx.getRawDb().prepare("PRAGMA table_info(tasks)").all() as { name: string }[]).map(c => c.name);
     expect(cols0).not.toContain('body_hash');
@@ -334,4 +344,72 @@ describe('SqliteIndex — body_hash column migration (existing DBs)', () => {
     idx.close();
   });
 
+});
+
+// ── MCPAT-071: Step D — single DB open at boot ───────────────────────────────
+describe('ensureHealthyIndex — Step D single DB open + returned index', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    dbPath = path.join(tmpDir, 'tasks.db');
+  });
+  afterEach(() => {
+    rmDirSafe(tmpDir);
+  });
+
+  it('healthy path: returns an open index the caller can query without re-opening', () => {
+    // Seed a healthy DB
+    const seed = new SqliteIndex(dbPath);
+    seed.init();
+    void seed.nextId('TEST');
+    seed.upsertTask(makeTask('TEST-1'));
+    seed.close();
+
+    let rebuildCalled = false;
+    const { result, index } = ensureHealthyIndex(dbPath, {}, () => { rebuildCalled = true; });
+
+    expect(result).toBe('ok');
+    expect(rebuildCalled).toBe(false);
+    expect(index).not.toBeNull();
+
+    // The returned connection must be usable without a second open
+    const task = index!.getTask('TEST-1');
+    expect(task).not.toBeNull();
+    expect(task!.id).toBe('TEST-1');
+
+    index!.close();
+  });
+
+  it('rebuilt path: returns null (caller must open their own SqliteIndex)', () => {
+    // Force a corrupt DB
+    fs.writeFileSync(dbPath, 'not a sqlite db\n'.repeat(10));
+
+    const { result, index } = ensureHealthyIndex(dbPath, {}, (fresh) => {
+      void fresh.nextId('TEST');
+      fresh.upsertTask(makeTask('TEST-1'));
+    });
+
+    expect(result).toBe('rebuilt');
+    expect(index).toBeNull();
+  });
+
+  it('healthy path: index is already initialised (getTask works, no second init needed)', () => {
+    const seed = new SqliteIndex(dbPath);
+    seed.init();
+    void seed.nextId('TEST');
+    seed.upsertTask(makeTask('TEST-2'));
+    seed.close();
+
+    const { result, index } = ensureHealthyIndex(dbPath, {}, () => { /* noop */ });
+    expect(result).toBe('ok');
+    expect(index).not.toBeNull();
+
+    // Should be able to list tasks without calling init() again
+    const tasks = index!.listTasks({ project: 'TEST' });
+    expect(tasks.some(t => t.id === 'TEST-2')).toBe(true);
+
+    index!.close();
+  });
 });

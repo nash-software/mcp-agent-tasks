@@ -106,7 +106,10 @@ async function main(): Promise<void> {
   // or oversized database is rebuilt from markdown before the server accepts
   // any tool requests.
   const dbPath = path.join(config.storageDir, '.index.db');
-  const healthResult = ensureHealthyIndex(dbPath, {}, (freshIndex) => {
+  // ensureHealthyIndex returns an already-open SqliteIndex on the healthy path
+  // (MCPAT-071 Step D — single DB open at boot).  On the rebuilt path it
+  // returns null and the caller must open a new SqliteIndex.
+  const { result: healthStatus, index: healthIndex } = ensureHealthyIndex(dbPath, {}, (freshIndex) => {
     // Reconcile every configured project into the fresh index during rebuild.
     // Reconcile is PREFIX-scoped, not directory-scoped — global-storage prefixes
     // (e.g. MCPAT/NASH/IFS) share one tasksDir, so we must NOT dedupe by tasksDir
@@ -130,12 +133,17 @@ async function main(): Promise<void> {
       throw new Error(`rebuild reconcile failed for ${errors.length} project(s): ${errors.join('; ')}`);
     }
   });
-  if (healthResult === 'rebuilt') {
+  if (healthStatus === 'rebuilt') {
     process.stderr.write('[index-health] index was corrupt/oversized and has been rebuilt from markdown\n');
   }
 
-  const sqliteIndex = new SqliteIndex(dbPath);
-  sqliteIndex.init();
+  // Reuse the healthy-path connection returned by ensureHealthyIndex (already open +
+  // init'd).  If the DB was rebuilt, healthIndex is null — open a fresh SqliteIndex.
+  const sqliteIndex: SqliteIndex = healthIndex ?? (() => {
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    return idx;
+  })();
 
   const markdownStore = new MarkdownStore();
   const manifestWriter = new ManifestWriter();
@@ -297,7 +305,7 @@ async function main(): Promise<void> {
     setImmediate(() => reconcileNext(i + 1));
   };
   // Skip initial reconcile if ensureHealthyIndex already rebuilt from markdown.
-  if (healthResult !== 'rebuilt') {
+  if (healthStatus !== 'rebuilt') {
     setImmediate(() => reconcileNext(0));
   } else {
     // Still need to start watchers even when we skipped reconcile.
