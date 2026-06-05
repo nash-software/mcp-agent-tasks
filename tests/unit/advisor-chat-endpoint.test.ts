@@ -160,6 +160,28 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
     });
     expect(res.status).toBe(400);
   });
+
+  it('400 on a sessionId that could inject a CLI flag', async () => {
+    const res = await fetch(`${baseUrl}/api/advisor/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'hi' }],
+        sessionId: '--output-format',
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400 on more than 50 messages', async () => {
+    const many = Array.from({ length: 51 }, () => ({ role: 'user', content: 'x' }));
+    const res = await fetch(`${baseUrl}/api/advisor/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: many }),
+    });
+    expect(res.status).toBe(400);
+  });
 });
 
 // ─── Happy-path: fake binary emitting stream-json ─────────────────────────
