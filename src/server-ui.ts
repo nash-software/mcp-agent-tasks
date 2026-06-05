@@ -19,6 +19,7 @@ import type { Priority, Area, Task, TaskStatus, StatusTransition, TaskType } fro
 import { isValidTransition } from './types/transitions.js';
 import { buildProjectsList } from './projects-list.js';
 import { McpTasksError } from './types/errors.js';
+import { computeBuildId, runBuild, resolvePackageRoot } from './dev/build-runner.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1245,6 +1246,13 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
   }
 
   const uiDir = join(__dirname, '..', 'dist', 'ui');
+
+  // Dev-tray gate (MCPAT-072 Phase A): read once at server start. Controls whether the
+  // rebuild-and-restart endpoint exists. The shipped tool runs without this flag and therefore
+  // cannot trigger a build (/api/dev/update returns 404). /api/version is always available.
+  const devTray = process.env['MCPAT_DEV_TRAY'] === '1';
+  const distDir = join(__dirname, '..', 'dist');
+  const repoRoot = resolvePackageRoot();
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://localhost`);
@@ -3341,6 +3349,47 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
       // API: agent activity log (P2-04) — append-only JSONL, newest-first
       if (pathname === '/api/agent/log' && req.method === 'GET') {
         sendJson(res, 200, readAgentLog()); // [] when file missing
+        return;
+      }
+
+      // API: build version (MCPAT-072 Phase A) — always available so the UI/tray poller can detect
+      // a fresh build regardless of the dev-tray flag. Must NOT be cached.
+      if (pathname === '/api/version' && req.method === 'GET') {
+        const body = JSON.stringify({ buildId: computeBuildId(distDir), devTray });
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+        });
+        res.end(body);
+        return;
+      }
+
+      // API: dev rebuild+restart (MCPAT-072 Phase A). Absent in the shipped tool (404 when the
+      // dev-tray flag is off). When enabled: rebuild, and on success flush the response then exit so
+      // the tray supervisor respawns on fresh code. On failure: report the log and stay up.
+      if (pathname === '/api/dev/update' && req.method === 'POST') {
+        if (!devTray) {
+          sendError(res, 404, `Unknown route: ${pathname}`);
+          return;
+        }
+        void runBuild(repoRoot).then((result) => {
+          if (result.ok) {
+            const body = JSON.stringify({ ok: true, buildId: result.buildId });
+            res.writeHead(200, {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(body),
+            });
+            // Defer exit until the response is fully flushed so the tray sees the success ack
+            // before the process restarts.
+            res.end(body, () => {
+              setTimeout(() => process.exit(0), 250);
+            });
+          } else {
+            // Build failed — stay up, no restart. Surface the log for diagnosis.
+            sendJson(res, 200, { ok: false, log: result.log });
+          }
+        });
         return;
       }
 
