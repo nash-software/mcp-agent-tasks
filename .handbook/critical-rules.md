@@ -316,7 +316,7 @@
 
 ## [HIGH] P4-02: batch close all done tasks into closed state
 
-## [HIGH] EstimatePrompt.tsx — component structure
+## [HIGH] EstimatePrompt.tsx — source structure (P4-04, AC 1–3)
 
 ## [HIGH] TodayView.tsx — estimate prompt integration (P4-04)
 
@@ -572,7 +572,7 @@
 
 ## [HIGH] filter.ts — activeFilterCount dimension counter
 
-## [HIGH] SqliteIndex — files child table persistence (MCPAT-068)
+## [HIGH] SqliteIndex files child table persistence
 
 ## [HIGH] TaskPanel.tsx — MCPAT-068 types structure
 
@@ -637,3 +637,95 @@
 ## [HIGH] POST /api/capture/infer validation and LLM fallback
 
 ## [HIGH] POST /api/capture/note endpoint validation and project fallback
+
+## [HIGH] NotesView (Phase E pinned-grid)
+
+## [HIGH] useCaptureOverlay.ts — focusCapture signature
+
+## [HIGH] CaptureOverlay.tsx — placeholder text per mode
+
+## [HIGH] CaptureOverlay.tsx — flash feedback text
+
+## [HIGH] App.tsx — focusCapture wiring
+
+## [HIGH] nav.ts — NAV order and kbd mapping (AC1, AC3, AC4)
+
+## [HIGH] nav.ts — NAV_GROUPS (AC2)
+
+## [HIGH] Nav.tsx — group rendering and count/kbd display (AC5, AC6)
+
+## [HIGH] types.ts — Density type (AC10)
+
+## [HIGH] createNote API function
+
+## [HIGH] sortTasks — complexity
+
+## [HIGH] sortTasks — estimate
+
+## [HIGH] AREA_ORDER — canonical area sort constant
+
+## [HIGH] TODAY_SORT_KEYS — ordered list constant
+
+## [HIGH] TODAY_SORT_KEY_LABEL — human-readable labels
+
+## [HIGH] taskCmp — priority
+
+## [HIGH] taskCmp — area
+
+## [HIGH] taskCmp — estimate
+
+## [HIGH] taskCmp — project
+
+## [HIGH] sortWithDoneSink
+
+## [HIGH] NoteStore Phase E — title + pinned fields
+
+## [HIGH] POST /api/notes (Phase E)
+
+## [HIGH] DELETE /api/notes/:id (Phase E)
+
+## [HIGH] P5-05 — reopen closed + interactive Completed
+
+## [HIGH] useToday.ts — scheduleWithEstimate (P4-04, AC 2)
+
+## [HIGH] SQLite auto_vacuum incremental mode and space reclamation
+
+## [HIGH] ensureHealthyIndex self-healing behavior
+
+## [HIGH] ensureHealthyIndex free-page-ratio healing algorithm
+
+## [HIGH] SqliteIndex body_hash storage contract for incremental reconciliation
+
+## [HIGH] ensureHealthyIndex return contract and DB open state
+
+## [HIGH] SqliteIndex upsertTask ON CONFLICT DO UPDATE for FTS synchronization
+
+## [HIGH] SqliteIndex db_schema_version gates ALTER TABLE probes on init()
+
+## [HIGH] buildSuggestions — critical task suggestion trigger
+
+## [HIGH] buildSuggestions — capacity hour warning suggestion
+
+## [HIGH] buildSuggestions — blocked task suggestion
+
+## [HIGH] buildSuggestions — task ID correlation across notes
+
+## [HIGH] buildSuggestions — automation scheduling suggestion for weekly tasks
+
+## [HIGH] buildSuggestions — suggestion ranking and result slicing
+
+## [HIGH] localAdvice — keyword-driven advice branching logic
+
+## [HIGH] SUGGESTED_PROMPTS constant structure and validation
+
+## [HIGH] POST /api/advisor/chat ENOENT error handling and request validation
+
+## [HIGH] POST /api/advisor/chat successful SSE response contract
+
+## [HIGH] streamAdvisorChat — happy path SSE frame handling
+
+## [HIGH] streamAdvisorChat — error frame handling
+
+## [HIGH] AdvisorView.tsx — self-fetching container structure
+
+## [HIGH] AdvisorView.tsx — render structure
