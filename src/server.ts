@@ -338,7 +338,12 @@ async function main(): Promise<void> {
   // so close()'s checkpoint alone is not enough (MCPAT-049). unref() so the
   // timer never keeps the process alive.
   const CHECKPOINT_INTERVAL_MS = 5 * 60 * 1000;
-  const checkpointTimer = setInterval(() => sqliteIndex.checkpoint(), CHECKPOINT_INTERVAL_MS);
+  const checkpointTimer = setInterval(() => {
+    // checkpoint() first so WAL pages are moved into the main file,
+    // then incrementalVacuum() reclaims newly-available free pages.
+    sqliteIndex.checkpoint();
+    sqliteIndex.incrementalVacuum();
+  }, CHECKPOINT_INTERVAL_MS);
   checkpointTimer.unref();
 
   // Cleanup on exit

@@ -135,6 +135,13 @@ export class SqliteIndex {
     // they must be set on every open. Setting them here (before init()/schema)
     // guarantees they are always active regardless of call order.
     try {
+      // Enable incremental auto-vacuum BEFORE any table is created.
+      // auto_vacuum only takes effect on a fresh/empty file (or after a full VACUUM),
+      // so it must run before init() applies schema.sql. On an already-created /
+      // bloated DB, this sets the mode for future pages but does NOT reclaim existing
+      // free pages — the ratio-based self-heal in index-health.ts handles that path
+      // by forcing a full rebuild+VACUUM of bloated existing files.
+      this.db.pragma('auto_vacuum = INCREMENTAL');
       this.db.pragma('foreign_keys = ON');
       this.db.pragma('busy_timeout = 5000');
       this.db.pragma('journal_mode = WAL');
@@ -946,6 +953,29 @@ export class SqliteIndex {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[sqlite-index] vacuum failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Reclaim free pages incrementally without a full file rewrite.
+   * Requires auto_vacuum = INCREMENTAL (set in constructor).
+   * Call after checkpoint() so the WAL is flushed first — free pages in the WAL
+   * cannot be reclaimed until they are in the main file.
+   *
+   * @param pages Number of free pages to reclaim. Omit to reclaim all free pages.
+   * Never throws — failures are logged to stderr.
+   */
+  incrementalVacuum(pages?: number): void {
+    if (!this.db.open) return;
+    try {
+      if (pages !== undefined) {
+        this.db.pragma(`incremental_vacuum(${pages})`);
+      } else {
+        this.db.pragma('incremental_vacuum');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] incrementalVacuum failed: ${msg}`);
     }
   }
 
