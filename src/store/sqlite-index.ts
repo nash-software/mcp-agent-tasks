@@ -120,6 +120,8 @@ interface NoteRow {
   created_at: string;
   updated_at: string;
   brain_sync_failed: number;
+  title: string | null;
+  pinned: number;
 }
 
 export class SqliteIndex {
@@ -229,7 +231,9 @@ export class SqliteIndex {
         tags TEXT NOT NULL DEFAULT '[]',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        brain_sync_failed INTEGER NOT NULL DEFAULT 0
+        brain_sync_failed INTEGER NOT NULL DEFAULT 0,
+        title TEXT,
+        pinned INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_notes_project ON notes(project);
       CREATE INDEX IF NOT EXISTS idx_notes_task_id ON notes(task_id);
@@ -240,6 +244,15 @@ export class SqliteIndex {
       this.db.exec('ALTER TABLE notes ADD COLUMN brain_sync_failed INTEGER NOT NULL DEFAULT 0');
     } catch {
       // Column already exists — expected on re-init
+    }
+    // Migration: add title and pinned columns (Phase E)
+    const noteColumns = this.db.pragma('table_info(notes)') as Array<{ name: string }>;
+    const noteColNames = new Set(noteColumns.map(c => c.name));
+    if (!noteColNames.has('title')) {
+      this.db.exec('ALTER TABLE notes ADD COLUMN title TEXT');
+    }
+    if (!noteColNames.has('pinned')) {
+      this.db.exec('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
     }
   }
 
@@ -955,13 +968,15 @@ export class SqliteIndex {
 
   upsertNote(note: NoteRecord): void {
     this.db.prepare(`
-      INSERT INTO notes (id, body, project, task_id, tags, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO notes (id, body, project, task_id, tags, created_at, updated_at, title, pinned)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         body = excluded.body,
         task_id = excluded.task_id,
         tags = excluded.tags,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        title = excluded.title,
+        pinned = excluded.pinned
     `).run(
       note.id,
       note.body,
@@ -970,7 +985,13 @@ export class SqliteIndex {
       JSON.stringify(note.tags),
       note.created_at,
       note.updated_at,
+      note.title ?? null,
+      note.pinned ? 1 : 0,
     );
+  }
+
+  deleteNote(id: string): void {
+    this.db.prepare(`DELETE FROM notes WHERE id = ?`).run(id);
   }
 
   getNote(id: string): NoteRecord | null {
@@ -1043,6 +1064,8 @@ export class SqliteIndex {
       created_at: row.created_at,
       updated_at: row.updated_at,
       ...(row.brain_sync_failed ? { brain_sync_failed: true } : {}),
+      ...(row.title != null ? { title: row.title } : {}),
+      ...(row.pinned ? { pinned: true } : {}),
     };
   }
 

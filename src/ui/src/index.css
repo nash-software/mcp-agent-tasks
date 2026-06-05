@@ -471,6 +471,20 @@
 .nav-status { display: flex; gap: 16px; padding: 2px 4px; }
 .ns-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-muted, #71717a); }
 
+/* ── Notes grid (Phase E) ──────────────────────────────────────────────────── */
+.notes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.notes-divider { height: 1px; background: var(--s3); margin: 16px 0; }
+.note-card { border: 1px solid var(--s3); border-radius: var(--r-card); background: var(--s1); padding: 14px 16px; transition: border-color 100ms; }
+.note-card:hover { border-color: #34343a; }
+.note-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.note-at { margin-left: auto; font-size: 11px; color: var(--muted-2); font-family: var(--font-mono); }
+.note-title { font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 6px; text-wrap: pretty; }
+.note-body { font-size: 12.5px; color: var(--text2); line-height: 1.55; margin-bottom: 10px; text-wrap: pretty; }
+.note-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.note-tag { font-size: 11px; color: var(--text2); background: var(--s2); border-radius: 4px; padding: 2px 6px; }
+.notes-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; color: var(--muted-2); }
+@media (max-width: 760px) { .notes-grid { grid-template-columns: 1fr; } }
+
 /* ── Phase F — done-row completed view restyle (MCPAT-070-F) ──────────────── */
 .done-row { display: flex; align-items: center; gap: 11px; min-height: var(--row-h); padding: 0 10px 0 12px; border-radius: 6px; cursor: pointer; transition: background 100ms; width: 100%; border: none; background: transparent; text-align: left; }
 .done-row:hover { background: var(--color-surface-1, #111113); }
