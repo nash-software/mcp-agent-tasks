@@ -16,6 +16,7 @@ import { TaskStore } from './store/task-store.js';
 import { Reconciler } from './store/reconciler.js';
 import { planCollisionFixes, applyCollisionFixes, findReferences, type StoreRef } from './store/id-collision-fixer.js';
 import { NoteStore } from './store/note-store.js';
+import { installTray, uninstallTray } from './cli-install-tray.js';
 
 // Extended update type to carry git link fields through the update path
 interface UpdateWithGit extends TaskUpdateInput {
@@ -1264,6 +1265,27 @@ notesCmd
     );
     console.log(`✓ Created note ${note.id} in project ${note.project}`);
     idx.close();
+  });
+
+// ── install-tray ──────────────────────────────────────────────────────────────
+
+program
+  .command('install-tray')
+  .description(
+    'Register agent-tasks tray to launch hidden at Windows login via a Scheduled Task. ' +
+    'Use --uninstall to remove it.',
+  )
+  .option('--uninstall', 'remove the autostart entry instead of creating it', false)
+  .action((options: { uninstall: boolean }) => {
+    // Resolve the dist/cli.js path: when compiled, __dirname is dist/, so
+    // dist/cli.js lives in __dirname itself.
+    const cliBinPath = path.join(__dirname, 'cli.js');
+
+    if (options.uninstall) {
+      uninstallTray();
+    } else {
+      installTray(cliBinPath);
+    }
   });
 
 // ── tray ──────────────────────────────────────────────────────────────────────
