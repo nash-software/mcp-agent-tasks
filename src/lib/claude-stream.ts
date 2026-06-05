@@ -87,9 +87,16 @@ export async function* spawnClaudeStream(
 
   let settled = false
 
-  // Write prompt to stdin then close it
-  child.stdin.write(prompt, 'utf-8')
-  child.stdin.end()
+  // Write prompt to stdin then close it.
+  // A child that closes its stdin early (a CLI that errors, is missing, or exits
+  // before reading its prompt) makes this write emit EPIPE. Swallow it so an
+  // unhandled stream error can never crash the SSE handler — the real failure is
+  // surfaced via the child 'error'/'close' frames instead.
+  child.stdin.on('error', () => { /* ignore EPIPE: child closed stdin early */ })
+  if (child.stdin.writable) {
+    child.stdin.write(prompt, 'utf-8')
+    child.stdin.end()
+  }
 
   // Yield mechanism: use a queue + resolvers so we can yield from the async generator
   // while the child emits events asynchronously.
