@@ -14,11 +14,27 @@ export const MAX_TAGS = 50;
 export const MAX_FILES = 200;
 
 /**
- * Maximum SQLite index file size in bytes (100 MiB).
+ * Maximum SQLite index file size in bytes (~25 MiB).
+ * Still ~4x a generous working set, but no longer 17x.
  * If the .index.db file exceeds this threshold at startup, the index is
  * treated as oversized and rebuilt from markdown source of truth.
  */
-export const MAX_DB_BYTES = 100 * 1024 * 1024;
+export const MAX_DB_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Free-page ratio above which the index is considered bloated and will be
+ * rebuilt by ensureHealthyIndex. 0.4 = 40% of pages are dead/unused.
+ * Only triggers when page_count >= MIN_PAGE_FLOOR to avoid churning tiny DBs.
+ */
+export const BLOAT_RATIO_THRESHOLD = 0.4;
+
+/**
+ * Minimum page count before the ratio-based bloat check kicks in.
+ * Tiny DBs can have a high ratio by accident (e.g. a handful of rows after
+ * bulk deletion) but are so small that rebuilding gains nothing.
+ * 256 pages * 4 KiB/page = 1 MiB minimum before ratio check applies.
+ */
+export const MIN_PAGE_FLOOR = 256;
 
 /**
  * Maximum number of lines kept in the agent-log.jsonl rolling log.

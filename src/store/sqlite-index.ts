@@ -127,6 +127,23 @@ interface NoteRow {
 export class SqliteIndex {
   private db: Database.Database;
 
+  /**
+   * Monotone integer incremented whenever the ALTER TABLE migration block in
+   * init() adds a new column.  Stored in schema_meta under the key
+   * 'db_schema_version' (distinct from the task-format 'schema_version' which
+   * is mirrored into markdown frontmatter — do NOT reuse that key).
+   *
+   * When init() detects that the stored value already equals DB_SCHEMA_VERSION
+   * it skips the 14 ALTER TABLE probes entirely, shrinking the synchronous
+   * boot path (MCPAT-071 Step D).
+   *
+   * Bump this constant whenever you add a new ALTER TABLE migration below.
+   * Current version 1 covers: body_hash, spec_file, milestone, estimate_hours,
+   * plan_file, auto_captured, area, scheduled_for, agent_status, block_reason,
+   * triage_note, triage_confidence, closed_at, close_batch.
+   */
+  static readonly DB_SCHEMA_VERSION = 1;
+
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
@@ -135,6 +152,13 @@ export class SqliteIndex {
     // they must be set on every open. Setting them here (before init()/schema)
     // guarantees they are always active regardless of call order.
     try {
+      // Enable incremental auto-vacuum BEFORE any table is created.
+      // auto_vacuum only takes effect on a fresh/empty file (or after a full VACUUM),
+      // so it must run before init() applies schema.sql. On an already-created /
+      // bloated DB, this sets the mode for future pages but does NOT reclaim existing
+      // free pages — the ratio-based self-heal in index-health.ts handles that path
+      // by forcing a full rebuild+VACUUM of bloated existing files.
+      this.db.pragma('auto_vacuum = INCREMENTAL');
       this.db.pragma('foreign_keys = ON');
       this.db.pragma('busy_timeout = 5000');
       this.db.pragma('journal_mode = WAL');
@@ -156,34 +180,58 @@ export class SqliteIndex {
     const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
     this.db.exec(schemaSql);
 
-    // Migration: add spec_file column to existing databases.
-    // Fresh databases get it from schema.sql above; existing ones need ALTER TABLE.
-    // SQLite serialises writes — concurrent init() calls are safe via try/catch.
-    const addColumnIfNotExists = (sql: string): void => {
-      try {
-        this.db.exec(sql);
-      } catch (err) {
-        if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
-          throw err;
-        }
-        // 'duplicate column name' means column already exists — expected on re-init
-      }
-    };
+    // Migration: add columns to existing databases that pre-date schema.sql additions.
+    // Fresh databases get all columns from schema.sql above; only older on-disk DBs need ALTER.
+    //
+    // MCPAT-071 Step D: gate the 14 ALTER probes behind db_schema_version so they
+    // are skipped on every boot after the first successful migration.  The key
+    // 'db_schema_version' lives in schema_meta and is DISTINCT from 'schema_version'
+    // (which is the task-format version mirrored into markdown frontmatter — do NOT
+    // reuse that key, see markdown-store.ts:94 and task-factory.ts:44).
+    //
+    // Fresh DBs: schema.sql creates the schema_meta table + 'schema_version' row but
+    // no 'db_schema_version' row, so stored_db_version is null and ALTERs run once,
+    // then db_schema_version is stamped. Subsequent inits skip the ALTERs.
+    //
+    // Legacy DBs: no 'db_schema_version' row → ALTERs run (idempotent), then stamped.
+    const storedVersionRow = this.db
+      .prepare<[], { value: string }>("SELECT value FROM schema_meta WHERE key='db_schema_version'")
+      .get();
+    const storedDbVersion = storedVersionRow ? parseInt(storedVersionRow.value, 10) : null;
 
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
-    addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL)");
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
-    addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL)");
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN closed_at INTEGER');
-    addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN close_batch TEXT');
+    if (storedDbVersion !== SqliteIndex.DB_SCHEMA_VERSION) {
+      // SQLite serialises writes — concurrent init() calls are safe via try/catch.
+      const addColumnIfNotExists = (sql: string): void => {
+        try {
+          this.db.exec(sql);
+        } catch (err) {
+          if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
+            throw err;
+          }
+          // 'duplicate column name' means column already exists — expected on re-init
+        }
+      };
+
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN body_hash TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN spec_file TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN milestone TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN estimate_hours REAL');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN plan_file TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN auto_captured INTEGER DEFAULT 0');
+      addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN area TEXT CHECK(area IN ('client','personal','outsource','internal') OR area IS NULL)");
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN scheduled_for TEXT');
+      addColumnIfNotExists("ALTER TABLE tasks ADD COLUMN agent_status TEXT CHECK(agent_status IN ('scheduled','running','done') OR agent_status IS NULL)");
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN block_reason TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_note TEXT');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN triage_confidence REAL');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN closed_at INTEGER');
+      addColumnIfNotExists('ALTER TABLE tasks ADD COLUMN close_batch TEXT');
+
+      // Stamp the current version so subsequent boots skip this block.
+      this.db.prepare(
+        "INSERT OR REPLACE INTO schema_meta(key, value) VALUES ('db_schema_version', ?)",
+      ).run(String(SqliteIndex.DB_SCHEMA_VERSION));
+    }
 
     // Ensure new tables exist on pre-existing DBs (idempotent — IF NOT EXISTS)
     this.db.exec(`
@@ -396,8 +444,14 @@ export class SqliteIndex {
    * no post-upsert patching).
    */
   upsertTask(task: Task, bodyHash?: string | null): void {
+    // Use ON CONFLICT(id) DO UPDATE instead of INSERT OR REPLACE.
+    // INSERT OR REPLACE fires tasks_ad (AFTER DELETE) + tasks_ai (AFTER INSERT) for every
+    // existing row, causing FTS shadow page churn on every reconcile.
+    // ON CONFLICT routes existing rows through tasks_au (AFTER UPDATE) which does a clean
+    // delete+reinsert in the FTS index without disturbing the rowid, avoiding free-page bloat.
+    // Every non-PK column must appear in the SET list — a missing column silently stops updating.
     const insert = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (
+      INSERT INTO tasks (
         id, title, type, status, priority, project,
         complexity, complexity_manual, why, parent,
         created, updated, last_activity,
@@ -418,6 +472,46 @@ export class SqliteIndex {
         @area, @scheduled_for, @agent_status, @block_reason,
         @triage_note, @triage_confidence, @closed_at, @close_batch
       )
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        type = excluded.type,
+        status = excluded.status,
+        priority = excluded.priority,
+        project = excluded.project,
+        complexity = excluded.complexity,
+        complexity_manual = excluded.complexity_manual,
+        why = excluded.why,
+        parent = excluded.parent,
+        created = excluded.created,
+        updated = excluded.updated,
+        last_activity = excluded.last_activity,
+        claimed_by = excluded.claimed_by,
+        claimed_at = excluded.claimed_at,
+        claim_ttl_hours = excluded.claim_ttl_hours,
+        branch = excluded.branch,
+        pr_number = excluded.pr_number,
+        pr_url = excluded.pr_url,
+        pr_state = excluded.pr_state,
+        pr_title = excluded.pr_title,
+        pr_merged_at = excluded.pr_merged_at,
+        pr_base_branch = excluded.pr_base_branch,
+        file_path = excluded.file_path,
+        body = excluded.body,
+        body_hash = excluded.body_hash,
+        schema_version = excluded.schema_version,
+        spec_file = excluded.spec_file,
+        milestone = excluded.milestone,
+        estimate_hours = excluded.estimate_hours,
+        plan_file = excluded.plan_file,
+        auto_captured = excluded.auto_captured,
+        area = excluded.area,
+        scheduled_for = excluded.scheduled_for,
+        agent_status = excluded.agent_status,
+        block_reason = excluded.block_reason,
+        triage_note = excluded.triage_note,
+        triage_confidence = excluded.triage_confidence,
+        closed_at = excluded.closed_at,
+        close_batch = excluded.close_batch
     `);
 
     const upsertAll = this.db.transaction((t: Task) => {
@@ -920,6 +1014,39 @@ export class SqliteIndex {
   }
 
   /**
+   * Return the ratio of free (unused) pages to total pages in the DB file.
+   * Returns 0 when page_count is 0 or when the DB is not open.
+   * Never throws — returns 0 on any error.
+   *
+   * Used by ensureHealthyIndex for ratio-based bloat detection (MCPAT-071 Step B).
+   */
+  freePageRatio(): number {
+    if (!this.db.open) return 0;
+    try {
+      const freelist = this.db.pragma('freelist_count', { simple: true }) as number;
+      const pageCount = this.db.pragma('page_count', { simple: true }) as number;
+      if (pageCount === 0) return 0;
+      return freelist / pageCount;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Return the total number of pages in the DB file.
+   * Returns 0 when the DB is not open or on error.
+   * Used alongside freePageRatio() for the bloat floor check.
+   */
+  pageCount(): number {
+    if (!this.db.open) return 0;
+    try {
+      return this.db.pragma('page_count', { simple: true }) as number;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Run SQLite's built-in quick_check integrity verification.
    * Returns true if the database passes ('ok'), false if corrupt.
    * Never throws — failures are treated as corrupt.
@@ -946,6 +1073,29 @@ export class SqliteIndex {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[sqlite-index] vacuum failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Reclaim free pages incrementally without a full file rewrite.
+   * Requires auto_vacuum = INCREMENTAL (set in constructor).
+   * Call after checkpoint() so the WAL is flushed first — free pages in the WAL
+   * cannot be reclaimed until they are in the main file.
+   *
+   * @param pages Number of free pages to reclaim. Omit to reclaim all free pages.
+   * Never throws — failures are logged to stderr.
+   */
+  incrementalVacuum(pages?: number): void {
+    if (!this.db.open) return;
+    try {
+      if (pages !== undefined) {
+        this.db.pragma(`incremental_vacuum(${pages})`);
+      } else {
+        this.db.pragma('incremental_vacuum');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[sqlite-index] incrementalVacuum failed: ${msg}`);
     }
   }
 
