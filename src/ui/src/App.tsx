@@ -758,7 +758,7 @@ export function App(): React.JSX.Element {
           {view === 'activity'  && <ActivityView filter={filter} areaMap={areaMap} onOpenPanel={setPanel} />}
           {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
           {view === 'notes'     && <NotesView filter={filter} areaMap={areaMap} focusCapture={capture.focusCapture} />}
-          {view === 'advisor'   && <AdvisorView />}
+          {view === 'advisor'   && <AdvisorView onOpenPanel={setPanel} />}
         </div>
       </main>
 

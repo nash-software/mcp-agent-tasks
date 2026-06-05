@@ -1,166 +1,107 @@
-import React, { useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Lightbulb, RefreshCw, AlertCircle } from 'lucide-react'
-import { ViewHeader } from '../components/ViewHeader'
+/**
+ * AdvisorView.tsx — Self-fetching container for the Advisor panel.
+ * Mirrors every sibling view: self-fetches tasks + notes, computes suggestions,
+ * and passes everything down to AdvisorChat + SuggestionCard presentational components.
+ */
+import React, { useState, useMemo } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { RefreshCw } from 'lucide-react'
+import { fetchNotes, transitionTask, signoffTask } from '../api'
+import { useTasks } from '../hooks/useTasks'
+import { buildSuggestions, type SuggestionId } from '../lib/advisor'
+import { AdvisorChat } from '../components/AdvisorChat'
+import { SuggestionCard } from '../components/SuggestionCard'
+import type { PanelState } from '../types'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Citation {
-  type: 'note' | 'task'
-  id: string
-  snippet: string
+interface Props {
+  onOpenPanel: (panel: PanelState) => void
 }
 
-interface Recommendation {
-  rank: number
-  action: string
-  reasoning: string
-  citations: Citation[]
-}
-
-interface AdvisorResponse {
-  recommendations: Recommendation[]
-  generated_at: string
-  error?: 'UNAVAILABLE'
-}
-
-// ── API ───────────────────────────────────────────────────────────────────────
-
-async function fetchAdvisorQuery(project?: string): Promise<AdvisorResponse> {
-  try {
-    const res = await fetch('/api/advisor/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project }),
-    })
-    if (!res.ok) return { recommendations: [], generated_at: new Date().toISOString(), error: 'UNAVAILABLE' }
-    return res.json() as Promise<AdvisorResponse>
-  } catch {
-    return { recommendations: [], generated_at: new Date().toISOString(), error: 'UNAVAILABLE' }
-  }
-}
-
-// ── Skeleton ─────────────────────────────────────────────────────────────────
-
-function SkeletonCard(): React.JSX.Element {
-  return (
-    <div className="advisor-card skeleton" aria-hidden="true">
-      <div className="skeleton-rank" />
-      <div className="skeleton-body">
-        <div className="skeleton-line w-3/4" />
-        <div className="skeleton-line w-1/2 mt-1" />
-      </div>
-    </div>
-  )
-}
-
-// ── RecommendationCard ────────────────────────────────────────────────────────
-
-function RecommendationCard({ rec }: { rec: Recommendation }): React.JSX.Element {
-  return (
-    <div className="advisor-card">
-      <span className="advisor-rank">{rec.rank}</span>
-      <div className="advisor-content">
-        <p className="advisor-action">{rec.action}</p>
-        <p className="advisor-reasoning">{rec.reasoning}</p>
-        {rec.citations.length > 0 && (
-          <div className="advisor-citations">
-            {rec.citations.map((c, i) => (
-              <span key={i} className={`advisor-citation ${c.type}`} title={c.snippet}>
-                {c.type === 'note' ? '📝' : '✓'} {c.id}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── AdvisorView ───────────────────────────────────────────────────────────────
-
-export function AdvisorView(): React.JSX.Element {
+export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
 
-  const advisorQuery = useQuery({
-    queryKey: ['advisor'],
-    queryFn: () => fetchAdvisorQuery(),
-    staleTime: 5 * 60 * 1000,
-    retry: false,
+  // ── Data fetching ─────────────────────────────────────────────────────────
+  const { tasks } = useTasks()
+  const { data: notes = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => fetchNotes({ limit: 200 }),
   })
 
-  const handleRefresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['advisor'] })
-  }, [queryClient])
+  // ── Capacity target ───────────────────────────────────────────────────────
+  const [target] = useState<number>(() => {
+    const raw = localStorage.getItem('lifeos-target')
+    const mins = raw !== null ? parseFloat(raw) : NaN
+    return isNaN(mins) ? 8 : mins / 60
+  })
 
-  const data = advisorQuery.data
-  const isLoading = advisorQuery.isLoading
-  const isUnavailable = data?.error === 'UNAVAILABLE' || advisorQuery.isError
-  const hasRecommendations = (data?.recommendations.length ?? 0) > 0
+  // ── Suggestions ───────────────────────────────────────────────────────────
+  const [seed, setSeed] = useState(0)
+  const [dismissed, setDismissed] = useState<SuggestionId[]>([])
+  const [live, setLive] = useState(false)
 
+  const all = useMemo(
+    () => buildSuggestions(tasks, notes, target),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, notes, target, seed],
+  )
+  const suggestions = all.filter(s => !dismissed.includes(s.id))
+
+  // ── Navigation ────────────────────────────────────────────────────────────
+  const onOpenTask = (id: string): void => onOpenPanel({ mode: 'detail', taskId: id })
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+  const commitMut = useMutation({
+    mutationFn: (id: string) => transitionTask(id, 'in_progress'),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['today'] })
+    },
+  })
+
+  const hermesMut = useMutation({
+    mutationFn: (id: string) => signoffTask(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    },
+  })
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="advisor-view">
-      <ViewHeader
-        title="Advisor"
-        right={
-          <button
-            type="button"
-            className="btn-icon"
-            onClick={handleRefresh}
-            disabled={isLoading}
-            aria-label="Refresh advisor"
-            title="Refresh"
-          >
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
-          </button>
-        }
+    <div className="advisor-view fade-up">
+      <AdvisorChat
+        tasks={tasks}
+        notes={notes}
+        suggestions={all}
+        onOpenTask={onOpenTask}
+        live={live}
+        onLive={() => setLive(true)}
       />
-
-      {/* Loading state */}
-      {isLoading && (
-        <div className="advisor-cards">
-          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
-        </div>
-      )}
-
-      {/* Offline / error state */}
-      {!isLoading && isUnavailable && (
-        <div className="advisor-unavailable">
-          <AlertCircle size={24} className="text-ink-faint" />
-          <p className="text-ink-muted text-sm mt-2">
-            Advisor unavailable — brain may be offline or claude CLI not found.
-          </p>
-          {data?.generated_at && (
-            <p className="text-ink-faint text-xs mt-1">Last updated: {data.generated_at}</p>
-          )}
+      <div className="sugg-section">
+        <div className="sugg-section-head">
+          <span className="section-label">Suggestions</span>
+          <span className="sugg-sub">synthesised from your tasks, notes &amp; brain</span>
           <button
-            type="button"
-            className="btn-sm mt-3"
-            onClick={handleRefresh}
+            className="icon-btn"
+            title="Refresh"
+            onClick={() => { setDismissed([]); setSeed(s => s + 1) }}
           >
-            Try again
+            <RefreshCw size={14} />
           </button>
         </div>
-      )}
-
-      {/* Empty state */}
-      {!isLoading && !isUnavailable && !hasRecommendations && (
-        <div className="advisor-empty">
-          <Lightbulb size={32} className="text-ink-faint" />
-          <p className="text-ink-muted text-sm mt-2">
-            Add some notes and tasks to get personalised advice.
-          </p>
-        </div>
-      )}
-
-      {/* Recommendations */}
-      {!isLoading && hasRecommendations && (
-        <div className="advisor-cards">
-          {data!.recommendations.map(rec => (
-            <RecommendationCard key={rec.rank} rec={rec} />
-          ))}
-        </div>
-      )}
+        {suggestions.length === 0
+          ? <div className="hero-empty">All clear — nothing needs your attention right now.</div>
+          : suggestions.map(s => (
+            <SuggestionCard
+              key={s.id}
+              s={s}
+              onDismiss={id => setDismissed(d => [...d, id])}
+              onOpen={onOpenTask}
+              onCommit={c => commitMut.mutate(c)}
+              onHermes={h => hermesMut.mutate(h)}
+            />
+          ))
+        }
+      </div>
     </div>
   )
 }
