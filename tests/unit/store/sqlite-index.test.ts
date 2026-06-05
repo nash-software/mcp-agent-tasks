@@ -677,4 +677,57 @@ describe('SqliteIndex', () => {
       }
     });
   });
+
+  // ── MCPAT-071: Step C — ON CONFLICT DO UPDATE reduces FTS churn ──────────────
+  describe('MCPAT-071 Step C — upsertTask ON CONFLICT DO UPDATE', () => {
+    it('FTS row count equals task count after a mix of inserts and updates', () => {
+      ensureProject(idx, 'TEST');
+      // Insert 10 tasks
+      for (let i = 1; i <= 10; i++) {
+        idx.upsertTask(makeTask({ id: `TEST-0${String(i).padStart(2, '0')}`, title: `Task ${i}` }));
+      }
+      // Update 5 of them (same id, changed title)
+      for (let i = 1; i <= 5; i++) {
+        idx.upsertTask(makeTask({ id: `TEST-0${String(i).padStart(2, '0')}`, title: `Updated Task ${i}` }));
+      }
+      // FTS row count must equal tasks table row count — no phantom duplicates
+      const rawDb = idx.getRawDb();
+      const ftsCnt = (rawDb.prepare('SELECT count(*) c FROM tasks_fts').get() as { c: number }).c;
+      const taskCnt = (rawDb.prepare('SELECT count(*) c FROM tasks').get() as { c: number }).c;
+      expect(ftsCnt).toBe(taskCnt);
+    });
+
+    it('FTS finds updated content, not stale content', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ title: 'OldUniqueWord12345' }));
+      // Re-upsert with new title
+      idx.upsertTask(makeTask({ title: 'NewUniqueWord67890' }));
+      const found = idx.searchTasks('NewUniqueWord67890');
+      expect(found.some(r => r.id === 'TEST-001')).toBe(true);
+      const stale = idx.searchTasks('OldUniqueWord12345');
+      expect(stale.some(r => r.id === 'TEST-001')).toBe(false);
+    });
+
+    it('repeated no-op upserts of unchanged rows keep free-page ratio below 0.15', () => {
+      // Seed an index with auto_vacuum=INCREMENTAL (default), do M no-op upserts,
+      // and confirm the freelist ratio stays low — the ON CONFLICT path avoids the
+      // delete+reinsert churn that inflates the freelist under INSERT OR REPLACE.
+      ensureProject(idx, 'TEST');
+      for (let i = 1; i <= 20; i++) {
+        idx.upsertTask(makeTask({ id: `TEST-${String(i).padStart(3, '0')}` }));
+      }
+      // Perform 50 no-op re-upserts of the same unchanged rows
+      for (let round = 0; round < 50; round++) {
+        for (let i = 1; i <= 20; i++) {
+          idx.upsertTask(makeTask({ id: `TEST-${String(i).padStart(3, '0')}` }));
+        }
+      }
+      idx.checkpoint();
+      idx.incrementalVacuum();
+      const freelist = idx['db'].pragma('freelist_count', { simple: true }) as number;
+      const pageCount = idx['db'].pragma('page_count', { simple: true }) as number;
+      const ratio = pageCount > 0 ? freelist / pageCount : 0;
+      expect(ratio).toBeLessThan(0.15);
+    });
+  });
 });

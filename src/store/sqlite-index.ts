@@ -403,8 +403,14 @@ export class SqliteIndex {
    * no post-upsert patching).
    */
   upsertTask(task: Task, bodyHash?: string | null): void {
+    // Use ON CONFLICT(id) DO UPDATE instead of INSERT OR REPLACE.
+    // INSERT OR REPLACE fires tasks_ad (AFTER DELETE) + tasks_ai (AFTER INSERT) for every
+    // existing row, causing FTS shadow page churn on every reconcile.
+    // ON CONFLICT routes existing rows through tasks_au (AFTER UPDATE) which does a clean
+    // delete+reinsert in the FTS index without disturbing the rowid, avoiding free-page bloat.
+    // Every non-PK column must appear in the SET list — a missing column silently stops updating.
     const insert = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (
+      INSERT INTO tasks (
         id, title, type, status, priority, project,
         complexity, complexity_manual, why, parent,
         created, updated, last_activity,
@@ -425,6 +431,46 @@ export class SqliteIndex {
         @area, @scheduled_for, @agent_status, @block_reason,
         @triage_note, @triage_confidence, @closed_at, @close_batch
       )
+      ON CONFLICT(id) DO UPDATE SET
+        title = excluded.title,
+        type = excluded.type,
+        status = excluded.status,
+        priority = excluded.priority,
+        project = excluded.project,
+        complexity = excluded.complexity,
+        complexity_manual = excluded.complexity_manual,
+        why = excluded.why,
+        parent = excluded.parent,
+        created = excluded.created,
+        updated = excluded.updated,
+        last_activity = excluded.last_activity,
+        claimed_by = excluded.claimed_by,
+        claimed_at = excluded.claimed_at,
+        claim_ttl_hours = excluded.claim_ttl_hours,
+        branch = excluded.branch,
+        pr_number = excluded.pr_number,
+        pr_url = excluded.pr_url,
+        pr_state = excluded.pr_state,
+        pr_title = excluded.pr_title,
+        pr_merged_at = excluded.pr_merged_at,
+        pr_base_branch = excluded.pr_base_branch,
+        file_path = excluded.file_path,
+        body = excluded.body,
+        body_hash = excluded.body_hash,
+        schema_version = excluded.schema_version,
+        spec_file = excluded.spec_file,
+        milestone = excluded.milestone,
+        estimate_hours = excluded.estimate_hours,
+        plan_file = excluded.plan_file,
+        auto_captured = excluded.auto_captured,
+        area = excluded.area,
+        scheduled_for = excluded.scheduled_for,
+        agent_status = excluded.agent_status,
+        block_reason = excluded.block_reason,
+        triage_note = excluded.triage_note,
+        triage_confidence = excluded.triage_confidence,
+        closed_at = excluded.closed_at,
+        close_batch = excluded.close_batch
     `);
 
     const upsertAll = this.db.transaction((t: Task) => {
