@@ -64,7 +64,7 @@ export function buildSuggestions(
   target: number,
 ): Suggestion[] {
   const TODAY_K = todayKey()
-  const open = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled')
+  const open = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived')
   const out: Omit<Suggestion, 'rank'>[] = []
 
   // 1 — s-crit: critical work not moving
@@ -146,7 +146,7 @@ export function buildSuggestions(
         }
       }
     }
-    // collect IDs that appear in >=2 notes and are open (not done/cancelled)
+    // collect IDs that appear in >=2 notes and are open (not done/closed/archived)
     const openIds = new Set(open.map(t => t.id))
     const crossNote = [...freq.entries()]
       .filter(([id, count]) => count >= 2 && openIds.has(id))
@@ -233,7 +233,7 @@ export function localAdvice(
 ): string {
   const q = prompt.toLowerCase()
   const TODAY_K = todayKey()
-  const open = tasks.filter(t => t.status !== 'done' && t.status !== 'cancelled')
+  const open = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived')
 
   if (/block|stuck|waiting/.test(q)) {
     const b = open.filter(t => t.status === 'blocked')
