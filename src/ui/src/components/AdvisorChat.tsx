@@ -1,0 +1,192 @@
+/**
+ * AdvisorChat.tsx — Presentational chat UI for the Advisor.
+ * Owns its own thread state only. Everything else (tasks, notes, suggestions)
+ * is passed from AdvisorView.
+ */
+import React, { useState, useRef, useEffect } from 'react'
+import { Wand2, Send, Layers, FileText, Search, Bot } from 'lucide-react'
+import { streamAdvisorChat, type ChatMessage } from '../api'
+import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, type Suggestion } from '../lib/advisor'
+import type { Task } from '../types'
+import type { NoteRecord } from '../api'
+
+// ── Types ──────────────────────────────────────────────────────────────────
+
+interface Msg {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+interface Props {
+  tasks: Task[]
+  notes: NoteRecord[]
+  suggestions: Suggestion[]
+  onOpenTask: (id: string) => void
+  live: boolean
+  onLive: () => void
+}
+
+// ── ChatHeader (non-exported inner component) ──────────────────────────────
+
+function ChatHeader({ live, openCount }: { live: boolean; openCount: number }): React.JSX.Element {
+  return (
+    <div className="adv-chat-head">
+      <div className="adv-avatar"><Wand2 size={16} /></div>
+      <div className="adv-head-main">
+        <div className="adv-head-title">Advisor</div>
+        <div className="adv-head-sub">Reasons over your tasks, notes &amp; brain</div>
+      </div>
+      <div className="adv-ctx">
+        <span className={`adv-ctx-chip${live ? ' live' : ''}`}>
+          <span className="d" />{live ? 'Claude · live' : 'Claude'}
+        </span>
+        <span className="adv-ctx-chip">brain CLI</span>
+        <span className="adv-ctx-chip">{openCount} tasks</span>
+      </div>
+    </div>
+  )
+}
+
+// ── AdvisorChat ────────────────────────────────────────────────────────────
+
+export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive }: Props): React.JSX.Element {
+  const openCount = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived').length
+
+  const greeting: Msg = {
+    role: 'assistant',
+    text: suggestions[0]
+      ? `I've read your ${openCount} open tasks, ${notes.length} notes and the brain index. The one thing I'd flag first: ${suggestions[0].title.toLowerCase()}. Ask me anything, or tap a prompt below.`
+      : `I've read your ${openCount} open tasks and ${notes.length} notes. Ask me anything about your work — I'll help you prioritise, unblock, or plan.`,
+  }
+
+  const [msgs, setMsgs] = useState<Msg[]>([greeting])
+  const [val, setVal] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined)
+  const threadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight
+    }
+  }, [msgs])
+
+  async function send(textArg?: string): Promise<void> {
+    const text = (textArg ?? val).trim()
+    if (!text || busy) return
+    setVal('')
+    const userMsg: Msg = { role: 'user', text }
+    setMsgs(prev => [...prev, userMsg, { role: 'assistant', text: '' }])
+    setBusy(true)
+
+    const apiMessages: ChatMessage[] = [...msgs, userMsg].map(m => ({ role: m.role, content: m.text }))
+
+    try {
+      for await (const frame of streamAdvisorChat(apiMessages, sessionId)) {
+        if (frame.type === 'delta') {
+          onLive()
+          setMsgs(prev => {
+            const next = [...prev]
+            const last = next[next.length - 1]
+            if (last && last.role === 'assistant') {
+              next[next.length - 1] = { ...last, text: last.text + frame.text }
+            }
+            return next
+          })
+        } else if (frame.type === 'session') {
+          setSessionId(frame.sessionId)
+        } else if (frame.type === 'error') {
+          throw new Error(frame.message)
+        } else if (frame.type === 'done') {
+          break
+        }
+      }
+    } catch {
+      const fallback = localAdvice(text, tasks, suggestions)
+      setMsgs(prev => {
+        const next = [...prev]
+        next[next.length - 1] = { role: 'assistant', text: fallback }
+        return next
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      void send()
+    }
+  }
+
+  const showPrompts = msgs.length <= 1
+
+  return (
+    <div className="adv-chat">
+      <ChatHeader live={live} openCount={openCount} />
+
+      <div className="adv-thread" ref={threadRef}>
+        {msgs.map((m, i) => (
+          <div key={i} className={`adv-msg ${m.role}`}>
+            {m.role === 'assistant' && (
+              <div className="adv-msg-ico"><Wand2 size={12} /></div>
+            )}
+            {m.role === 'assistant' && busy && i === msgs.length - 1 && m.text === '' ? (
+              <div className="adv-bubble thinking">
+                <span className="dot" /><span className="dot" /><span className="dot" />
+              </div>
+            ) : (
+              <div className="adv-bubble">
+                {m.role === 'assistant'
+                  ? renderWithChips(m.text, onOpenTask)
+                  : m.text}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {showPrompts && (
+        <div className="adv-suggested">
+          {SUGGESTED_PROMPTS.map(p => (
+            <button key={p} className="prompt-chip" onClick={() => void send(p)}>
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="adv-composer">
+        <div className="adv-tools">
+          <span className="tool-chip"><Layers size={10} />@tasks</span>
+          <span className="tool-chip"><FileText size={10} />@notes</span>
+          <span className="tool-chip"><Search size={10} />brain search</span>
+          <span className="tool-chip"><Bot size={10} />ACR</span>
+        </div>
+        <div className="adv-input-row">
+          <textarea
+            className="adv-input"
+            rows={1}
+            placeholder="Ask anything about your work…"
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={busy}
+          />
+          <button
+            className="adv-send"
+            onClick={() => void send()}
+            disabled={!val.trim() || busy}
+            aria-label="Send"
+          >
+            <Send size={14} />
+          </button>
+        </div>
+        <div className="adv-foot-hint">
+          {live ? 'Connected to Claude · responses stream live' : 'Claude offline — answering from local context'}
+        </div>
+      </div>
+    </div>
+  )
+}

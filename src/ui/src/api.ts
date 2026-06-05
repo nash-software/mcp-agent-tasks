@@ -257,6 +257,58 @@ export async function deleteNote(id: string): Promise<void> {
   }
 }
 
+// ── Advisor chat ──────────────────────────────────────────────────────────
+
+export interface ChatMessage { role: 'user' | 'assistant'; content: string }
+
+export type AdvisorChatFrame =
+    { type: 'delta'; text: string }
+  | { type: 'session'; sessionId: string }
+  | { type: 'done' }
+  | { type: 'error'; message: string }
+
+export async function* streamAdvisorChat(
+  messages: ChatMessage[],
+  sessionId?: string,
+): AsyncGenerator<AdvisorChatFrame> {
+  const res = await fetch('/api/advisor/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, sessionId }),
+  })
+  if (!res.ok || !res.body) {
+    yield { type: 'error', message: `HTTP ${res.status}` }
+    return
+  }
+  // Parse SSE stream line-by-line
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buf = ''
+  let currentEvent = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split('\n')
+    buf = lines.pop() ?? ''
+    for (const line of lines) {
+      if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); continue }
+      if (line.startsWith('data:')) {
+        const payload = line.slice(5).trim()
+        try {
+          const obj = JSON.parse(payload) as Record<string, unknown>
+          if (currentEvent === 'delta') yield { type: 'delta', text: String(obj['text'] ?? '') }
+          else if (currentEvent === 'session') yield { type: 'session', sessionId: String(obj['sessionId'] ?? '') }
+          else if (currentEvent === 'done') { yield { type: 'done' }; return }
+          else if (currentEvent === 'error') { yield { type: 'error', message: String(obj['message'] ?? 'unknown') }; return }
+        } catch { /* skip malformed frame */ }
+        currentEvent = ''
+      }
+    }
+  }
+  yield { type: 'done' }
+}
+
 export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }> {
   const res = await fetch('/api/config')
   if (!res.ok) return {}
