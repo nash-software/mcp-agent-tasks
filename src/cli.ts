@@ -1266,6 +1266,17 @@ notesCmd
     idx.close();
   });
 
+// ── tray ──────────────────────────────────────────────────────────────────────
+
+program
+  .command('tray')
+  .description('Start the tray supervisor (serve-ui + system tray icon)')
+  .option('--port <n>', 'port number', '4242')
+  .action(async (opts: { port: string }) => {
+    const { startTray } = await import('./tray/index.js');
+    await startTray({ port: parseInt(opts.port, 10) });
+  });
+
 // ── parse ─────────────────────────────────────────────────────────────────────
 
 program.parse(process.argv);
