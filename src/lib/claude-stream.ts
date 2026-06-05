@@ -53,7 +53,7 @@ export interface SpawnClaudeStreamOpts {
  */
 export async function* spawnClaudeStream(
   opts: SpawnClaudeStreamOpts,
-): AsyncIterable<StreamFrame> {
+): AsyncGenerator<StreamFrame> {
   const { bin, prompt, sessionId, timeoutMs = 60_000 } = opts
 
   const args = [

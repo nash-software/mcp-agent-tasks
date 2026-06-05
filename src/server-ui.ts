@@ -3139,15 +3139,17 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             const bin = resolveClaudeBinary();
             const iter = spawnClaudeStream({ bin, prompt: fullPrompt, sessionId });
 
-            // Kill the iterator only on a genuine client disconnect — i.e. the
+            // Kill the generator only on a genuine client disconnect — i.e. the
             // response stream closed before we finished writing it. Listening on
             // req 'close' is wrong here: it fires when the request *body* finishes
             // (right after we read it), which would abort the generator after the
             // first frame and drop later frames (e.g. the session id). Guarding on
             // res.writableEnded ensures normal completion never aborts the stream.
+            // iter.return() (the same generator the for-await consumes) runs its
+            // finally block, killing the claude child immediately — no orphan process.
             res.on('close', () => {
               if (!res.writableEnded) {
-                void iter[Symbol.asyncIterator]().return?.();
+                void iter.return(undefined);
               }
             });
 
