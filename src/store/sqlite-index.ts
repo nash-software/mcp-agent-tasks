@@ -927,6 +927,39 @@ export class SqliteIndex {
   }
 
   /**
+   * Return the ratio of free (unused) pages to total pages in the DB file.
+   * Returns 0 when page_count is 0 or when the DB is not open.
+   * Never throws — returns 0 on any error.
+   *
+   * Used by ensureHealthyIndex for ratio-based bloat detection (MCPAT-071 Step B).
+   */
+  freePageRatio(): number {
+    if (!this.db.open) return 0;
+    try {
+      const freelist = this.db.pragma('freelist_count', { simple: true }) as number;
+      const pageCount = this.db.pragma('page_count', { simple: true }) as number;
+      if (pageCount === 0) return 0;
+      return freelist / pageCount;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Return the total number of pages in the DB file.
+   * Returns 0 when the DB is not open or on error.
+   * Used alongside freePageRatio() for the bloat floor check.
+   */
+  pageCount(): number {
+    if (!this.db.open) return 0;
+    try {
+      return this.db.pragma('page_count', { simple: true }) as number;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Run SQLite's built-in quick_check integrity verification.
    * Returns true if the database passes ('ok'), false if corrupt.
    * Never throws — failures are treated as corrupt.

@@ -10,11 +10,23 @@
 
 import fs from 'node:fs';
 import { SqliteIndex } from './sqlite-index.js';
-import { MAX_DB_BYTES } from './limits.js';
+import { MAX_DB_BYTES, BLOAT_RATIO_THRESHOLD, MIN_PAGE_FLOOR } from './limits.js';
 
 export interface HealthOpts {
   /** Override the maximum allowed db bytes (useful for tests). Defaults to MAX_DB_BYTES. */
   maxDbBytes?: number;
+  /**
+   * Free-page ratio threshold above which the DB is considered bloated.
+   * Only applies when page_count >= minPageFloor.
+   * Defaults to BLOAT_RATIO_THRESHOLD (0.4).
+   */
+  bloatRatio?: number;
+  /**
+   * Minimum page count before the ratio-based bloat check kicks in.
+   * Tiny DBs are never rebuilt on ratio alone.
+   * Defaults to MIN_PAGE_FLOOR (256).
+   */
+  minPageFloor?: number;
 }
 
 export type HealthResult = 'ok' | 'rebuilt';
@@ -46,6 +58,8 @@ export function ensureHealthyIndex(
   rebuildFn: (freshIndex: SqliteIndex) => void,
 ): HealthResult {
   const maxBytes = opts.maxDbBytes ?? MAX_DB_BYTES;
+  const bloatRatio = opts.bloatRatio ?? BLOAT_RATIO_THRESHOLD;
+  const minPageFloor = opts.minPageFloor ?? MIN_PAGE_FLOOR;
 
   let reason: string | null = null;
 
@@ -62,7 +76,7 @@ export function ensureHealthyIndex(
     }
   }
 
-  // --- 2. If still ok, open and run quick_check ---
+  // --- 2. If still ok, open and run quick_check + ratio check ---
   if (reason === null) {
     let probe: SqliteIndex | null = null;
     try {
@@ -70,6 +84,14 @@ export function ensureHealthyIndex(
       probe.init();
       if (!probe.quickCheck()) {
         reason = 'quick_check failed (corrupt)';
+      } else {
+        // Ratio-based bloat detection: rebuild if too many dead pages (MCPAT-071 Step B).
+        // Only triggers above MIN_PAGE_FLOOR so trivially small DBs are left alone.
+        const ratio = probe.freePageRatio();
+        const pages = probe.pageCount();
+        if (ratio > bloatRatio && pages >= minPageFloor) {
+          reason = `bloated (${(ratio * 100).toFixed(1)}% free pages, ${pages} pages)`;
+        }
       }
     } catch (err) {
       reason = `open/init failed: ${err instanceof Error ? err.message : String(err)}`;
