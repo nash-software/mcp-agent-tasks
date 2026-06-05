@@ -1,5 +1,6 @@
 import React from 'react'
 import { useStats } from '../hooks/useStats'
+import { UpdateButton } from './UpdateButton'
 import type { TaskStatus } from '../types'
 
 export type TabId = 'today' | 'board' | 'roadmap' | 'activity' | 'braindump' | 'artifacts'
@@ -23,9 +24,11 @@ const STATUS_LABELS: { key: TaskStatus; label: string; color: string }[] = [
 interface Props {
   activeTab: TabId
   onTabChange: (tab: TabId) => void
+  /** When true, shows the "Update" dev-tray build trigger button. */
+  devTray?: boolean
 }
 
-export function Header({ activeTab, onTabChange }: Props): React.JSX.Element {
+export function Header({ activeTab, onTabChange, devTray = false }: Props): React.JSX.Element {
   const { stats, isLoading } = useStats()
 
   const totals: Record<string, number> = {}
@@ -56,12 +59,13 @@ export function Header({ activeTab, onTabChange }: Props): React.JSX.Element {
         ))}
       </nav>
       {!isLoading && (
-        <div className="ml-auto flex gap-4 text-xs">
+        <div className="ml-auto flex items-center gap-4 text-xs">
           {STATUS_LABELS.map(s => (
             <span key={s.key} className={s.color}>
               {s.label} <strong>{totals[s.key] ?? 0}</strong>
             </span>
           ))}
+          <UpdateButton devTray={devTray} />
         </div>
       )}
     </header>

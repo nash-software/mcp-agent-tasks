@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Nav } from './components/Nav'
+import { ReloadToast } from './components/ReloadToast'
+import { UpdateButton } from './components/UpdateButton'
+import { useBuildVersion } from './hooks/useBuildVersion'
 import { TodayView } from './views/TodayView'
 import { BoardView } from './views/BoardView'
 import { RoadmapView } from './views/RoadmapView'
@@ -232,6 +235,9 @@ export function App(): React.JSX.Element {
   const handleSortChange = useCallback((key: SortKey, dir: SortDir): void => {
     setSort({ key, dir })
   }, [])
+
+  // ─── Build version polling (Phase C) ─────────────────────────────────────
+  const buildVersion = useBuildVersion()
 
   const capture = useCaptureOverlay()
   const { tasks: allTasks } = useTasks()
@@ -652,6 +658,12 @@ export function App(): React.JSX.Element {
         activeProject={filter.projects.length === 1 ? filter.projects[0] : undefined}
       />
 
+      {/* Phase C — dev-tray Update button, shown only when devTray:true from /api/version.
+          UpdateButton returns null when devTray is false — no render overhead in production. */}
+      <div className="fixed top-2 right-4 z-40 flex items-center">
+        <UpdateButton devTray={buildVersion.devTray} />
+      </div>
+
       {/* left nav */}
       <Nav
         view={view}
@@ -797,6 +809,9 @@ export function App(): React.JSX.Element {
         onClose={() => setProjectsModalOpen(false)}
         projects={projectEntries}
       />
+
+      {/* Phase C — Reload toast: appears when the version poller detects a new buildId */}
+      <ReloadToast visible={buildVersion.updateAvailable} />
     </div>
   )
 }
