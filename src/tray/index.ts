@@ -14,7 +14,6 @@ import {
   resolveScratchDir,
   resolveCliBin,
 } from './supervisor.js';
-import type { HealthState } from './supervisor.js';
 import { TRAY_ICON_BASE64 } from './icon.js';
 
 // ── Public entry ──────────────────────────────────────────────────────────────
@@ -46,18 +45,18 @@ export async function startTray(opts: TrayOptions = {}): Promise<void> {
   }
 
   // ── Supervisor ─────────────────────────────────────────────────────────────
+  // NOTE: we intentionally do NOT wire onHealthChange to a tray tooltip update.
+  // systray2's `update-menu` action requires a COMPLETE menu (icon + items);
+  // sending a partial `{title, tooltip}` crashes it asynchronously
+  // ("Cannot read properties of undefined (reading 'forEach')"). Health state is
+  // already logged by the supervisor (setHealth → writeLog), so the live tooltip
+  // refresh is an unnecessary, crash-prone cosmetic.
   const supervisor = new TraySupvisor({
     repoRoot,
     port,
     scratchDir,
     cliBinPath,
-    onHealthChange: (state: HealthState, reason: string) => {
-      handleHealthChange(state, reason, port, trayRef);
-    },
   });
-
-  // Capture tray instance after creation below.
-  let trayRef: { sendAction: (a: { type: string; menu?: unknown }) => void } | null = null;
 
   const cleanup = (): void => {
     supervisor.stop();
@@ -69,7 +68,7 @@ export async function startTray(opts: TrayOptions = {}): Promise<void> {
   supervisor.start();
 
   // ── systray2 menu ──────────────────────────────────────────────────────────
-  trayRef = await startTrayMenu(supervisor, port, scratchDir);
+  await startTrayMenu(supervisor, port, scratchDir);
 }
 
 // ── Menu items (exported for testing) ────────────────────────────────────────
@@ -141,28 +140,6 @@ export function buildMenuItems(
 }
 
 // ── systray2 integration ──────────────────────────────────────────────────────
-
-function handleHealthChange(
-  state: HealthState,
-  reason: string,
-  port: number,
-  tray: { sendAction: (a: { type: string; menu?: unknown }) => void } | null,
-): void {
-  const label =
-    state === 'healthy'
-      ? `agent-tasks — running on :${port}`
-      : state === 'restarting'
-        ? `agent-tasks — restarting…`
-        : `agent-tasks — unhealthy: ${reason.slice(0, 60)}`;
-
-  if (tray !== null) {
-    try {
-      tray.sendAction({ type: 'update-menu', menu: { title: 'agent-tasks', tooltip: label } });
-    } catch {
-      // Tray may not be fully started yet — ignore.
-    }
-  }
-}
 
 async function startTrayMenu(
   supervisor: TraySupvisor,
