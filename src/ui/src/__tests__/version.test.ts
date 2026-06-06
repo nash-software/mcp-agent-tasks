@@ -259,10 +259,6 @@ describe('App.tsx — version wiring', () => {
     expect(src).toContain('ReloadToast')
   })
 
-  it('imports UpdateButton component', () => {
-    expect(src).toContain('UpdateButton')
-  })
-
   it('calls useBuildVersion() hook', () => {
     expect(src).toContain('useBuildVersion()')
   })
@@ -272,9 +268,26 @@ describe('App.tsx — version wiring', () => {
     expect(src).toContain('ReloadToast')
   })
 
-  it('AC3 — passes buildVersion.devTray to UpdateButton devTray prop', () => {
-    expect(src).toContain('buildVersion.devTray')
+  it('AC3 — wires buildVersion.devTray through to the Nav (Update control lives in the nav footer)', () => {
+    expect(src).toContain('devTray={buildVersion.devTray}')
+  })
+})
+
+// ─── Nav.tsx — dev Update control in footer (AC3) ────────────────────────────
+
+describe('Nav.tsx — dev Update control', () => {
+  const src = readSrc('components/Nav.tsx')
+
+  it('imports UpdateButton component', () => {
     expect(src).toContain('UpdateButton')
+  })
+
+  it('AC3 — accepts a devTray prop', () => {
+    expect(src).toContain('devTray')
+  })
+
+  it('AC3 — renders UpdateButton gated on devTray', () => {
+    expect(src).toContain('<UpdateButton devTray={devTray}')
   })
 })
 
