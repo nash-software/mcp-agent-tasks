@@ -729,3 +729,61 @@
 ## [HIGH] AdvisorView.tsx — self-fetching container structure
 
 ## [HIGH] AdvisorView.tsx — render structure
+
+## [HIGH] computeBuildId — stable hash with file-change sensitivity
+
+## [HIGH] runBuild — spawn error handling and cwd isolation
+
+## [HIGH] PWA_MANIFEST — required fields and icon entries
+
+## [HIGH] RUNTIME_CACHING — NetworkOnly for version and dev, NetworkFirst for tasks
+
+## [HIGH] workbox.navigateFallbackDenylist — exclude /api/version and /api/dev/*
+
+## [HIGH] Design token constants — brand-accurate hex colors
+
+## [HIGH] hasBuildChanged — case-sensitive identity comparison
+
+## [HIGH] lib/version.ts — pure Node module with fetchVersion and postDevUpdate
+
+## [HIGH] hooks/useBuildVersion — polling with visibility and cleanup guards
+
+## [HIGH] ReloadToast.tsx — conditional render with window.location.reload
+
+## [HIGH] UpdateButton.tsx — dev-tray conditional with failed state tracking
+
+## [HIGH] App.tsx — version wiring with useBuildVersion and component props
+
+## [HIGH] Header.tsx — devTray prop in interface forwarded to UpdateButton
+
+## [HIGH] serve-ui dev endpoints — GET /api/version and POST /api/dev/update when MCPAT_DEV_TRAY=1
+
+## [HIGH] serve-ui dev endpoints — prod gate when MCPAT_DEV_TRAY unset
+
+## [HIGH] serve-ui dev endpoints — response flush before deferred process exit
+
+## [HIGH] acquireLock integration — exclusive lock with dead-process overwrite
+
+## [HIGH] buildTrayCommand — node-hidden.exe quoted with cli path and tray subcommand
+
+## [HIGH] installTray — reg add /f overwrite for idempotency
+
+## [HIGH] uninstallTray — silent handling of missing registry entries
+
+## [HIGH] cross-platform guard — Windows-only tray operations
+
+## [HIGH] buildMenuItems — 5-item menu with Open, Update, Restart, Logs, Quit handlers
+
+## [HIGH] acquireLock / releaseLock — lock file write and deletion
+
+## [HIGH] serverLogPath — .tray/server.log constant
+
+## [HIGH] resolveCliBin — dist/cli.js constant
+
+## [HIGH] resolveScratchDir — scratchpads directory constant
+
+## [HIGH] TraySupvisor — exponential backoff with MAX_RAPID_RESTARTS threshold
+
+## [HIGH] TraySupvisor — respawn on ok:true build, skip on ok:false
+
+## [HIGH] TraySupvisor — health: healthy on start, restarting on unexpected exit

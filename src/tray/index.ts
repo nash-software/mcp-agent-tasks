@@ -171,7 +171,15 @@ async function startTrayMenu(
   let SysTray: typeof import('systray2').default | undefined;
   try {
     const mod = await import('systray2');
-    SysTray = mod.default;
+    // systray2 is CJS exporting `{ default: SysTray }`. Under Node's ESM→CJS
+    // interop, `mod.default` is the whole module.exports object, so the class
+    // lives at `mod.default.default`. Some bundlers unwrap one level — handle
+    // both shapes rather than assuming.
+    const candidate = mod.default as unknown;
+    const nested = (candidate as { default?: unknown } | null)?.default;
+    SysTray = (typeof nested === 'function'
+      ? nested
+      : candidate) as typeof import('systray2').default;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[tray] systray2 unavailable — running in server-only mode. (${msg})`);

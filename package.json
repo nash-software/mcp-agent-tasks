@@ -26,6 +26,7 @@
     "dist",
     "hooks",
     "schema",
+    "scripts/postinstall-ui.mjs",
     "src/templates",
     "README.md"
   ],
@@ -33,6 +34,7 @@
     "build": "tsup && npm --prefix src/ui run build",
     "build:server": "tsup",
     "build:ui": "npm --prefix src/ui ci --prefer-offline && npm --prefix src/ui run build",
+    "postinstall": "node scripts/postinstall-ui.mjs",
     "type-check": "tsc --noEmit && npm --prefix src/ui run type-check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
