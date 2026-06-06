@@ -211,9 +211,13 @@ describe('POST /api/advisor/chat — happy path (fake claude binary)', () => {
     // The server reads these via spawnClaudeStream; we emit:
     //   content_block_delta → delta frame
     //   result with session_id → session frame
+    // Real CLI shape (MCPAT-074): text deltas arrive inside a stream_event envelope,
+    // and the session id is on the top-level result event. The old fixture used a
+    // bare top-level content_block_delta — a shape the CLI never emits — which is
+    // why this happy-path test passed while the live endpoint streamed nothing.
     const fakeOutput = [
-      JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'hello world' } }),
-      JSON.stringify({ type: 'result', session_id: 'sess-abc-123' }),
+      JSON.stringify({ type: 'stream_event', event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'hello world' } } }),
+      JSON.stringify({ type: 'result', subtype: 'success', result: 'hello world', session_id: 'sess-abc-123' }),
     ].join('\n') + '\n';
 
     const fakeBinPath = process.platform === 'win32'

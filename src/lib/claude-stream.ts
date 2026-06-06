@@ -24,17 +24,47 @@ export type StreamFrame =
 
 // ── Raw stream-json types (parsed from claude stdout) ──────────────────────
 
-interface ContentBlockDeltaEvent {
-  type: 'content_block_delta';
-  delta: { type: string; text?: string }
+/**
+ * The CLI's `--include-partial-messages` mode wraps streaming Anthropic API events
+ * in a `stream_event` envelope: {type:'stream_event', event:{type:'content_block_delta',…}}.
+ * The text we want lives at event.delta.text (delta.type === 'text_delta'). Top-level
+ * `result` carries the session_id. Anything else (thinking/signature deltas, message_*,
+ * system, rate_limit_event) is ignored.
+ */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null;
 }
 
-interface ResultEvent {
-  type: 'result';
-  session_id?: string;
-}
+/**
+ * Parse a single stream-json line into a StreamFrame, or null if the line carries
+ * nothing we surface. Pure + side-effect free so it is unit-testable without a spawn.
+ * Handles both the `stream_event` envelope (real CLI output) and a bare top-level
+ * `content_block_delta` (back-compat / older CLIs).
+ */
+export function parseClaudeStreamLine(line: string): StreamFrame | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  let ev: unknown;
+  try { ev = JSON.parse(trimmed); } catch { return null; }
+  if (!isRecord(ev)) return null;
 
-type ClaudeEvent = ContentBlockDeltaEvent | ResultEvent | { type: string }
+  // Unwrap the stream_event envelope; fall back to the event itself for bare deltas.
+  const inner: unknown = ev['type'] === 'stream_event' && isRecord(ev['event']) ? ev['event'] : ev;
+  if (isRecord(inner) && inner['type'] === 'content_block_delta') {
+    const delta = inner['delta'];
+    if (isRecord(delta) && delta['type'] === 'text_delta' && typeof delta['text'] === 'string') {
+      return { type: 'delta', text: delta['text'] };
+    }
+    return null; // thinking_delta / signature_delta / empty
+  }
+
+  // session id arrives on the top-level result event
+  if (ev['type'] === 'result' && typeof ev['session_id'] === 'string') {
+    return { type: 'session', sessionId: ev['session_id'] };
+  }
+
+  return null;
+}
 
 // ── spawnClaudeStream ──────────────────────────────────────────────────────
 
@@ -132,22 +162,8 @@ export async function* spawnClaudeStream(
     const lines = buf.split('\n')
     buf = lines.pop() ?? ''
     for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        const ev = JSON.parse(trimmed) as ClaudeEvent
-        if (ev.type === 'content_block_delta') {
-          const cbe = ev as ContentBlockDeltaEvent
-          if (cbe.delta.type === 'text_delta' && typeof cbe.delta.text === 'string') {
-            push({ type: 'delta', text: cbe.delta.text })
-          }
-        } else if (ev.type === 'result') {
-          const re = ev as ResultEvent
-          if (re.session_id) {
-            push({ type: 'session', sessionId: re.session_id })
-          }
-        }
-      } catch { /* skip malformed line */ }
+      const frame = parseClaudeStreamLine(line)
+      if (frame) push(frame)
     }
   })
 
@@ -156,15 +172,8 @@ export async function* spawnClaudeStream(
     if (settled) return
     clearTimeout(killTimer)
     // Flush remaining buffer
-    if (buf.trim()) {
-      try {
-        const ev = JSON.parse(buf.trim()) as ClaudeEvent
-        if (ev.type === 'result') {
-          const re = ev as ResultEvent
-          if (re.session_id) push({ type: 'session', sessionId: re.session_id })
-        }
-      } catch { /* skip */ }
-    }
+    const frame = parseClaudeStreamLine(buf)
+    if (frame) push(frame)
     push({ type: 'done' })
     finish()
   })
