@@ -151,6 +151,8 @@ describe('runBuild (AC-2, AC-3)', () => {
     expect(args).toEqual(['run', 'build']);
     expect(options.cwd).toBe('/some/package/root');
     expect(options.cwd).not.toBe(process.cwd());
-    expect(options.shell).toBe(false);
+    // shell:true is required so the platform resolves `npm` → npm.cmd on Windows;
+    // spawning npm.cmd with shell:false throws EINVAL on modern Node.
+    expect(options.shell).toBe(true);
   });
 });

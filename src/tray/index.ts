@@ -243,7 +243,10 @@ async function startTrayMenu(
 function defaultOpenUrl(url: string): void {
   try {
     if (process.platform === 'win32') {
-      spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref();
+      // explorer.exe opens a URL in the default browser/handler. It is a real
+      // .exe, so it avoids the `spawn('cmd' …)`/`.cmd` EINVAL on modern Node.
+      // (explorer returns a non-zero exit on success — harmless; we unref.)
+      spawn('explorer.exe', [url], { detached: true, stdio: 'ignore' }).unref();
     } else if (process.platform === 'darwin') {
       spawn('open', [url], { detached: true, stdio: 'ignore' }).unref();
     } else {
