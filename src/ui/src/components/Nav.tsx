@@ -5,6 +5,7 @@ import { NAV_GROUPS, NAV_BY_ID } from '../lib/nav'
 import { MOD } from '../lib/platform'
 import { useAcrStatus } from '../hooks/useAcrStatus'
 import { AreaDot } from './atoms'
+import { UpdateButton } from './UpdateButton'
 import type { ViewId, TaskArea, Density } from '../types'
 import type { FilterBarProject } from './FilterBar'
 
@@ -34,6 +35,8 @@ interface NavProps {
   onDensityChange: (d: Density) => void
   /** Per-view counts — when defined, shown as a badge; otherwise the kbd hint is shown. */
   navCounts?: Partial<Record<ViewId, number>>
+  /** When true (server running under the tray), show the dev Update control in the footer. */
+  devTray?: boolean
 }
 
 const DENSITY_OPTIONS: { label: string; value: Density }[] = [
@@ -57,6 +60,7 @@ export function Nav({
   density,
   onDensityChange,
   navCounts = {},
+  devTray = false,
 }: NavProps): React.JSX.Element {
   const acrQ = useAcrStatus()
 
@@ -236,6 +240,9 @@ export function Nav({
             Brain
           </span>
         </div>
+
+        {/* Dev-only rebuild trigger (server running under the tray). Hidden in prod. */}
+        <UpdateButton devTray={devTray} />
 
         {/* Settings cog — manage projects */}
         <button

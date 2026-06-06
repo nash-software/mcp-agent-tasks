@@ -8,6 +8,7 @@
  */
 
 import React, { useState } from 'react'
+import { RotateCw } from 'lucide-react'
 import { postDevUpdate, type DevUpdateResponse } from '../lib/version'
 
 interface Props {
@@ -51,18 +52,22 @@ export function UpdateButton({ devTray }: Props): React.JSX.Element | null {
         onClick={() => void handleUpdate()}
         disabled={updateState.phase === 'building'}
         aria-label={updateState.phase === 'building' ? 'Building…' : 'Trigger dev build and update'}
-        className="flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium bg-indigo-900 text-violet-300 hover:bg-indigo-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        title="Rebuild the app and restart the server"
+        className="nav-foot-btn flex items-center gap-2 w-full bg-surface-2 text-ink-muted text-xs px-3 py-1.5 rounded hover:text-ink disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
       >
         {updateState.phase === 'building' ? (
           <>
             <span
-              className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent"
+              className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
               aria-hidden="true"
             />
             Building…
           </>
         ) : (
-          'Update'
+          <>
+            <RotateCw size={13} aria-hidden />
+            Update
+          </>
         )}
       </button>
       {updateState.phase === 'failed' && (

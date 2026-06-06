@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Nav } from './components/Nav'
 import { ReloadToast } from './components/ReloadToast'
-import { UpdateButton } from './components/UpdateButton'
 import { useBuildVersion } from './hooks/useBuildVersion'
 import { TodayView } from './views/TodayView'
 import { BoardView } from './views/BoardView'
@@ -658,12 +657,6 @@ export function App(): React.JSX.Element {
         activeProject={filter.projects.length === 1 ? filter.projects[0] : undefined}
       />
 
-      {/* Phase C — dev-tray Update button, shown only when devTray:true from /api/version.
-          UpdateButton returns null when devTray is false — no render overhead in production. */}
-      <div className="fixed top-2 right-4 z-40 flex items-center">
-        <UpdateButton devTray={buildVersion.devTray} />
-      </div>
-
       {/* left nav */}
       <Nav
         view={view}
@@ -680,6 +673,7 @@ export function App(): React.JSX.Element {
         density={density}
         onDensityChange={setDensityPersisted}
         navCounts={navCounts}
+        devTray={buildVersion.devTray}
       />
 
       {/* main scroll region */}
