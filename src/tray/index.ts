@@ -15,6 +15,7 @@ import {
   resolveCliBin,
 } from './supervisor.js';
 import type { HealthState } from './supervisor.js';
+import { TRAY_ICON_BASE64 } from './icon.js';
 
 // ── Public entry ──────────────────────────────────────────────────────────────
 
@@ -197,7 +198,7 @@ async function startTrayMenu(
 
   const tray = new SysTray({
     menu: {
-      icon: '',
+      icon: TRAY_ICON_BASE64,
       title: 'agent-tasks',
       tooltip: `agent-tasks — running on :${port}`,
       items: systrayItems,
@@ -205,6 +206,18 @@ async function startTrayMenu(
     debug: false,
     copyDir: false,
   });
+
+  // systray2 spawns its helper process inside ready(); `_process` is null until
+  // then. onExit/onError read `_process` directly, so they MUST be registered
+  // AFTER ready() resolves — registering them synchronously throws
+  // "Cannot read properties of null (reading 'on')".
+  try {
+    await tray.ready();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[tray] systray2 failed to start — continuing in server-only mode. (${msg})`);
+    return null;
+  }
 
   tray.onClick((action) => {
     // systray2 passes __id as the zero-based index of the clicked item.
@@ -215,11 +228,6 @@ async function startTrayMenu(
         console.error('[tray] Menu handler error:', err);
       });
     }
-  });
-
-  tray.ready().catch((err: unknown) => {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[tray] systray2 failed to start — continuing in server-only mode. (${msg})`);
   });
 
   tray.onExit(() => {
