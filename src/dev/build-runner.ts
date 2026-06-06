@@ -72,8 +72,6 @@ export function resolvePackageRoot(): string {
 export async function runBuild(
   repoRoot: string,
 ): Promise<{ ok: boolean; log: string; buildId: string }> {
-  const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-
   return new Promise((resolvePromise) => {
     let log = '';
     let settled = false;
@@ -86,9 +84,13 @@ export async function runBuild(
     };
 
     try {
-      const child = spawn(npmCmd, ['run', 'build'], {
+      // shell:true so the platform resolves `npm` → npm.cmd on Windows.
+      // Spawning npm.cmd directly (shell:false) throws EINVAL on modern Node
+      // (Windows .cmd spawn restriction). cwd is an option, not part of the
+      // command line, and the command is fixed — no injection surface.
+      const child = spawn('npm', ['run', 'build'], {
         cwd: repoRoot,
-        shell: false,
+        shell: true,
       });
 
       child.stdout?.on('data', (chunk: Buffer) => {
