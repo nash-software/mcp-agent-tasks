@@ -19,6 +19,13 @@ import { execSync } from 'node:child_process';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const uiDir = join(root, 'src', 'ui');
 
+if (process.env.CI) {
+  // CI installs UI deps in its own dedicated step. Running a nested `npm install`
+  // here (inside the root `npm ci`) duplicates that and can deadlock on npm's
+  // cache lock — skip entirely in CI.
+  process.exit(0);
+}
+
 if (!existsSync(join(uiDir, 'package.json'))) {
   // Published package (or no UI present) — nothing to do.
   process.exit(0);
