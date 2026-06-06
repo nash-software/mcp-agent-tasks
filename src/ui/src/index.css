@@ -12,6 +12,27 @@
     --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
     --nav-w: 216px;
     --ambient-w: 296px;
+
+    /* Design tokens (MCPAT-073) — canonical palette from tailwind.config.js / design handoff.
+       The Advisor CSS block references these without inline fallbacks; without these
+       definitions every Advisor surface/border/radius collapses to transparent/0. */
+    --bg: #09090B;
+    --s1: #111113;
+    --s2: #18181B;
+    --s2-hover: #1D1D20;
+    --s3: #27272A;
+    --text: #FAFAFA;
+    --text2: #A1A1AA;
+    --muted: #71717A;
+    --muted-2: #52525B;
+    --red: #EF4444;
+    --amber: #F59E0B;
+    --green: #22C55E;
+    --blue: #3B82F6;
+    --r-card: 8px;
+    --r-input: 6px;
+    --r-badge: 4px;
+    --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SF Mono', monospace;
   }
 
   html {
@@ -387,6 +408,7 @@
 .btn-sm, .btn-sm-primary, .btn-sm-ghost {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   height: 28px;
   padding: 0 11px;
   border-radius: 6px;

@@ -4,7 +4,7 @@
  * Matches advisor.jsx SuggestionCard structure exactly.
  */
 import React from 'react'
-import { X } from 'lucide-react'
+import { X, Plus, Bot, ArrowRight } from 'lucide-react'
 import { SEV_LABEL } from '../lib/advisor'
 import type { Suggestion, SuggestionId } from '../lib/advisor'
 
@@ -40,13 +40,13 @@ export function SuggestionCard({ s, onDismiss, onOpen, onCommit, onHermes }: Sug
         )}
         <div className="sugg-actions">
           {s.actions.includes('commit') && s.taskIds[0] && (
-            <button className="btn sm" onClick={() => onCommit(s.taskIds[0])}>Commit</button>
+            <button className="btn-sm" onClick={() => onCommit(s.taskIds[0])}><Plus size={14} />Commit</button>
           )}
           {s.actions.includes('hermes') && s.taskIds[0] && (
-            <button className="btn sm" onClick={() => onHermes(s.taskIds[0])}>Hand to Hermes</button>
+            <button className="btn-sm" onClick={() => onHermes(s.taskIds[0])}><Bot size={14} />Hand to Hermes</button>
           )}
           {s.actions.includes('open') && s.taskIds[0] && (
-            <button className="btn sm ghost" onClick={() => onOpen(s.taskIds[0])}>Open</button>
+            <button className="btn-sm-ghost" onClick={() => onOpen(s.taskIds[0])}>Open<ArrowRight size={14} /></button>
           )}
         </div>
       </div>
