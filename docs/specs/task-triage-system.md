@@ -94,6 +94,15 @@ Recommendation: start with **A** (deterministic, fast, no LLM dependency), layer
 | **P4** | Triage UI view (option A) + `/api/triage/*` |
 | **P5** | Tier 2 LLM triage + Advisor integration (option B) |
 
+## 7a. Findings from the P1 dry-run (2026-06-07) — plan pivot
+
+The Tier-0 read-only dry-run surfaced two things that reshape the plan:
+
+- **Tier 0 is low-yield.** Only ~9 open tasks have a *verifiable merged PR*. The "214 stale = mostly merged-but-unflipped" hypothesis does **not** hold against git evidence — the bulk of stale tasks have no linked merged PR. **Tier 2 (LLM "is this done?") is the real workhorse; Tier 0/1 are cheap pre-filters.**
+- **Store divergence (pre-existing).** Open-task counts disagree: live board `/api/tasks` = **310**, MCP `task_stats` = 297, the triage engine reading per-project SQLite indexes *without reconcile* = **140**, flat global store `~/.mcp-tasks/tasks/` = 26 (separate). The board (310) is `openProjectIndexes` **with reconcile-on-boot** (repopulates each index from markdown). **Fix:** the engine must read the **markdown source-of-truth directly** (lock-free, current, matches the board) rather than the SQLite indexes. The broader split-brain (stale indexes vs markdown vs flat store) is logged as a separate data-hygiene item.
+
+**Revised emphasis:** P1 = enumeration fix (read markdown) + Tier 0 + **Tier 2 LLM triage as the centrepiece** (batched, auto-apply high-confidence, escalate the rest), with apply/audit/undo.
+
 ## 8. Resolved decisions (2026-06-06)
 
 - **D1 — End-state status:** auto-resolved → `done`, then a later batch sweeps aged `done` → `closed`. Two-stage keeps a visible/auditable review window in the done column before final close. (`closed` = confirmed-finished-and-archived-from-view; `done` = work complete, still in recent view.)

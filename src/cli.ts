@@ -1303,12 +1303,47 @@ program
 
 program
   .command('triage [project]')
-  .description('Tier-0 dry-run triage: show which open tasks are provably merged (no changes written)')
+  .description('Triage open tasks: Tier-0 git signals (always) + Tier-2 LLM (--llm). Default: dry-run.')
+  .option('--apply', 'apply decisions (write transitions + audit log). Default: dry-run', false)
+  .option('--llm', 'enable Tier-2 LLM triage (default OFF)', false)
+  .option('--limit <n>', 'cap number of tasks sent to LLM', parseInt)
+  .option('--batch <n>', 'LLM batch size (default 15)', parseInt)
+  .option('--threshold <n>', 'LLM confidence threshold 0..1 (default 0.85)', parseFloat)
   .option('--json', 'output raw JSON report')
-  .action(async (_project: string | undefined, options: { json?: boolean }) => {
-    const { runTier0Dryrun } = await import('./triage/engine.js');
+  .action(async (_project: string | undefined, options: {
+    apply: boolean;
+    llm: boolean;
+    limit?: number;
+    batch?: number;
+    threshold?: number;
+    json?: boolean;
+  }) => {
+    const { runTriage } = await import('./triage/engine.js');
     const config = loadConfig();
-    const report = runTier0Dryrun(config);
+
+    const { resolveClaudeBinary } = await import('./server-ui.js');
+    const { spawnClaudeStream } = await import('./lib/claude-stream.js');
+
+    const report = await runTriage(config, {
+      llm: {
+        enabled: options.llm,
+        runBatch: options.llm
+          ? async (prompt: string): Promise<string> => {
+              const bin = resolveClaudeBinary();
+              let text = '';
+              for await (const f of spawnClaudeStream({ bin, prompt, timeoutMs: 120_000 })) {
+                if (f.type === 'delta') text += f.text;
+                else if (f.type === 'error') throw new Error(f.message);
+              }
+              return text;
+            }
+          : undefined,
+        threshold: options.threshold,
+        batchSize: options.batch,
+        maxTasks: options.limit,
+      },
+      apply: options.apply,
+    });
 
     if (options.json) {
       console.log(JSON.stringify(report, null, 2));
@@ -1316,10 +1351,31 @@ program
     }
 
     // Human-readable summary
-    const { decisions, totalOpen, projects } = report;
+    const { decisions, skips, totalOpen, projects, tier0Count, tier2Count } = report;
     const N = decisions.length;
     const M = totalOpen;
-    console.log(`\nTier-0 triage (dry-run): would resolve ${N} of ${M} open tasks\n`);
+    const applyMode = options.apply ? '' : ' (dry-run)';
+    console.log(`\nTriage${applyMode}: ${N} of ${M} open tasks would be resolved\n`);
+    console.log(`  Tier 0: ${tier0Count} resolved`);
+
+    if (options.llm) {
+      const escalated = skips.filter(s => s.reason === 'llm-keep' || s.reason === 'llm-unsure' || s.reason === 'llm-error');
+      const byReason: Record<string, number> = {};
+      for (const s of escalated) byReason[s.reason] = (byReason[s.reason] ?? 0) + 1;
+      const escalationStr = Object.entries(byReason).map(([r, c]) => `${r}:${c}`).join(', ');
+      console.log(`  Tier 2: ${tier2Count} resolved / ${escalated.length} escalated${escalationStr ? ` (${escalationStr})` : ''}`);
+    }
+    console.log('');
+
+    // Per-project breakdown
+    if (projects.length > 0) {
+      console.log('Per-project:');
+      for (const p of [...projects].sort((a, b) => b.resolved - a.resolved)) {
+        if (p.open === 0) continue;
+        console.log(`  ${p.prefix.padEnd(12)} ${p.resolved} resolved / ${p.open} open`);
+      }
+      console.log('');
+    }
 
     // Signal breakdown
     const signalCounts: Record<string, number> = {};
@@ -1329,33 +1385,51 @@ program
     if (Object.keys(signalCounts).length > 0) {
       console.log('Signal breakdown:');
       for (const [sig, cnt] of Object.entries(signalCounts).sort((a, b) => b[1] - a[1])) {
-        console.log(`  ${sig.padEnd(22)} ${cnt}`);
+        console.log(`  ${sig.padEnd(24)} ${cnt}`);
       }
       console.log('');
     }
 
-    // Per-project breakdown
-    if (projects.length > 0) {
-      console.log('Per-project:');
-      for (const p of projects.sort((a, b) => b.resolved - a.resolved)) {
-        console.log(`  ${p.prefix.padEnd(12)} ${p.resolved} resolved / ${p.open} open`);
-      }
-      console.log('');
-    }
-
-    // Sample of up to 15 decisions
-    const sample = decisions.slice(0, 15);
+    // Sample up to 20 decisions
+    const sample = decisions.slice(0, 20);
     if (sample.length > 0) {
-      console.log(`Sample decisions (showing up to 15 of ${N}):`);
+      console.log(`Sample decisions (showing up to 20 of ${N}):`);
       for (const d of sample) {
         const hard = d.evidenceHard ? '' : ' (soft)';
-        console.log(`  RESOLVE ${d.taskId.padEnd(14)} ${d.fromStatus}→done  [${d.signal}]${hard}  ${d.detail}`);
+        const conf = d.confidence !== undefined ? ` conf=${d.confidence.toFixed(2)}` : '';
+        console.log(`  RESOLVE ${d.taskId.padEnd(14)} ${d.fromStatus}→done  [tier ${d.tier}, ${d.signal}${conf}]${hard}  ${d.detail}`);
       }
-      if (N > 15) console.log(`  ... and ${N - 15} more`);
+      if (N > 20) console.log(`  ... and ${N - 20} more`);
       console.log('');
     }
 
-    console.log('Run with --apply to act (not yet implemented).');
+    // Apply summary / dry-run footer
+    if (options.apply) {
+      const applied = report.applied ?? 0;
+      const failed = report.failed ?? 0;
+      console.log(`Applied ${applied}, failed ${failed}.${report.runId ? ` Undo: agent-tasks triage-undo ${report.runId}` : ''}`);
+    } else {
+      console.log('Dry run — re-run with --apply to act.');
+    }
+  });
+
+// ── triage-undo ───────────────────────────────────────────────────────────────
+
+program
+  .command('triage-undo <runId>')
+  .description('Undo a prior triage run by reversing each applied transition')
+  .action(async (runId: string) => {
+    const { undoRun } = await import('./triage/audit.js');
+    const config = loadConfig();
+    try {
+      const { reverted, failed } = await undoRun(runId, config);
+      console.log(`Reverted ${reverted} task(s), failed ${failed}.`);
+      if (failed > 0) process.exitCode = 1;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ triage-undo failed: ${msg}`);
+      process.exit(1);
+    }
   });
 
 // ── parse ─────────────────────────────────────────────────────────────────────
