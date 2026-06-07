@@ -85,6 +85,77 @@ export interface TriageLlmOpts {
   maxTasks?: number;
 }
 
+export interface ProjectEntry {
+  prefix: string;
+  tasksDir: string;
+  repoPath: string | null;
+}
+
+export interface TaskWithEntry {
+  task: Task;
+  entry: ProjectEntry;
+}
+
+/**
+ * Adaptive batch runner: attempts the full batch; on timeout or error, if tasks.length > 1,
+ * splits in half and recurses on each half. If tasks.length === 1, returns an llm-error skip.
+ * Bounded recursion (depth ≤ log₂(n)); never throws.
+ */
+export async function runLlmBatchAdaptive(
+  tasks: TaskWithEntry[],
+  runBatch: LlmRunBatch,
+  opts: { nowMs: number; gitRun: CmdRunner; threshold: number },
+): Promise<{ decisions: TriageDecision[]; skips: TriageSkip[] }> {
+  if (tasks.length === 0) return { decisions: [], skips: [] };
+
+  const views = tasks.map(({ task, entry }) => {
+    const repoSummary = entry.repoPath
+      ? summarizeSignals(gatherRepoSignals(task, entry.repoPath, opts.gitRun))
+      : '';
+    return taskView(task, opts.nowMs, repoSummary || undefined);
+  });
+  const prompt = buildTriagePrompt(views);
+
+  let rawOutput: string;
+  try {
+    rawOutput = await runBatch(prompt);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[triage] LLM batch error (size=${tasks.length}): ${msg}\n`);
+
+    if (tasks.length === 1) {
+      return {
+        decisions: [],
+        skips: [{ taskId: tasks[0]!.task.id, project: tasks[0]!.task.project, reason: 'llm-error', detail: msg }],
+      };
+    }
+
+    const mid = Math.floor(tasks.length / 2);
+    const leftResult = await runLlmBatchAdaptive(tasks.slice(0, mid), runBatch, opts);
+    const rightResult = await runLlmBatchAdaptive(tasks.slice(mid), runBatch, opts);
+    return {
+      decisions: [...leftResult.decisions, ...rightResult.decisions],
+      skips: [...leftResult.skips, ...rightResult.skips],
+    };
+  }
+
+  const verdicts = parseTriageVerdicts(rawOutput);
+  const verdictsById = new Map(verdicts.map(v => [v.id, v]));
+  const decisions: TriageDecision[] = [];
+  const skips: TriageSkip[] = [];
+  for (const { task } of tasks) {
+    const verdict = verdictsById.get(task.id);
+    const outcome = mapVerdict(task, verdict, opts.threshold);
+    if (isDecision(outcome)) {
+      decisions.push(outcome);
+    } else {
+      skips.push(outcome);
+    }
+  }
+
+  return { decisions, skips };
+}
+
 export interface TriageRunOpts {
   nowMs?: number;
   gitRun?: CmdRunner;
@@ -108,12 +179,6 @@ export interface TriageReport {
 const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
   'todo', 'in_progress', 'blocked', 'draft', 'approved',
 ]);
-
-interface ProjectEntry {
-  prefix: string;
-  tasksDir: string;
-  repoPath: string | null;
-}
 
 function buildProjectEntries(config: McpTasksConfig): ProjectEntry[] {
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
@@ -187,11 +252,6 @@ function readTasksFromDir(
   return { tasks, parseErrors };
 }
 
-/** Internal: a task paired with the project entry that owns it. */
-interface TaskWithEntry {
-  task: Task;
-  entry: ProjectEntry;
-}
 
 /**
  * Run the Tier-0 dry-run triage sweep across all projects.
@@ -272,8 +332,8 @@ export async function runTriage(
   const nowMs = opts.nowMs ?? Date.now();
   const gitRun = opts.gitRun ?? defaultRunner;
   const llmOpts = opts.llm ?? { enabled: false };
-  const threshold = llmOpts.threshold ?? 0.85;
-  const batchSize = llmOpts.batchSize ?? 8;
+  const threshold = llmOpts.threshold ?? 0.75;
+  const batchSize = llmOpts.batchSize ?? 6;
   const maxTasks = llmOpts.maxTasks ?? Infinity;
   const runBatch = llmOpts.runBatch ?? defaultLlmRunBatch;
 
@@ -351,39 +411,12 @@ export async function runTriage(
     }
 
     for (const batch of batches) {
-      const views = batch.map(({ task, entry }) => {
-        const repoSummary = entry.repoPath
-          ? summarizeSignals(gatherRepoSignals(task, entry.repoPath, gitRun))
-          : '';
-        return taskView(task, nowMs, repoSummary || undefined);
-      });
-      const prompt = buildTriagePrompt(views);
-
-      let rawOutput: string;
-      try {
-        rawOutput = await runBatch(prompt);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(`[triage] LLM batch error: ${msg}\n`);
-        for (const { task } of batch) {
-          tier2Skips.push({ taskId: task.id, project: task.project, reason: 'llm-error', detail: msg });
-        }
-        continue;
-      }
-
-      const verdicts = parseTriageVerdicts(rawOutput);
-      const verdictsById = new Map(verdicts.map(v => [v.id, v]));
-
-      for (const { task } of batch) {
-        const verdict = verdictsById.get(task.id);
-        const outcome = mapVerdict(task, verdict, threshold);
-        const stats = projectStats.get(task.project) ?? { open: 0, resolved: 0 };
-        if (isDecision(outcome)) {
-          tier2Decisions.push(outcome);
-          stats.resolved++;
-        } else {
-          tier2Skips.push(outcome);
-        }
+      const { decisions, skips } = await runLlmBatchAdaptive(batch, runBatch, { nowMs, gitRun, threshold });
+      tier2Decisions.push(...decisions);
+      tier2Skips.push(...skips);
+      for (const d of decisions) {
+        const stats = projectStats.get(d.project) ?? { open: 0, resolved: 0 };
+        stats.resolved++;
       }
     }
   }

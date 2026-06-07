@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writeRun, readRun, undoRun } from '../../src/triage/audit.js';
 import type { AuditEntry } from '../../src/triage/audit.js';
-import { runTriage, LLM_BATCH_TIMEOUT_MS } from '../../src/triage/engine.js';
-import type { TriageRunOpts } from '../../src/triage/engine.js';
+import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive } from '../../src/triage/engine.js';
+import type { TriageRunOpts, TaskWithEntry } from '../../src/triage/engine.js';
 import type { McpTasksConfig } from '../../src/config/loader.js';
 import type { CmdResult } from '../../src/triage/git-signals.js';
 import type { TaskStatus } from '../../src/types/task.js';
@@ -290,14 +290,14 @@ describe('undoRun', () => {
   });
 });
 
-// ── AC6: batch constants ───────────────────────────────────────────────────────
+// ── AC2/AC6: batch constants ───────────────────────────────────────────────────
 
-describe('engine batch constants (AC6)', () => {
+describe('engine batch constants (A-AC2)', () => {
   it('LLM_BATCH_TIMEOUT_MS is 300000', () => {
     expect(LLM_BATCH_TIMEOUT_MS).toBe(300_000);
   });
 
-  it('default Tier-2 batchSize is 8: 9 tasks produce 2 batch calls', async () => {
+  it('default Tier-2 batchSize is 6: 9 tasks produce 2 batch calls', async () => {
     const projDir = join(tmpRoot, 'ac6-batch-proj');
     const { config, tasksDir } = makeTempConfig(projDir);
 
@@ -348,14 +348,113 @@ describe('engine batch constants (AC6)', () => {
     const opts: TriageRunOpts = {
       nowMs: FIXED_NOW,
       gitRun: noSignalRunner,
-      // No batchSize override — uses the default of 8
-      llm: { enabled: true, runBatch: fakeBatch, threshold: 0.85 },
+      // No batchSize override — uses the default of 6
+      llm: { enabled: true, runBatch: fakeBatch, threshold: 0.75 },
     };
 
     await runTriage(config, opts);
 
-    // 9 tasks / 8 per batch = 2 batch calls
+    // 9 tasks / 6 per batch = 2 batch calls (batch of 6, batch of 3)
     expect(batchCallCount).toBe(2);
+  });
+});
+
+// ── A-AC1: runLlmBatchAdaptive ─────────────────────────────────────────────────
+
+function makeMinimalTaskWithEntry(id: string): TaskWithEntry {
+  return {
+    task: {
+      schema_version: 1,
+      id,
+      project: id.split('-')[0]!,
+      title: `Task ${id}`,
+      type: 'feature',
+      status: 'todo',
+      priority: 'medium',
+      why: 'test',
+      tags: [],
+      complexity: 1,
+      complexity_manual: false,
+      created: '2026-01-01T00:00:00Z',
+      updated: '2026-01-01T00:00:00Z',
+      last_activity: '2026-01-01T00:00:00Z',
+      claimed_by: null,
+      claimed_at: null,
+      claim_ttl_hours: 4,
+      parent: null,
+      children: [],
+      dependencies: [],
+      subtasks: [],
+      git: { commits: [] },
+      transitions: [],
+      files: [],
+      body: '',
+      file_path: `${id}.md`,
+    },
+    entry: { prefix: id.split('-')[0]!, tasksDir: '/tmp/test', repoPath: null },
+  };
+}
+
+describe('runLlmBatchAdaptive (A-AC1)', () => {
+  const opts = { nowMs: FIXED_NOW, gitRun: noSignalRunner, threshold: 0.75 };
+
+  it('returns empty results for empty task list', async () => {
+    const fakeBatch = async (_p: string): Promise<string> => '[]';
+    const result = await runLlmBatchAdaptive([], fakeBatch, opts);
+    expect(result.decisions).toHaveLength(0);
+    expect(result.skips).toHaveLength(0);
+  });
+
+  it('calls runBatch once per batch on success, returns skips (no verdicts for unknown ids)', async () => {
+    const tasks = [makeMinimalTaskWithEntry('T-001'), makeMinimalTaskWithEntry('T-002')];
+    let callCount = 0;
+    const fakeBatch = async (_p: string): Promise<string> => { callCount++; return '[]'; };
+    const result = await runLlmBatchAdaptive(tasks, fakeBatch, opts);
+    expect(callCount).toBe(1);
+    // '[]' → no verdicts → both marked llm-unsure or similar skip (mapVerdict returns skip)
+    expect(result.decisions).toHaveLength(0);
+    expect(result.skips).toHaveLength(2);
+  });
+
+  it('splits on timeout and sub-batches succeed: both tasks are processed (not lost)', async () => {
+    const tasks = [makeMinimalTaskWithEntry('T-011'), makeMinimalTaskWithEntry('T-012')];
+
+    // Times out when both tasks are in the prompt, succeeds individually
+    const fakeBatch = async (prompt: string): Promise<string> => {
+      if (prompt.includes('T-011') && prompt.includes('T-012')) throw new Error('timeout');
+      return '[]';
+    };
+
+    const result = await runLlmBatchAdaptive(tasks, fakeBatch, opts);
+    // After split, each sub-batch succeeds with '[]' (empty verdicts).
+    // mapVerdict → 'llm-error' (no verdict returned), but detail says 'no verdict' not 'timeout'.
+    expect(result.decisions).toHaveLength(0);
+    expect(result.skips).toHaveLength(2);
+    // Both tasks accounted for — not dropped
+    const ids = result.skips.map(s => s.taskId).sort();
+    expect(ids).toEqual(['T-011', 'T-012']);
+    // Detail must not reference 'timeout' — confirms sub-batches ran and didn't themselves time out
+    expect(result.skips.every(s => !s.detail?.includes('timeout'))).toBe(true);
+  });
+
+  it('size-1 timeout yields exactly one llm-error skip', async () => {
+    const tasks = [makeMinimalTaskWithEntry('T-021')];
+    const alwaysTimeout = async (_p: string): Promise<string> => { throw new Error('timeout'); };
+    const result = await runLlmBatchAdaptive(tasks, alwaysTimeout, opts);
+    expect(result.decisions).toHaveLength(0);
+    expect(result.skips).toHaveLength(1);
+    expect(result.skips[0]!.taskId).toBe('T-021');
+    expect(result.skips[0]!.reason).toBe('llm-error');
+  });
+
+  it('never throws even when runBatch always rejects', async () => {
+    const tasks = [makeMinimalTaskWithEntry('T-031'), makeMinimalTaskWithEntry('T-032'), makeMinimalTaskWithEntry('T-033')];
+    const alwaysError = async (_p: string): Promise<string> => { throw new Error('LLM down'); };
+    const result = await runLlmBatchAdaptive(tasks, alwaysError, opts);
+    // All tasks end up as llm-error skips after recursive splitting
+    expect(result.decisions).toHaveLength(0);
+    expect(result.skips).toHaveLength(3);
+    expect(result.skips.every(s => s.reason === 'llm-error')).toBe(true);
   });
 });
 
