@@ -20,8 +20,10 @@ import { isValidTransition } from './types/transitions.js';
 import { buildProjectsList } from './projects-list.js';
 import { McpTasksError } from './types/errors.js';
 import { computeBuildId, runBuild, resolvePackageRoot } from './dev/build-runner.js';
-import { runTriage as runTriageSweep, type TriageReport } from './triage/engine.js';
-import { undoRun as undoTriageRun } from './triage/audit.js';
+import { runTriage as runTriageSweep, projectTasksDirs, type TriageReport } from './triage/engine.js';
+import { undoRun as undoTriageRun, applyDecisions, writeRun } from './triage/audit.js';
+import { transitionPath } from './triage/decide.js';
+import type { TriageDecision } from './triage/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -1246,6 +1248,37 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
   if (genIdx) {
     void retryFailedBrainSyncs(genIdx.index).catch(() => { /* ignore — non-critical */ });
   }
+
+  // On boot: auto-reconcile (MCPAT-078) — transition merged-but-unflipped tasks to done.
+  // Root-cause fix for the accumulation problem: the post-merge git hook does not fire on
+  // `gh pr merge` (remote squash + local fast-forward), so tasks whose PR merged remotely
+  // stay in_progress forever. A Tier-0-only sweep (deterministic: PR merged / commit in main)
+  // self-heals them every boot. Background + non-blocking so gh/git probes never delay startup;
+  // Tier-0 only so no LLM and no surprise closures. Disable with MCPAT_NO_AUTO_RECONCILE=1.
+  if (process.env['MCPAT_NO_AUTO_RECONCILE'] !== '1') {
+    void (async (): Promise<void> => {
+      try {
+        const report = await runTriageSweep(loadConfig(), { llm: { enabled: false }, apply: true });
+        if (report.applied && report.applied > 0) {
+          console.error(`[serve-ui] auto-reconcile: resolved ${report.applied} merged-but-open task(s) on boot (run ${report.runId ?? 'n/a'})`);
+        }
+      } catch (err) {
+        console.error('[serve-ui] auto-reconcile failed (non-fatal):', err instanceof Error ? err.message : err);
+      }
+    })();
+  }
+
+  // In-memory cache of dry-run triage decisions, keyed by runId, so the UI can Apply a
+  // previewed sweep WITHOUT re-running the LLM (MCPAT-079). Bounded to the few most recent runs.
+  const triageRunCache = new Map<string, TriageDecision[]>();
+  const rememberTriageRun = (runId: string, decisions: TriageDecision[]): void => {
+    triageRunCache.set(runId, decisions);
+    while (triageRunCache.size > 5) {
+      const oldest = triageRunCache.keys().next().value;
+      if (oldest === undefined) break;
+      triageRunCache.delete(oldest);
+    }
+  };
 
   const uiDir = join(__dirname, '..', 'dist', 'ui');
 
@@ -3401,6 +3434,9 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         void (async (): Promise<void> => {
           try {
             const report: TriageReport = await runTriageSweep(loadConfig(), { llm: { enabled: false } });
+            const runId = `ui-${Date.now()}`;
+            rememberTriageRun(runId, report.decisions);
+            report.runId = runId;
             sendJson(res, 200, report);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -3424,6 +3460,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 threshold?: unknown;
                 batch?: unknown;
               };
+              // Always a dry run here — applying happens via /api/triage/apply by runId so the
+              // LLM is not re-run on Apply (MCPAT-079).
               const report: TriageReport = await runTriageSweep(loadConfig(), {
                 llm: {
                   enabled: body.llm === true,
@@ -3431,12 +3469,91 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                   threshold: typeof body.threshold === 'number' ? body.threshold : undefined,
                   batchSize: typeof body.batch === 'number' ? body.batch : undefined,
                 },
-                apply: body.apply === true,
               });
+              const runId = `ui-${Date.now()}`;
+              rememberTriageRun(runId, report.decisions);
+              report.runId = runId;
               sendJson(res, 200, report);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
               sendJson(res, 500, { error: 'TRIAGE_ERROR', message: msg });
+            }
+          })();
+        });
+        return;
+      }
+
+      // POST /api/triage/apply — apply a previously-previewed run by runId (no LLM re-run)
+      if (pathname === '/api/triage/apply' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          void (async (): Promise<void> => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as { runId?: unknown };
+              if (!body.runId || typeof body.runId !== 'string') {
+                sendJson(res, 400, { error: 'INVALID_BODY', message: 'runId must be a non-empty string' });
+                return;
+              }
+              const decisions = triageRunCache.get(body.runId);
+              if (!decisions) {
+                sendJson(res, 404, { error: 'RUN_NOT_FOUND', message: 'no cached run for that runId — re-run the sweep' });
+                return;
+              }
+              const cfg = loadConfig();
+              const { applied, failed, entries } = await applyDecisions(decisions, cfg, projectTasksDirs(cfg));
+              if (entries.length > 0) {
+                try { await writeRun(body.runId, entries); } catch { /* audit best-effort */ }
+              }
+              triageRunCache.delete(body.runId);
+              sendJson(res, 200, { applied, failed, runId: body.runId });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'APPLY_ERROR', message: msg });
+            }
+          })();
+        });
+        return;
+      }
+
+      // POST /api/triage/resolve — manually resolve a single task to done (queue "Close")
+      if (pathname === '/api/triage/resolve' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          void (async (): Promise<void> => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as { taskId?: unknown };
+              if (!body.taskId || typeof body.taskId !== 'string') {
+                sendJson(res, 400, { error: 'INVALID_BODY', message: 'taskId must be a non-empty string' });
+                return;
+              }
+              const taskId = body.taskId;
+              let current: Task | null = null;
+              for (const pi of projectIndexes) {
+                current = pi.index.getTask(taskId);
+                if (current) break;
+              }
+              if (!current) {
+                sendJson(res, 404, { error: 'TASK_NOT_FOUND' });
+                return;
+              }
+              const path = transitionPath(current.status, 'done');
+              if (!path) {
+                sendJson(res, 400, { error: 'NO_PATH', message: `cannot resolve from ${current.status}` });
+                return;
+              }
+              const decision: TriageDecision = {
+                taskId, project: taskId.split('-')[0] ?? current.project,
+                fromStatus: current.status, toStatus: 'done', path,
+                tier: 2, signal: 'manual-close', detail: 'closed from triage queue', evidenceHard: false,
+              };
+              const cfg = loadConfig();
+              const { applied, failed } = await applyDecisions([decision], cfg, projectTasksDirs(cfg));
+              sendJson(res, applied > 0 ? 200 : 500, { applied, failed, taskId });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'RESOLVE_ERROR', message: msg });
             }
           })();
         });

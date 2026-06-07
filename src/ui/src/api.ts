@@ -730,3 +730,13 @@ export function runTriageSweep(opts: TriageRunOptions = {}): Promise<TriageRepor
 export function undoTriageRun(runId: string): Promise<{ reverted: number; failed: number }> {
   return post<{ reverted: number; failed: number }>('/api/triage/undo', { runId })
 }
+
+/** Apply a previously-previewed sweep by runId — does NOT re-run the LLM. */
+export function applyTriageRun(runId: string): Promise<{ applied: number; failed: number; runId: string }> {
+  return post<{ applied: number; failed: number; runId: string }>('/api/triage/apply', { runId })
+}
+
+/** Manually resolve a single task to done (the "Close" action in the escalation queue). */
+export function resolveTriageTask(taskId: string): Promise<{ applied: number; failed: number; taskId: string }> {
+  return post<{ applied: number; failed: number; taskId: string }>('/api/triage/resolve', { taskId })
+}
