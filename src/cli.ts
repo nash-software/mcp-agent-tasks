@@ -1299,6 +1299,65 @@ program
     await startTray({ port: parseInt(opts.port, 10) });
   });
 
+// ── triage ────────────────────────────────────────────────────────────────────
+
+program
+  .command('triage [project]')
+  .description('Tier-0 dry-run triage: show which open tasks are provably merged (no changes written)')
+  .option('--json', 'output raw JSON report')
+  .action(async (_project: string | undefined, options: { json?: boolean }) => {
+    const { runTier0Dryrun } = await import('./triage/engine.js');
+    const config = loadConfig();
+    const report = runTier0Dryrun(config);
+
+    if (options.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
+    // Human-readable summary
+    const { decisions, totalOpen, projects } = report;
+    const N = decisions.length;
+    const M = totalOpen;
+    console.log(`\nTier-0 triage (dry-run): would resolve ${N} of ${M} open tasks\n`);
+
+    // Signal breakdown
+    const signalCounts: Record<string, number> = {};
+    for (const d of decisions) {
+      signalCounts[d.signal] = (signalCounts[d.signal] ?? 0) + 1;
+    }
+    if (Object.keys(signalCounts).length > 0) {
+      console.log('Signal breakdown:');
+      for (const [sig, cnt] of Object.entries(signalCounts).sort((a, b) => b[1] - a[1])) {
+        console.log(`  ${sig.padEnd(22)} ${cnt}`);
+      }
+      console.log('');
+    }
+
+    // Per-project breakdown
+    if (projects.length > 0) {
+      console.log('Per-project:');
+      for (const p of projects.sort((a, b) => b.resolved - a.resolved)) {
+        console.log(`  ${p.prefix.padEnd(12)} ${p.resolved} resolved / ${p.open} open`);
+      }
+      console.log('');
+    }
+
+    // Sample of up to 15 decisions
+    const sample = decisions.slice(0, 15);
+    if (sample.length > 0) {
+      console.log(`Sample decisions (showing up to 15 of ${N}):`);
+      for (const d of sample) {
+        const hard = d.evidenceHard ? '' : ' (soft)';
+        console.log(`  RESOLVE ${d.taskId.padEnd(14)} ${d.fromStatus}→done  [${d.signal}]${hard}  ${d.detail}`);
+      }
+      if (N > 15) console.log(`  ... and ${N - 15} more`);
+      console.log('');
+    }
+
+    console.log('Run with --apply to act (not yet implemented).');
+  });
+
 // ── parse ─────────────────────────────────────────────────────────────────────
 
 program.parse(process.argv);
