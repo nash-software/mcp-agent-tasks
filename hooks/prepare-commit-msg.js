@@ -23,7 +23,9 @@ function run() {
     process.exit(0);
   }
 
-  const idMatch = /([A-Z]+-\d+)/i.exec(branch);
+  // Strict: only extract PREFIX-NNN from typed feature branches.
+  // Pattern: ^(feat|fix|chore|refactor|spike|docs|test)/([A-Z]+-[0-9]+)-
+  const idMatch = /^(?:feat|fix|chore|refactor|spike|docs|test)\/([A-Z]+-[0-9]+)-/i.exec(branch);
   if (!idMatch) {
     process.exit(0);
   }
@@ -38,8 +40,8 @@ function run() {
   const lines = msg.split('\n');
   const firstLine = lines[0] ?? '';
 
-  // Don't prefix if already prefixed
-  if (firstLine.startsWith(`[${id}]`)) {
+  // Don't prefix if message already carries any [PREFIX-NNN] stamp
+  if (/^\[[A-Z]+-[0-9]+\]/i.test(firstLine)) {
     process.exit(0);
   }
 
