@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Trello, MessageSquare, Brain,
-  Package, Map, Activity, CheckCircle, StickyNote, Lightbulb, type LucideIcon
+  Package, Map, Activity, CheckCircle, StickyNote, Lightbulb, ListChecks, type LucideIcon
 } from 'lucide-react'
 import type { ViewId } from '../types'
 
@@ -8,7 +8,7 @@ export interface NavItem {
   id: ViewId
   label: string
   icon: LucideIcon
-  /** Keyboard shortcut digit: 1–9 for indices 0–8, 0 for index 9 (Completed). */
+  /** Keyboard shortcut digit: 1–9 for indices 0–8, 0 for index 9 (Completed). -1 = no shortcut. */
   kbd: number
 }
 
@@ -20,6 +20,7 @@ export const NAV: NavItem[] = [
   { id: 'notes',     label: 'Notes',      icon: StickyNote,      kbd: 4 },
   { id: 'advisor',   label: 'Advisor',    icon: Lightbulb,       kbd: 5 },
   { id: 'hermes',    label: 'Hermes',     icon: MessageSquare,   kbd: 6 },
+  { id: 'triage',    label: 'Triage',     icon: ListChecks,      kbd: -1 },
   { id: 'artifacts', label: 'Artifacts',  icon: Package,         kbd: 7 },
   { id: 'roadmap',   label: 'Roadmap',    icon: Map,             kbd: 8 },
   { id: 'activity',  label: 'Activity',   icon: Activity,        kbd: 9 },
@@ -41,6 +42,6 @@ export interface NavGroup {
  */
 export const NAV_GROUPS: NavGroup[] = [
   { label: 'Workspace',  ids: ['today', 'board', 'braindump', 'notes'] },
-  { label: 'Assistants', ids: ['advisor', 'hermes'] },
+  { label: 'Assistants', ids: ['advisor', 'hermes', 'triage'] },
   { label: 'Library',    ids: ['artifacts', 'roadmap', 'activity', 'completed'] },
 ]

@@ -117,7 +117,7 @@ export function Nav({
                     </span>
                   ) : (
                     <span className="ml-auto text-xs text-ink-faint overflow-hidden whitespace-nowrap nav-kbd">
-                      <kbd>{item.kbd}</kbd>
+                      {item.kbd >= 0 && <kbd>{item.kbd}</kbd>}
                     </span>
                   )}
                 </button>

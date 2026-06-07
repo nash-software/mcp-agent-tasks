@@ -661,3 +661,72 @@ export function buildProposalHeuristic(task: Task): ProposalWithMatch {
     _match: match,
   }
 }
+
+// ── Triage (MCPAT-077) ──────────────────────────────────────────────────────
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `${res.status} ${res.statusText} — ${path}`)
+  }
+  return res.json() as Promise<T>
+}
+
+export interface TriageDecision {
+  taskId: string
+  project: string
+  fromStatus: string
+  toStatus: string
+  path: string[]
+  tier: 0 | 2
+  signal: string
+  detail: string
+  evidenceHard: boolean
+  confidence?: number
+}
+
+export interface TriageSkip {
+  taskId: string
+  project: string
+  reason: string
+  detail: string
+}
+
+export interface TriageReport {
+  decisions: TriageDecision[]
+  skips: TriageSkip[]
+  totalOpen: number
+  tier0Count: number
+  tier2Count: number
+  projects: { prefix: string; open: number; resolved: number }[]
+  parseErrors: number
+  applied?: number
+  failed?: number
+  runId?: string
+}
+
+export interface TriageRunOptions {
+  llm?: boolean
+  apply?: boolean
+  limit?: number
+  threshold?: number
+}
+
+/** Tier-0-only dry-run preview (fast, no LLM). */
+export function fetchTriagePreview(): Promise<TriageReport> {
+  return get<TriageReport>('/api/triage/preview')
+}
+
+/** Full sweep — Tier 0 + (with llm) Tier 2; applies when apply is true. May take minutes. */
+export function runTriageSweep(opts: TriageRunOptions = {}): Promise<TriageReport> {
+  return post<TriageReport>('/api/triage/run', opts)
+}
+
+export function undoTriageRun(runId: string): Promise<{ reverted: number; failed: number }> {
+  return post<{ reverted: number; failed: number }>('/api/triage/undo', { runId })
+}
