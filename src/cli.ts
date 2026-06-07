@@ -258,9 +258,64 @@ program
   .option('--path <dir>', 'project root directory (used with --local)', process.cwd())
   .option('--local', 'install to .git/hooks/ of the target repo instead of the global path', false)
   .option('--global', 'install to ~/.claude/git-hooks/ (default behaviour, explicit flag)', true)
-  .action((options: { path: string; local: boolean; global: boolean }) => {
+  .option('--all-projects', 'install post-commit and prepare-commit-msg into every project repo in config', false)
+  .action((options: { path: string; local: boolean; global: boolean; allProjects: boolean }) => {
     // Source hooks live next to this file in hooks/ (dist layout) or in project hooks/ (dev)
     const hooksSourceDir = path.join(__dirname, '..', 'hooks');
+
+    if (options.allProjects) {
+      // ── All-projects install ─────────────────────────────────────────────────
+      const config = loadConfig();
+      const hookNames = ['post-commit', 'prepare-commit-msg'] as const;
+      if (config.projects.length === 0) {
+        console.warn('⚠  No projects registered in config — nothing to install.');
+        return;
+      }
+      for (const proj of config.projects) {
+        const hooksDir = path.join(proj.path, '.git', 'hooks');
+        if (!fs.existsSync(hooksDir)) {
+          console.warn(`⚠  Skipping ${proj.prefix} (${proj.path}): no .git/hooks directory`);
+          continue;
+        }
+        for (const hookName of hookNames) {
+          const source = path.join(hooksSourceDir, `${hookName}.js`);
+          if (!fs.existsSync(source)) {
+            console.error(`✗ Source hook not found: ${source}`);
+            continue;
+          }
+          const target = path.join(hooksDir, hookName);
+          const MCP_MARKER = '# agent-tasks';
+          if (!fs.existsSync(target)) {
+            fs.copyFileSync(source, target);
+            fs.chmodSync(target, 0o755);
+            console.log(`✓ [${proj.prefix}] Installed ${hookName}`);
+          } else {
+            const existing = fs.readFileSync(target, 'utf-8');
+            if (existing.includes(MCP_MARKER) || existing.includes('mcp-agent-tasks') || existing.includes('agent-tasks')) {
+              fs.copyFileSync(source, target);
+              fs.chmodSync(target, 0o755);
+              console.log(`✓ [${proj.prefix}] Updated ${hookName}`);
+            } else {
+              const dotDir = path.join(hooksDir, `${hookName}.d`);
+              if (!fs.existsSync(dotDir)) fs.mkdirSync(dotDir, { recursive: true });
+              const existingDest = path.join(dotDir, '00-existing');
+              if (!fs.existsSync(existingDest)) {
+                fs.renameSync(target, existingDest);
+                fs.chmodSync(existingDest, 0o755);
+              }
+              const mcpDest = path.join(dotDir, '10-agent-tasks');
+              fs.copyFileSync(source, mcpDest);
+              fs.chmodSync(mcpDest, 0o755);
+              const dispatcher = `#!/usr/bin/env node\n// agent-tasks dispatcher\nconst fs = require('fs'); const path = require('path'); const {execFileSync} = require('child_process');\nconst d = path.join(__dirname, path.basename(__filename) + '.d');\nif (!fs.existsSync(d)) process.exit(0);\nfor (const f of fs.readdirSync(d).sort()) {\n  try { execFileSync(path.join(d, f), process.argv.slice(2), {stdio: 'inherit', env: process.env}); }\n  catch (e) { process.exit((e.status) || 1); }\n}\n`;
+              fs.writeFileSync(target, dispatcher, 'utf-8');
+              fs.chmodSync(target, 0o755);
+              console.log(`✓ [${proj.prefix}] Installed ${hookName} (chained)`);
+            }
+          }
+        }
+      }
+      return;
+    }
 
     if (!options.local) {
       // ── Global install (default) ─────────────────────────────────────────────
@@ -1307,8 +1362,8 @@ program
   .option('--apply', 'apply decisions (write transitions + audit log). Default: dry-run', false)
   .option('--llm', 'enable Tier-2 LLM triage (default OFF)', false)
   .option('--limit <n>', 'cap number of tasks sent to LLM', parseInt)
-  .option('--batch <n>', 'LLM batch size (default 15)', parseInt)
-  .option('--threshold <n>', 'LLM confidence threshold 0..1 (default 0.85)', parseFloat)
+  .option('--batch <n>', 'LLM batch size (default 6)', parseInt)
+  .option('--threshold <n>', 'LLM confidence threshold 0..1 (default 0.75)', parseFloat)
   .option('--json', 'output raw JSON report')
   .action(async (_project: string | undefined, options: {
     apply: boolean;
@@ -1324,6 +1379,12 @@ program
     const { resolveClaudeBinary } = await import('./server-ui.js');
     const { spawnClaudeStream } = await import('./lib/claude-stream.js');
 
+    // Env var overrides (CLI flag takes priority, then env var, then engine default)
+    const envThreshold = process.env['MCPAT_TRIAGE_THRESHOLD']
+      ? parseFloat(process.env['MCPAT_TRIAGE_THRESHOLD'])
+      : undefined;
+    const resolvedThreshold = options.threshold ?? (Number.isFinite(envThreshold!) ? envThreshold : undefined);
+
     const report = await runTriage(config, {
       llm: {
         enabled: options.llm,
@@ -1338,7 +1399,7 @@ program
               return text;
             }
           : undefined,
-        threshold: options.threshold,
+        threshold: resolvedThreshold,
         batchSize: options.batch,
         maxTasks: options.limit,
       },
