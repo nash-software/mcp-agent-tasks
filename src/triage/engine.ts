@@ -139,6 +139,11 @@ function buildProjectEntries(config: McpTasksConfig): ProjectEntry[] {
   return entries;
 }
 
+/** Map of project prefix → tasks markdown dir (for apply/resolve outside a full sweep). */
+export function projectTasksDirs(config: McpTasksConfig): Map<string, string> {
+  return new Map(buildProjectEntries(config).map(e => [e.prefix, e.tasksDir]));
+}
+
 /**
  * Read all task markdown files in the given directory.
  * Skips dotfiles, index.yaml, and any non-.md files.
