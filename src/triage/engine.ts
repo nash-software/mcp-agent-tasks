@@ -24,6 +24,7 @@ import { decideTier0 } from './decide.js';
 import { isDecision } from './types.js';
 import type { TriageDecision, TriageSkip } from './types.js';
 import { taskView, buildTriagePrompt, parseTriageVerdicts, mapVerdict } from './llm-triage.js';
+import { gatherRepoSignals, summarizeSignals } from './repo-signals.js';
 import { spawn } from 'node:child_process';
 import { resolveClaudeBinary } from '../server-ui.js';
 import { applyDecisions, writeRun } from './audit.js';
@@ -37,7 +38,7 @@ const CLAUDE_ENV_STRIP = [
   'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_IS_HEADLESS',
   'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'ELECTRON_RUN_AS_NODE',
 ];
-const LLM_BATCH_TIMEOUT_MS = 180_000;
+export const LLM_BATCH_TIMEOUT_MS = 300_000;
 
 /**
  * Default batch runner: a plain one-shot `claude -p` reading the prompt from stdin
@@ -272,7 +273,7 @@ export async function runTriage(
   const gitRun = opts.gitRun ?? defaultRunner;
   const llmOpts = opts.llm ?? { enabled: false };
   const threshold = llmOpts.threshold ?? 0.85;
-  const batchSize = llmOpts.batchSize ?? 15;
+  const batchSize = llmOpts.batchSize ?? 8;
   const maxTasks = llmOpts.maxTasks ?? Infinity;
   const runBatch = llmOpts.runBatch ?? defaultLlmRunBatch;
 
@@ -350,7 +351,12 @@ export async function runTriage(
     }
 
     for (const batch of batches) {
-      const views = batch.map(({ task }) => taskView(task, nowMs));
+      const views = batch.map(({ task, entry }) => {
+        const repoSummary = entry.repoPath
+          ? summarizeSignals(gatherRepoSignals(task, entry.repoPath, gitRun))
+          : '';
+        return taskView(task, nowMs, repoSummary || undefined);
+      });
       const prompt = buildTriagePrompt(views);
 
       let rawOutput: string;
