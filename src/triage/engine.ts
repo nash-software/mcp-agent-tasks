@@ -24,23 +24,57 @@ import { decideTier0 } from './decide.js';
 import { isDecision } from './types.js';
 import type { TriageDecision, TriageSkip } from './types.js';
 import { taskView, buildTriagePrompt, parseTriageVerdicts, mapVerdict } from './llm-triage.js';
-import { spawnClaudeStream } from '../lib/claude-stream.js';
+import { spawn } from 'node:child_process';
 import { resolveClaudeBinary } from '../server-ui.js';
 import { applyDecisions, writeRun } from './audit.js';
 
 /** Batch LLM runner: accepts a prompt string, returns the full text response. */
 export type LlmRunBatch = (prompt: string) => Promise<string>;
 
-/** Default batch runner using the streaming claude CLI. */
-const defaultLlmRunBatch: LlmRunBatch = async (prompt: string): Promise<string> => {
-  const bin = resolveClaudeBinary();
-  let text = '';
-  for await (const f of spawnClaudeStream({ bin, prompt, timeoutMs: 180_000 })) {
-    if (f.type === 'delta') text += f.text;
-    else if (f.type === 'error') throw new Error(f.message);
-  }
-  return text;
-};
+// Claude Code env vars that make a spawned claude think it is nested — strip them
+// (delete, never set undefined: undefined causes EINVAL on Windows).
+const CLAUDE_ENV_STRIP = [
+  'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_IS_HEADLESS',
+  'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'ELECTRON_RUN_AS_NODE',
+];
+const LLM_BATCH_TIMEOUT_MS = 180_000;
+
+/**
+ * Default batch runner: a plain one-shot `claude -p` reading the prompt from stdin
+ * and accumulating stdout. We deliberately do NOT use --output-format stream-json
+ * --include-partial-messages here: that mode does not close cleanly for large
+ * triage prompts and hangs to the timeout. Plain `-p` exits promptly with the full
+ * text, which parseTriageVerdicts then extracts (MCPAT-077).
+ */
+const defaultLlmRunBatch: LlmRunBatch = (prompt: string): Promise<string> =>
+  new Promise<string>((resolve, reject) => {
+    const bin = resolveClaudeBinary();
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    for (const k of CLAUDE_ENV_STRIP) delete env[k];
+
+    const child = spawn(bin, ['-p'], { shell: false, stdio: ['pipe', 'pipe', 'ignore'], env });
+    let out = '';
+    let settled = false;
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => finish(() => {
+      try { child.kill(); } catch { /* already dead */ }
+      reject(new Error('timeout'));
+    }), LLM_BATCH_TIMEOUT_MS);
+
+    child.stdout.on('data', (c: Buffer) => { out += c.toString('utf-8'); });
+    child.on('close', () => finish(() => resolve(out)));
+    child.on('error', (err: Error) => finish(() => reject(err)));
+    child.stdin.on('error', () => { /* ignore EPIPE if claude closes stdin early */ });
+    if (child.stdin.writable) {
+      child.stdin.write(prompt, 'utf-8');
+      child.stdin.end();
+    }
+  });
 
 export interface TriageLlmOpts {
   enabled: boolean;
