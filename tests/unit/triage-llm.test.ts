@@ -125,3 +125,36 @@ describe('mapVerdict', () => {
     if (!isDecision(o)) expect(o.reason).toBe('llm-error'); else throw new Error('should skip');
   });
 });
+
+// ── repo signal integration (AC4) ─────────────────────────────────────────────
+
+describe('buildTriagePrompt — repo signals (AC4)', () => {
+  it('includes repo summary on the task line when present', () => {
+    const v = taskView(task({ id: 'MCPAT-001' }), NOW, '| files 2/2 exist; id in 3 commits (last 2026-05-30)');
+    const p = buildTriagePrompt([v]);
+    expect(p).toContain('| files 2/2 exist');
+    expect(p).toContain('id in 3 commits');
+  });
+
+  it('omits repo part when repoSummary is absent', () => {
+    const v = taskView(task({ id: 'MCPAT-001' }), NOW);
+    const p = buildTriagePrompt([v]);
+    // No pipe+files separator should appear in task line
+    expect(p).not.toMatch(/\| files/);
+  });
+
+  it('header instructs model to weigh repo evidence', () => {
+    const p = buildTriagePrompt([taskView(task(), NOW)]);
+    expect(p).toMatch(/repo.signal|repo signal/i);
+  });
+
+  it('taskView stores repo summary in the view object', () => {
+    const v = taskView(task(), NOW, '| touched 2026-05-29');
+    expect(v.repo).toBe('| touched 2026-05-29');
+  });
+
+  it('taskView repo field is absent when no summary provided', () => {
+    const v = taskView(task(), NOW);
+    expect(v.repo).toBeUndefined();
+  });
+});

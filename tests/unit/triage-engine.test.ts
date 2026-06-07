@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writeRun, readRun, undoRun } from '../../src/triage/audit.js';
 import type { AuditEntry } from '../../src/triage/audit.js';
-import { runTriage } from '../../src/triage/engine.js';
+import { runTriage, LLM_BATCH_TIMEOUT_MS } from '../../src/triage/engine.js';
 import type { TriageRunOpts } from '../../src/triage/engine.js';
 import type { McpTasksConfig } from '../../src/config/loader.js';
 import type { CmdResult } from '../../src/triage/git-signals.js';
@@ -287,5 +287,220 @@ describe('undoRun', () => {
     // UNKNOWN prefix has no tasksDir → failed += 1
     expect(result.failed).toBe(1);
     expect(result.reverted).toBe(0);
+  });
+});
+
+// ── AC6: batch constants ───────────────────────────────────────────────────────
+
+describe('engine batch constants (AC6)', () => {
+  it('LLM_BATCH_TIMEOUT_MS is 300000', () => {
+    expect(LLM_BATCH_TIMEOUT_MS).toBe(300_000);
+  });
+
+  it('default Tier-2 batchSize is 8: 9 tasks produce 2 batch calls', async () => {
+    const projDir = join(tmpRoot, 'ac6-batch-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    // Write 9 open task markdown files directly
+    const { writeFileSync } = await import('node:fs');
+    for (let i = 1; i <= 9; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---',
+        'schema_version: 1',
+        `id: ${id}`,
+        `title: Task ${i}`,
+        'type: feature',
+        'status: todo',
+        'priority: medium',
+        `project: TEST`,
+        'tags: []',
+        'complexity: 1',
+        'complexity_manual: false',
+        `why: reason ${i}`,
+        `created: 2026-01-0${Math.min(i, 9)}T00:00:00Z`,
+        `updated: 2026-01-01T00:00:00Z`,
+        `last_activity: 2026-01-01T00:00:00Z`,
+        'claimed_by: null',
+        'claimed_at: null',
+        'claim_ttl_hours: 4',
+        'parent: null',
+        'children: []',
+        'dependencies: []',
+        'subtasks: []',
+        'git:',
+        '  commits: []',
+        'transitions: []',
+        'files: []',
+        '---',
+        '',
+        `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    let batchCallCount = 0;
+    const fakeBatch = async (_prompt: string): Promise<string> => {
+      batchCallCount++;
+      return '[]';
+    };
+
+    const opts: TriageRunOpts = {
+      nowMs: FIXED_NOW,
+      gitRun: noSignalRunner,
+      // No batchSize override — uses the default of 8
+      llm: { enabled: true, runBatch: fakeBatch, threshold: 0.85 },
+    };
+
+    await runTriage(config, opts);
+
+    // 9 tasks / 8 per batch = 2 batch calls
+    expect(batchCallCount).toBe(2);
+  });
+});
+
+// ── AC5: repo signals flow through to prompt ──────────────────────────────────
+
+describe('engine Tier-2 repo signals (AC5)', () => {
+  it('tasks with absent repoPath are still judged without error', async () => {
+    const projDir = join(tmpRoot, 'ac5-no-repo-proj');
+    // Use a config with no registered projects → repoPath is null
+    const tasksDir = join(projDir, 'agent-tasks');
+    mkdirSync(tasksDir, { recursive: true });
+
+    const config: McpTasksConfig = {
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'warn',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [],
+    };
+
+    const { writeFileSync } = await import('node:fs');
+    const md = [
+      '---',
+      'schema_version: 1',
+      'id: GEN-001',
+      'title: Orphan task with no repo',
+      'type: feature',
+      'status: todo',
+      'priority: medium',
+      'project: GEN',
+      'tags: []',
+      'complexity: 1',
+      'complexity_manual: false',
+      'why: test',
+      'created: 2026-01-01T00:00:00Z',
+      'updated: 2026-01-01T00:00:00Z',
+      'last_activity: 2026-01-01T00:00:00Z',
+      'claimed_by: null',
+      'claimed_at: null',
+      'claim_ttl_hours: 4',
+      'parent: null',
+      'children: []',
+      'dependencies: []',
+      'subtasks: []',
+      'git:',
+      '  commits: []',
+      'transitions: []',
+      'files: []',
+      '---',
+      '',
+      '## Body',
+    ].join('\n');
+    writeFileSync(join(tasksDir, 'GEN-001.md'), md, 'utf-8');
+
+    let capturedPrompt = '';
+    const fakeBatch = async (prompt: string): Promise<string> => {
+      capturedPrompt = prompt;
+      return '[]';
+    };
+
+    const opts: TriageRunOpts = {
+      nowMs: FIXED_NOW,
+      gitRun: noSignalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 10 },
+    };
+
+    // Should complete without throwing
+    const report = await runTriage(config, opts);
+    expect(report).toHaveProperty('decisions');
+    // Prompt was built — task was sent to LLM (metadata-only, no repo signals)
+    expect(capturedPrompt).toContain('GEN-001');
+    // No pipe-separated repo signals since repoPath is absent
+    expect(capturedPrompt).not.toMatch(/GEN-001.*\|.*exist/);
+  });
+
+  it('passes repo signal summary into the prompt when gitRun returns signals', async () => {
+    const projDir = join(tmpRoot, 'ac5-with-repo-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    const md = [
+      '---',
+      'schema_version: 1',
+      'id: TEST-999',
+      'title: Add JobDispatcher pipeline',
+      'type: feature',
+      'status: todo',
+      'priority: medium',
+      'project: TEST',
+      'tags: []',
+      'complexity: 1',
+      'complexity_manual: false',
+      'why: needed',
+      'created: 2025-01-01T00:00:00Z',
+      'updated: 2025-06-01T00:00:00Z',
+      'last_activity: 2025-06-01T00:00:00Z',
+      'claimed_by: null',
+      'claimed_at: null',
+      'claim_ttl_hours: 4',
+      'parent: null',
+      'children: []',
+      'dependencies: []',
+      'subtasks: []',
+      'git:',
+      '  commits: []',
+      'transitions: []',
+      'files:',
+      '  - src/dispatcher.ts',
+      '---',
+      '',
+      '## Body',
+    ].join('\n');
+    writeFileSync(join(tasksDir, 'TEST-999.md'), md, 'utf-8');
+
+    // gitRun returns a commit for the task ID and the file present
+    const signalRunner = (_cmd: string, args: string[], _cwd?: string): CmdResult => {
+      const a = args.join(' ');
+      if (a.includes('ls-files') && a.includes('src/dispatcher.ts')) return { code: 0, stdout: 'src/dispatcher.ts\n' };
+      if (a.includes('--grep=TEST-999') && a.includes('--oneline')) return { code: 0, stdout: 'abc123 feat: add dispatcher\n' };
+      if (a.includes('--grep=TEST-999') && a.includes('%cs')) return { code: 0, stdout: '2026-05-30\n' };
+      if (a.includes('log -1 --format=%cs -- src/dispatcher.ts')) return { code: 0, stdout: '2026-05-29\n' };
+      if (a.includes('grep') && a.includes('JobDispatcher')) return { code: 0, stdout: 'src/dispatcher.ts\n' };
+      return { code: 1, stdout: '' };
+    };
+
+    let capturedPrompt = '';
+    const fakeBatch = async (prompt: string): Promise<string> => {
+      capturedPrompt = prompt;
+      return '[]';
+    };
+
+    const opts: TriageRunOpts = {
+      nowMs: FIXED_NOW,
+      gitRun: signalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 10 },
+    };
+
+    await runTriage(config, opts);
+
+    // The prompt should include repo signal summary for TEST-999
+    expect(capturedPrompt).toContain('TEST-999');
+    expect(capturedPrompt).toMatch(/\|.*exist|id in.*commit|touched|in code/);
   });
 });
