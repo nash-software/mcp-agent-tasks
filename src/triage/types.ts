@@ -23,17 +23,18 @@ export interface MergeEvidence {
   hard: boolean;         // true = verified via live git/gh; false = stored state
 }
 
-/** A decision to resolve a task to `done`. */
+/** A decision to resolve a task to `done`. Produced by Tier 0 (git) or Tier 2 (LLM). */
 export interface TriageDecision {
   taskId: string;
   project: string;
   fromStatus: TaskStatus;
-  toStatus: TaskStatus;          // always 'done' for Tier 0
+  toStatus: TaskStatus;          // 'done' for Tier 0/2
   path: TaskStatus[];            // transition hops incl. endpoints (from … to)
-  tier: 0;
-  signal: MergeSignal;
+  tier: 0 | 2;
+  signal: string;               // MergeSignal for Tier 0; `llm-<verdict>` for Tier 2
   detail: string;
-  evidenceHard: boolean;
+  evidenceHard: boolean;        // Tier 0 hard git/gh evidence; false for Tier 2
+  confidence?: number;          // Tier 2 model confidence (0..1)
 }
 
 export type SkipReason =
@@ -42,7 +43,10 @@ export type SkipReason =
   | 'open-pr'            // linked PR still open
   | 'claimed-active'     // claimed by a live (non-expired) session
   | 'fresh'              // soft evidence + recently touched → too risky to auto-resolve
-  | 'no-path';           // no valid transition path to done
+  | 'no-path'            // no valid transition path to done
+  | 'llm-keep'           // Tier 2: LLM judged still-relevant → keep
+  | 'llm-unsure'         // Tier 2: LLM unsure or below confidence threshold → escalate to queue
+  | 'llm-error';         // Tier 2: LLM verdict missing/unparseable for this task
 
 export interface TriageSkip {
   taskId: string;
