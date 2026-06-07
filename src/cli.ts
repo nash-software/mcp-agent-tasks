@@ -1365,7 +1365,7 @@ program
   .option('--batch <n>', 'LLM batch size (default 10)', parseInt)
   .option('--threshold <n>', 'LLM confidence threshold 0..1 (default 0.75)', parseFloat)
   .option('--model <model>', 'LLM model for Tier-2 verdicts (default claude-haiku-4-5; env: MCPAT_TRIAGE_MODEL)')
-  .option('--concurrency <n>', 'max concurrent Tier-2 batches (default 4; env: MCPAT_TRIAGE_CONCURRENCY)', parseInt)
+  .option('--concurrency <n>', 'max concurrent Tier-2 batches (default 3; env: MCPAT_TRIAGE_CONCURRENCY)', parseInt)
   .option('--json', 'output raw JSON report')
   .action(async (_project: string | undefined, options: {
     apply: boolean;

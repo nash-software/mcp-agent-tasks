@@ -133,8 +133,28 @@ export function parseTriageVerdicts(out: string): TriageVerdict[] {
   return result;
 }
 
+/** Per-verdict confidence thresholds for Tier-2 triage decisions. */
+export interface TriageThresholds {
+  done: number;
+  obsolete: number;
+  duplicate: number;
+}
+
+/**
+ * Build TriageThresholds from a base value.
+ * `done` uses the base directly; `obsolete` and `duplicate` use max(base, 0.85)
+ * so they stay stricter than done when the base is low.
+ */
+export function defaultThresholds(base: number = 0.75): TriageThresholds {
+  return {
+    done: base,
+    obsolete: Math.max(base, 0.85),
+    duplicate: Math.max(base, 0.85),
+  };
+}
+
 /** Map an LLM verdict to a triage decision (resolve to done) or a skip (keep/escalate). */
-export function mapVerdict(task: Task, verdict: TriageVerdict | undefined, threshold: number): TriageOutcome {
+export function mapVerdict(task: Task, verdict: TriageVerdict | undefined, thresholds: TriageThresholds): TriageOutcome {
   const skip = (reason: SkipReason, detail: string): TriageOutcome => ({ taskId: task.id, project: task.project, reason, detail });
 
   if (!OPEN_STATUSES.has(task.status)) return skip('not-open', `status is ${task.status}`);
@@ -142,8 +162,10 @@ export function mapVerdict(task: Task, verdict: TriageVerdict | undefined, thres
   if (verdict.verdict === 'still_relevant') return skip('llm-keep', verdict.rationale || 'still relevant');
   if (verdict.verdict === 'unsure') return skip('llm-unsure', verdict.rationale || 'unsure');
   if (!RESOLVE_VERDICTS.has(verdict.verdict)) return skip('llm-unsure', `unhandled verdict ${verdict.verdict}`);
-  if (verdict.confidence < threshold) {
-    return skip('llm-unsure', `${verdict.verdict} @ ${verdict.confidence.toFixed(2)} < ${threshold}`);
+
+  const requiredThreshold = thresholds[verdict.verdict as keyof TriageThresholds] ?? thresholds.done;
+  if (verdict.confidence < requiredThreshold) {
+    return skip('llm-unsure', `${verdict.verdict} @ ${verdict.confidence.toFixed(2)} < ${requiredThreshold}`);
   }
   const path = transitionPath(task.status, 'done');
   if (!path) return skip('no-path', `no transition path ${task.status} → done`);
