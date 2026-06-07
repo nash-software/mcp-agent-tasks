@@ -5,10 +5,25 @@
  * SessionStart hooks so each batch skips the full hook chain. Seeded once per
  * run; subsequent calls are no-ops when the sentinel `.seeded` file exists.
  */
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, writeFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 const SENTINEL = '.seeded';
+
+/**
+ * Copy the auth credentials from the real config dir into the lean dir so the
+ * triage spawn can authenticate (the Max-subscription OAuth token lives in
+ * .credentials.json). Without this the lean spawn errors instantly with no auth.
+ * Refreshed every call so a rotated token never goes stale (MCPAT-082 P2 fix).
+ */
+function copyCredentials(dir: string): void {
+  const sourceDir = process.env['CLAUDE_CONFIG_DIR'] || join(homedir(), '.claude');
+  const src = join(sourceDir, '.credentials.json');
+  if (existsSync(src)) {
+    try { copyFileSync(src, join(dir, '.credentials.json')); } catch { /* best-effort */ }
+  }
+}
 
 /** Return true if `dir` already has a seeded lean config. */
 export function isSeeded(dir: string): boolean {
@@ -21,8 +36,10 @@ export function isSeeded(dir: string): boolean {
  * atomicity (POSIX-safe; best-effort on Windows with fallback direct write).
  */
 export function seedLeanConfigDir(dir: string): void {
-  if (isSeeded(dir)) return;
   mkdirSync(dir, { recursive: true });
+  // Always refresh auth so a rotated token never goes stale, even across runs.
+  copyCredentials(dir);
+  if (isSeeded(dir)) return;
 
   const settings = {
     hooks: {},
