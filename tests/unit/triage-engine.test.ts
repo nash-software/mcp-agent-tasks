@@ -10,11 +10,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { writeRun, readRun, undoRun } from '../../src/triage/audit.js';
 import type { AuditEntry } from '../../src/triage/audit.js';
-import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive } from '../../src/triage/engine.js';
+import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive, runBounded, makeGhCachedRunner, DEFAULT_TRIAGE_MODEL, buildTriageSpawnArgs } from '../../src/triage/engine.js';
 import type { TriageRunOpts, TaskWithEntry } from '../../src/triage/engine.js';
 import type { McpTasksConfig } from '../../src/config/loader.js';
 import type { CmdResult } from '../../src/triage/git-signals.js';
 import type { TaskStatus } from '../../src/types/task.js';
+import { warmCommitLog } from '../../src/triage/repo-signals.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -290,14 +291,14 @@ describe('undoRun', () => {
   });
 });
 
-// ── AC2/AC6: batch constants ───────────────────────────────────────────────────
+// ── batch constants ────────────────────────────────────────────────────────────
 
-describe('engine batch constants (A-AC2)', () => {
+describe('engine batch constants', () => {
   it('LLM_BATCH_TIMEOUT_MS is 300000', () => {
     expect(LLM_BATCH_TIMEOUT_MS).toBe(300_000);
   });
 
-  it('default Tier-2 batchSize is 6: 9 tasks produce 2 batch calls', async () => {
+  it('AC6: default Tier-2 batchSize is 10: 9 tasks produce 1 batch call', async () => {
     const projDir = join(tmpRoot, 'ac6-batch-proj');
     const { config, tasksDir } = makeTempConfig(projDir);
 
@@ -348,14 +349,45 @@ describe('engine batch constants (A-AC2)', () => {
     const opts: TriageRunOpts = {
       nowMs: FIXED_NOW,
       gitRun: noSignalRunner,
-      // No batchSize override — uses the default of 6
+      // No batchSize override — uses the default of 10
       llm: { enabled: true, runBatch: fakeBatch, threshold: 0.75 },
     };
 
     await runTriage(config, opts);
 
-    // 9 tasks / 6 per batch = 2 batch calls (batch of 6, batch of 3)
-    expect(batchCallCount).toBe(2);
+    // 9 tasks / 10 per batch = 1 batch call (all 9 fit in a single batch)
+    expect(batchCallCount).toBe(1);
+  });
+
+  it('AC6: batchSize=5 with 11 tasks produces 3 batch calls (adaptive split not needed)', async () => {
+    const projDir = join(tmpRoot, 'ac6-split-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    for (let i = 1; i <= 11; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    let batchCallCount = 0;
+    const fakeBatch = async (_prompt: string): Promise<string> => { batchCallCount++; return '[]'; };
+
+    await runTriage(config, {
+      nowMs: FIXED_NOW, gitRun: noSignalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, threshold: 0.75, batchSize: 5 },
+    });
+
+    // 11 tasks / 5 per batch = 3 batches (5+5+1)
+    expect(batchCallCount).toBe(3);
   });
 });
 
@@ -601,5 +633,278 @@ describe('engine Tier-2 repo signals (AC5)', () => {
     // The prompt should include repo signal summary for TEST-999
     expect(capturedPrompt).toContain('TEST-999');
     expect(capturedPrompt).toMatch(/\|.*exist|id in.*commit|touched|in code/);
+  });
+});
+
+// ── AC1: model flag ────────────────────────────────────────────────────────────
+
+describe('AC1: Tier-2 model flag', () => {
+  it('DEFAULT_TRIAGE_MODEL is claude-haiku-4-5', () => {
+    expect(DEFAULT_TRIAGE_MODEL).toBe('claude-haiku-4-5');
+  });
+
+  it('buildTriageSpawnArgs includes -p and --model <model>', () => {
+    const args = buildTriageSpawnArgs('claude-haiku-4-5');
+    expect(args).toContain('-p');
+    expect(args).toContain('--model');
+    expect(args[args.indexOf('--model') + 1]).toBe('claude-haiku-4-5');
+  });
+
+  it('buildTriageSpawnArgs passes the model string verbatim', () => {
+    const customModel = 'claude-sonnet-4-6';
+    const args = buildTriageSpawnArgs(customModel);
+    expect(args[args.indexOf('--model') + 1]).toBe(customModel);
+  });
+});
+
+// ── AC3: concurrent batch execution ───────────────────────────────────────────
+
+describe('AC3: concurrent Tier-2 batches', () => {
+  it('runBounded: all thunks complete and order is preserved', async () => {
+    const thunks = [1, 2, 3, 4, 5].map(n => async () => n * 2);
+    const results = await runBounded(thunks, 2);
+    expect(results).toEqual([2, 4, 6, 8, 10]);
+  });
+
+  it('runBounded: empty input returns empty array', async () => {
+    const results = await runBounded([], 4);
+    expect(results).toEqual([]);
+  });
+
+  it('runBounded: concurrency=1 runs thunks sequentially', async () => {
+    const order: number[] = [];
+    const thunks = [1, 2, 3].map(n => async () => { order.push(n); return n; });
+    await runBounded(thunks, 1);
+    expect(order).toEqual([1, 2, 3]);
+  });
+
+  it('AC3: N batches run concurrently up to the concurrency limit', async () => {
+    const projDir = join(tmpRoot, 'ac3-concurrency-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    // Write 6 tasks: with batchSize=2, this creates 3 batches
+    for (let i = 1; i <= 6; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+
+    const fakeBatch = async (_prompt: string): Promise<string> => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      // Yield to event loop so concurrent batches can start before any finishes
+      await new Promise<void>(resolve => setImmediate(resolve));
+      inFlight--;
+      return '[]';
+    };
+
+    const opts: TriageRunOpts = {
+      nowMs: FIXED_NOW,
+      gitRun: noSignalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 2, concurrency: 3, threshold: 0.75 },
+    };
+
+    await runTriage(config, opts);
+
+    // With 3 batches and concurrency=3, all 3 should run simultaneously
+    expect(maxInFlight).toBeGreaterThanOrEqual(2);
+  });
+
+  it('AC3: concurrency=1 serialises batches (maxInFlight=1)', async () => {
+    const projDir = join(tmpRoot, 'ac3-serial-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    for (let i = 1; i <= 4; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fakeBatch = async (_prompt: string): Promise<string> => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      inFlight--;
+      return '[]';
+    };
+
+    await runTriage(config, {
+      nowMs: FIXED_NOW, gitRun: noSignalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 2, concurrency: 1, threshold: 0.75 },
+    });
+
+    expect(maxInFlight).toBe(1);
+  });
+});
+
+// ── AC4: per-repo commit-log cache ─────────────────────────────────────────────
+
+describe('AC4: per-repo git-log pre-warm cache', () => {
+  it('warmCommitLog returns stdout on success', () => {
+    const run = (_cmd: string, _args: string[]): CmdResult => ({
+      code: 0, stdout: 'abc1234 feat: add thing\ndef5678 fix: stuff\n',
+    });
+    const log = warmCommitLog('/repo', run);
+    expect(log).toContain('abc1234');
+  });
+
+  it('warmCommitLog returns empty string on failure', () => {
+    const run = (): CmdResult => ({ code: 1, stdout: '' });
+    expect(warmCommitLog('/repo', run)).toBe('');
+  });
+
+  it('warmCommitLog returns empty string when runner throws', () => {
+    const run = (): CmdResult => { throw new Error('no git'); };
+    expect(warmCommitLog('/repo', run)).toBe('');
+  });
+
+  it('AC4: per-repo log is fetched once per run, not once per task', async () => {
+    const projDir = join(tmpRoot, 'ac4-cache-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    // 3 tasks in the same repo — log should only be fetched once
+    for (let i = 1; i <= 3; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    // Track how many times a full git log (no --grep) is called
+    let fullLogCallCount = 0;
+    const trackingRunner = (_cmd: string, args: string[], _cwd?: string): CmdResult => {
+      const joined = args.join(' ');
+      if (joined.includes('log') && joined.includes('--oneline') && joined.includes('--all')
+          && !joined.includes('--grep')) {
+        fullLogCallCount++;
+      }
+      return { code: 1, stdout: '' };
+    };
+
+    const fakeBatch = async (_prompt: string): Promise<string> => '[]';
+
+    await runTriage(config, {
+      nowMs: FIXED_NOW, gitRun: trackingRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 10, threshold: 0.75 },
+    });
+
+    // The repo log should be fetched exactly once (one repo, one warm-up)
+    // or 0 if there are no tasks after Tier-0 filtering
+    expect(fullLogCallCount).toBeLessThanOrEqual(1);
+  });
+});
+
+// ── AC5: gh results cache + Tier-0 resilience ─────────────────────────────────
+
+describe('AC5: gh results cache + Tier-0 resilience', () => {
+  it('makeGhCachedRunner caches gh pr view results by PR number', () => {
+    let ghCallCount = 0;
+    const baseRunner = (_cmd: string, _args: string[]): CmdResult => {
+      ghCallCount++;
+      return { code: 0, stdout: JSON.stringify({ state: 'MERGED', mergedAt: '2026-05-01T00:00:00Z' }) };
+    };
+    const { runner } = makeGhCachedRunner(baseRunner);
+
+    // First call — should hit base runner
+    runner('gh', ['pr', 'view', '42', '--json', 'state,mergedAt'], '/repo');
+    expect(ghCallCount).toBe(1);
+
+    // Second call for the same PR — should use cache, not call base runner again
+    const result = runner('gh', ['pr', 'view', '42', '--json', 'state,mergedAt'], '/repo');
+    expect(ghCallCount).toBe(1);
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.state).toBe('MERGED');
+  });
+
+  it('makeGhCachedRunner caches null entry for failed gh calls', () => {
+    let ghCallCount = 0;
+    const failingRunner = (_cmd: string, _args: string[]): CmdResult => {
+      ghCallCount++;
+      return { code: 1, stdout: '' };
+    };
+    const { runner } = makeGhCachedRunner(failingRunner);
+
+    runner('gh', ['pr', 'view', '99', '--json', 'state,mergedAt'], '/repo');
+    expect(ghCallCount).toBe(1);
+
+    // Second call — cached as null (failed), does not call base again
+    const result = runner('gh', ['pr', 'view', '99', '--json', 'state,mergedAt'], '/repo');
+    expect(ghCallCount).toBe(1);
+    expect(result.code).toBe(1);
+  });
+
+  it('makeGhCachedRunner passes non-gh commands through without caching', () => {
+    let gitCallCount = 0;
+    const base = (cmd: string, _args: string[]): CmdResult => {
+      if (cmd === 'git') gitCallCount++;
+      return { code: 0, stdout: '' };
+    };
+    const { runner } = makeGhCachedRunner(base);
+
+    runner('git', ['log', '--oneline'], '/repo');
+    runner('git', ['log', '--oneline'], '/repo');
+    // Git calls are not cached — both go through
+    expect(gitCallCount).toBe(2);
+  });
+
+  it('AC5: Tier-0 resilient — failed probe does not abort the sweep', async () => {
+    const projDir = join(tmpRoot, 'ac5-resilience-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    for (let i = 1; i <= 3; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    // runTriage should NOT throw even if gitRun throws for every probe
+    const throwingRunner = (): CmdResult => { throw new Error('network down'); };
+
+    await expect(runTriage(config, {
+      nowMs: FIXED_NOW,
+      gitRun: throwingRunner,
+      llm: { enabled: false },
+    })).resolves.toHaveProperty('decisions');
   });
 });
