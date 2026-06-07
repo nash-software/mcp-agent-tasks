@@ -5,9 +5,42 @@
  * All signals use the injected CmdRunner so the module is unit-testable without
  * a real repo. Every signal is resilient: command failures return absent/zeroed
  * values, never throw.
+ *
+ * MCPAT-082 P4: RepoCache pre-loads `git log --oneline --all` once per repo per
+ * run and matches task IDs in-memory, replacing N per-task git-log spawns with one.
+ * git-grep results are also cached per keyword to avoid redundant filesystem scans.
  */
 import type { Task } from '../types/task.js';
 import type { CmdRunner } from './git-signals.js';
+
+/**
+ * Per-repo signal cache (MCPAT-082 P4).
+ * Pre-loaded once per repo per triage run to avoid per-task git spawns.
+ */
+export interface RepoCache {
+  /** Raw `git log --oneline --all` output, pre-warmed once per repo. */
+  commitLog?: string;
+  /** keyword → whether `git grep` found it in the repo. */
+  grepHits: Map<string, boolean>;
+}
+
+/** Create a fresh (empty) RepoCache. */
+export function createRepoCache(): RepoCache {
+  return { grepHits: new Map() };
+}
+
+/**
+ * Pre-warm the commit log for `repoPath` (run ONCE per repo per sweep).
+ * Returns the full `git log --oneline --all` stdout, or '' on failure.
+ */
+export function warmCommitLog(repoPath: string, run: CmdRunner): string {
+  try {
+    const r = run('git', ['log', '--oneline', '--all'], repoPath);
+    return r.code === 0 ? r.stdout : '';
+  } catch {
+    return '';
+  }
+}
 
 export interface RepoSignals {
   filesTotal: number;
@@ -79,8 +112,17 @@ const MAX_FILES = 10;
  * Gather Tier-2 repo signals for `task` from `repoPath`.
  * Returns empty/zeroed signals (never throws) when repoPath is null or any
  * command fails. Uses injected CmdRunner for unit-testability.
+ *
+ * Pass a pre-warmed `cache` (MCPAT-082 P4) to avoid per-task git spawns:
+ * - cache.commitLog: full log searched in-memory for task ID (no --grep spawn)
+ * - cache.grepHits: keyword→found map to skip duplicate git-grep calls
  */
-export function gatherRepoSignals(task: Task, repoPath: string | null, run: CmdRunner): RepoSignals {
+export function gatherRepoSignals(
+  task: Task,
+  repoPath: string | null,
+  run: CmdRunner,
+  cache?: RepoCache,
+): RepoSignals {
   if (!repoPath) return emptySignals();
 
   const s = emptySignals();
@@ -96,16 +138,38 @@ export function gatherRepoSignals(task: Task, repoPath: string | null, run: CmdR
   }
 
   // Signal 2: taskIdInHistory — count commits mentioning the task ID
-  try {
-    const r = run('git', ['log', '--oneline', '--all', `--grep=${task.id}`, '-i'], repoPath);
-    if (r.code === 0 && r.stdout.trim().length > 0) {
-      s.idCommitCount = r.stdout.trim().split('\n').filter(Boolean).length;
-      const r2 = run('git', ['log', '--all', '--format=%cs', `--grep=${task.id}`, '-1', '-i'], repoPath);
-      if (r2.code === 0 && r2.stdout.trim().length > 0) {
-        s.idLastDate = r2.stdout.trim();
+  // P4 optimisation: if commitLog is pre-warmed, search in-memory (no spawn).
+  if (cache?.commitLog !== undefined) {
+    const needle = task.id.toLowerCase();
+    const matches = cache.commitLog
+      .split('\n')
+      .filter(line => line.toLowerCase().includes(needle) && line.trim().length > 0);
+    s.idCommitCount = matches.length;
+    if (matches.length > 0) {
+      // Extract SHA from first matching line ("abc1234 commit message") for date lookup
+      const sha = matches[0]?.split(' ')[0];
+      if (sha) {
+        try {
+          const r = run('git', ['log', '-1', '--format=%cs', sha], repoPath);
+          if (r.code === 0 && r.stdout.trim().length > 0) {
+            s.idLastDate = r.stdout.trim();
+          }
+        } catch { /* resilient */ }
       }
     }
-  } catch { /* resilient */ }
+  } else {
+    // Fallback: per-task git log --grep (original behaviour)
+    try {
+      const r = run('git', ['log', '--oneline', '--all', `--grep=${task.id}`, '-i'], repoPath);
+      if (r.code === 0 && r.stdout.trim().length > 0) {
+        s.idCommitCount = r.stdout.trim().split('\n').filter(Boolean).length;
+        const r2 = run('git', ['log', '--all', '--format=%cs', `--grep=${task.id}`, '-1', '-i'], repoPath);
+        if (r2.code === 0 && r2.stdout.trim().length > 0) {
+          s.idLastDate = r2.stdout.trim();
+        }
+      }
+    } catch { /* resilient */ }
+  }
 
   // Signal 3: filesRecentlyTouched — most recent commit date across checked files
   if (filesToCheck.length > 0) {
@@ -123,14 +187,19 @@ export function gatherRepoSignals(task: Task, repoPath: string | null, run: CmdR
   }
 
   // Signal 4: keywordInCode — grep for feature symbols in the codebase
+  // P4 optimisation: grepHits cache avoids duplicate git-grep calls per keyword.
   const keywords = extractKeywords(task.title);
   s.keywordsTried = keywords;
   for (const kw of keywords) {
+    if (cache?.grepHits.has(kw)) {
+      if (cache.grepHits.get(kw)) s.keywordsFound.push(kw);
+      continue;
+    }
     try {
       const r = run('git', ['grep', '-l', '--max-count=1', kw], repoPath);
-      if (r.code === 0 && r.stdout.trim().length > 0) {
-        s.keywordsFound.push(kw);
-      }
+      const found = r.code === 0 && r.stdout.trim().length > 0;
+      if (cache) cache.grepHits.set(kw, found);
+      if (found) s.keywordsFound.push(kw);
     } catch { /* resilient */ }
   }
 
