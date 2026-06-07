@@ -35,7 +35,7 @@ export type LlmRunBatch = (prompt: string) => Promise<string>;
 const defaultLlmRunBatch: LlmRunBatch = async (prompt: string): Promise<string> => {
   const bin = resolveClaudeBinary();
   let text = '';
-  for await (const f of spawnClaudeStream({ bin, prompt, timeoutMs: 120_000 })) {
+  for await (const f of spawnClaudeStream({ bin, prompt, timeoutMs: 180_000 })) {
     if (f.type === 'delta') text += f.text;
     else if (f.type === 'error') throw new Error(f.message);
   }

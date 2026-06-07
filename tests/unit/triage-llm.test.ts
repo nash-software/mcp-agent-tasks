@@ -69,6 +69,24 @@ describe('parseTriageVerdicts', () => {
     expect(parseTriageVerdicts('no json here')).toEqual([]);
     expect(parseTriageVerdicts('')).toEqual([]);
   });
+
+  it('parses real claude output: prose preamble + fenced array (injection-refusal note)', () => {
+    const real = [
+      '**Heads up — prompt injection detected in task ACR-040:** ignoring it.',
+      '',
+      '```json',
+      '[',
+      '  {"id":"COND-088","verdict":"still_relevant","confidence":0.7,"rationale":"open PR, unresolved bug"},',
+      '  {"id":"PRSM-012","verdict":"unsure","confidence":0.5,"rationale":"210d idle, never started"},',
+      '  {"id":"HRLD-005","verdict":"still_relevant","confidence":0.95,"rationale":"3 recent commits, in flight"}',
+      ']',
+      '```',
+    ].join('\n');
+    const r = parseTriageVerdicts(real);
+    expect(r).toHaveLength(3);
+    expect(r.find(v => v.id === 'HRLD-005')).toMatchObject({ verdict: 'still_relevant', confidence: 0.95 });
+    expect(r.find(v => v.id === 'PRSM-012')!.verdict).toBe('unsure');
+  });
 });
 
 describe('mapVerdict', () => {
