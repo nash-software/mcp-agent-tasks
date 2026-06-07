@@ -20,6 +20,8 @@ import { isValidTransition } from './types/transitions.js';
 import { buildProjectsList } from './projects-list.js';
 import { McpTasksError } from './types/errors.js';
 import { computeBuildId, runBuild, resolvePackageRoot } from './dev/build-runner.js';
+import { runTriage as runTriageSweep, type TriageReport } from './triage/engine.js';
+import { undoRun as undoTriageRun } from './triage/audit.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3389,6 +3391,77 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             // Build failed — stay up, no restart. Surface the log for diagnosis.
             sendJson(res, 200, { ok: false, log: result.log });
           }
+        });
+        return;
+      }
+
+      // ── Triage API ─────────────────────────────────────────────────────────
+      // GET /api/triage/preview — Tier-0 (git) dry-run preview, no LLM, fast
+      if (pathname === '/api/triage/preview' && req.method === 'GET') {
+        void (async (): Promise<void> => {
+          try {
+            const report: TriageReport = await runTriageSweep(loadConfig(), { llm: { enabled: false } });
+            sendJson(res, 200, report);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'TRIAGE_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // POST /api/triage/run — run a full triage sweep (optionally with LLM + apply)
+      if (pathname === '/api/triage/run' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          void (async (): Promise<void> => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+                llm?: unknown;
+                apply?: unknown;
+                limit?: unknown;
+                threshold?: unknown;
+                batch?: unknown;
+              };
+              const report: TriageReport = await runTriageSweep(loadConfig(), {
+                llm: {
+                  enabled: body.llm === true,
+                  maxTasks: typeof body.limit === 'number' ? body.limit : undefined,
+                  threshold: typeof body.threshold === 'number' ? body.threshold : undefined,
+                  batchSize: typeof body.batch === 'number' ? body.batch : undefined,
+                },
+                apply: body.apply === true,
+              });
+              sendJson(res, 200, report);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'TRIAGE_ERROR', message: msg });
+            }
+          })();
+        });
+        return;
+      }
+
+      // POST /api/triage/undo — revert a prior applied triage run by runId
+      if (pathname === '/api/triage/undo' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          void (async (): Promise<void> => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as { runId?: unknown };
+              if (!body.runId || typeof body.runId !== 'string') {
+                sendJson(res, 400, { error: 'INVALID_BODY', message: 'runId must be a non-empty string' });
+                return;
+              }
+              const result = await undoTriageRun(body.runId, loadConfig());
+              sendJson(res, 200, result);
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 500, { error: 'UNDO_ERROR', message: msg });
+            }
+          })();
         });
         return;
       }

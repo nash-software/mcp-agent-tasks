@@ -19,6 +19,7 @@ import { HermesView } from './views/HermesView'
 import { CompletedView } from './views/CompletedView'
 import { NotesView } from './views/NotesView'
 import { AdvisorView } from './views/AdvisorView'
+import { TriageView } from './views/TriageView'
 import { useTasks } from './hooks/useTasks'
 import { useToday } from './hooks/useToday'
 import { useArtifacts } from './hooks/useArtifacts'
@@ -34,7 +35,7 @@ import { type Filter, EMPTY_FILTER, filterActive } from './lib/filter'
 import { SortControl } from './components/SortControl'
 import { type SortKey, type SortDir, type TodaySortKey, TODAY_SORT_KEYS } from './lib/sort'
 
-const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed']
+const VALID_VIEWS: ViewId[] = ['today', 'board', 'hermes', 'braindump', 'artifacts', 'roadmap', 'activity', 'completed', 'notes', 'advisor', 'triage']
 
 // ─── Density types + persistence ────────────────────────────────────────────
 const VALID_DENSITIES: Density[] = ['compact', 'balanced', 'airy']
@@ -548,7 +549,7 @@ export function App(): React.JSX.Element {
         id: `nav-${navItem.id}`,
         cat: 'Navigate',
         label: `Go to ${navItem.label}`,
-        kbd: String(navItem.kbd),
+        kbd: navItem.kbd >= 0 ? String(navItem.kbd) : undefined,
         run: () => { handleViewChange(navItem.id) },
       })
     }
@@ -765,6 +766,7 @@ export function App(): React.JSX.Element {
           {view === 'completed' && <CompletedView onOpenPanel={setPanel} />}
           {view === 'notes'     && <NotesView filter={filter} areaMap={areaMap} focusCapture={capture.focusCapture} />}
           {view === 'advisor'   && <AdvisorView onOpenPanel={setPanel} />}
+          {view === 'triage'    && <TriageView onOpenPanel={setPanel} />}
         </div>
       </main>
 
