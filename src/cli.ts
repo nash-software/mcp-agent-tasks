@@ -1362,8 +1362,10 @@ program
   .option('--apply', 'apply decisions (write transitions + audit log). Default: dry-run', false)
   .option('--llm', 'enable Tier-2 LLM triage (default OFF)', false)
   .option('--limit <n>', 'cap number of tasks sent to LLM', parseInt)
-  .option('--batch <n>', 'LLM batch size (default 6)', parseInt)
+  .option('--batch <n>', 'LLM batch size (default 10)', parseInt)
   .option('--threshold <n>', 'LLM confidence threshold 0..1 (default 0.75)', parseFloat)
+  .option('--model <model>', 'LLM model for Tier-2 verdicts (default claude-haiku-4-5; env: MCPAT_TRIAGE_MODEL)')
+  .option('--concurrency <n>', 'max concurrent Tier-2 batches (default 4; env: MCPAT_TRIAGE_CONCURRENCY)', parseInt)
   .option('--json', 'output raw JSON report')
   .action(async (_project: string | undefined, options: {
     apply: boolean;
@@ -1371,13 +1373,12 @@ program
     limit?: number;
     batch?: number;
     threshold?: number;
+    model?: string;
+    concurrency?: number;
     json?: boolean;
   }) => {
-    const { runTriage } = await import('./triage/engine.js');
+    const { runTriage, makeDefaultLlmRunBatch } = await import('./triage/engine.js');
     const config = loadConfig();
-
-    const { resolveClaudeBinary } = await import('./server-ui.js');
-    const { spawnClaudeStream } = await import('./lib/claude-stream.js');
 
     // Env var overrides (CLI flag takes priority, then env var, then engine default)
     const envThreshold = process.env['MCPAT_TRIAGE_THRESHOLD']
@@ -1385,23 +1386,23 @@ program
       : undefined;
     const resolvedThreshold = options.threshold ?? (Number.isFinite(envThreshold!) ? envThreshold : undefined);
 
+    const envConcurrency = process.env['MCPAT_TRIAGE_CONCURRENCY']
+      ? parseInt(process.env['MCPAT_TRIAGE_CONCURRENCY'], 10)
+      : undefined;
+    const resolvedConcurrency = options.concurrency ?? (Number.isFinite(envConcurrency!) ? envConcurrency : undefined);
+
+    // Model: CLI flag > MCPAT_TRIAGE_MODEL env > engine default (claude-haiku-4-5)
+    const resolvedModel = options.model ?? process.env['MCPAT_TRIAGE_MODEL'];
+
     const report = await runTriage(config, {
       llm: {
         enabled: options.llm,
-        runBatch: options.llm
-          ? async (prompt: string): Promise<string> => {
-              const bin = resolveClaudeBinary();
-              let text = '';
-              for await (const f of spawnClaudeStream({ bin, prompt, timeoutMs: 120_000 })) {
-                if (f.type === 'delta') text += f.text;
-                else if (f.type === 'error') throw new Error(f.message);
-              }
-              return text;
-            }
-          : undefined,
+        runBatch: options.llm ? makeDefaultLlmRunBatch(resolvedModel) : undefined,
         threshold: resolvedThreshold,
         batchSize: options.batch,
         maxTasks: options.limit,
+        model: resolvedModel,
+        concurrency: resolvedConcurrency,
       },
       apply: options.apply,
     });
