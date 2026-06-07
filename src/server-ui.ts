@@ -1247,6 +1247,25 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
     void retryFailedBrainSyncs(genIdx.index).catch(() => { /* ignore — non-critical */ });
   }
 
+  // On boot: auto-reconcile (MCPAT-078) — transition merged-but-unflipped tasks to done.
+  // Root-cause fix for the accumulation problem: the post-merge git hook does not fire on
+  // `gh pr merge` (remote squash + local fast-forward), so tasks whose PR merged remotely
+  // stay in_progress forever. A Tier-0-only sweep (deterministic: PR merged / commit in main)
+  // self-heals them every boot. Background + non-blocking so gh/git probes never delay startup;
+  // Tier-0 only so no LLM and no surprise closures. Disable with MCPAT_NO_AUTO_RECONCILE=1.
+  if (process.env['MCPAT_NO_AUTO_RECONCILE'] !== '1') {
+    void (async (): Promise<void> => {
+      try {
+        const report = await runTriageSweep(loadConfig(), { llm: { enabled: false }, apply: true });
+        if (report.applied && report.applied > 0) {
+          console.error(`[serve-ui] auto-reconcile: resolved ${report.applied} merged-but-open task(s) on boot (run ${report.runId ?? 'n/a'})`);
+        }
+      } catch (err) {
+        console.error('[serve-ui] auto-reconcile failed (non-fatal):', err instanceof Error ? err.message : err);
+      }
+    })();
+  }
+
   const uiDir = join(__dirname, '..', 'dist', 'ui');
 
   // Dev-tray gate (MCPAT-072 Phase A): read once at server start. Controls whether the
