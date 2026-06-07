@@ -31,16 +31,35 @@ import type { CmdRunner, CmdResult } from './git-signals.js';
 import { decideTier0 } from './decide.js';
 import { isDecision } from './types.js';
 import type { TriageDecision, TriageSkip } from './types.js';
-import { taskView, buildTriagePrompt, parseTriageVerdicts, mapVerdict } from './llm-triage.js';
+import { taskView, buildTriagePrompt, parseTriageVerdicts, mapVerdict, defaultThresholds } from './llm-triage.js';
+import type { TriageThresholds } from './llm-triage.js';
 import { gatherRepoSignals, summarizeSignals, createRepoCache, warmCommitLog } from './repo-signals.js';
 import type { RepoCache } from './repo-signals.js';
 import { spawn } from 'node:child_process';
+import type { SpawnOptions, ChildProcess } from 'node:child_process';
 import { resolveClaudeBinary } from '../server-ui.js';
 import { applyDecisions, writeRun } from './audit.js';
 import { seedLeanConfigDir } from './lean-config.js';
 
 /** Batch LLM runner: accepts a prompt string, returns the full text response. */
 export type LlmRunBatch = (prompt: string) => Promise<string>;
+
+/**
+ * Injection point for the child_process.spawn call in Tier-2 batch runs.
+ * Defaults to the real Node spawn; inject a mock in tests.
+ */
+export type SpawnFn = (cmd: string, args: string[], opts: SpawnOptions) => ChildProcess;
+
+/** OS error codes that indicate a transient spawn failure (not a logic error). */
+export const TRANSIENT_SPAWN_CODES: ReadonlySet<string> = new Set([
+  'ENOENT', 'EBUSY', 'EAGAIN', 'EMFILE', 'ETXTBSY',
+]);
+
+/** Maximum total spawn attempts (initial + retries). */
+export const SPAWN_RETRY_MAX = 3;
+
+/** Base delay per retry attempt in ms; actual delay is base * attempt + jitter. */
+export const SPAWN_RETRY_BASE_MS = 150;
 
 // Claude Code env vars that make a spawned claude think it is nested — strip them
 // (delete, never set undefined: undefined causes EINVAL on Windows).
@@ -57,50 +76,94 @@ export const DEFAULT_TRIAGE_MODEL = 'claude-haiku-4-5';
 const LEAN_CONFIG_DIR = join(tmpdir(), '.claude-triage');
 
 /**
+ * Run a single claude spawn attempt. Rejects with a timeout Error (code 'ETIMEOUT')
+ * or with the spawn error directly. Callers decide whether to retry.
+ */
+function runSpawnOnce(
+  bin: string,
+  args: string[],
+  promptText: string,
+  env: NodeJS.ProcessEnv,
+  spawnFn: SpawnFn,
+): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const child = spawnFn(bin, args, { shell: false, stdio: ['pipe', 'pipe', 'ignore'], env });
+    let out = '';
+    let settled = false;
+    const finish = (fn: () => void): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      fn();
+    };
+    const timer = setTimeout(() => finish(() => {
+      try { child.kill(); } catch { /* already dead */ }
+      const err = Object.assign(new Error('timeout'), { code: 'ETIMEOUT' });
+      reject(err);
+    }), LLM_BATCH_TIMEOUT_MS);
+
+    child.stdout!.on('data', (c: Buffer) => { out += c.toString('utf-8'); });
+    child.on('close', () => finish(() => resolve(out)));
+    child.on('error', (err: Error) => finish(() => reject(err)));
+    child.stdin!.on('error', () => { /* ignore EPIPE if claude closes stdin early */ });
+    if (child.stdin!.writable) {
+      child.stdin!.write(promptText, 'utf-8');
+      child.stdin!.end();
+    }
+  });
+}
+
+/**
+ * Spawn claude with retry on transient OS errors (ENOENT/EBUSY/EAGAIN/EMFILE/ETXTBSY).
+ * Up to SPAWN_RETRY_MAX total attempts. Timeouts are NOT retried — they propagate immediately
+ * so the adaptive splitter in runLlmBatchAdaptive can handle slow batches as before.
+ *
+ * Exported for unit testing: inject a SpawnFn mock to simulate transient failures.
+ */
+export async function spawnClaudeWithRetry(
+  bin: string,
+  args: string[],
+  promptText: string,
+  env: NodeJS.ProcessEnv,
+  spawnFn: SpawnFn = spawn as SpawnFn,
+): Promise<string> {
+  for (let attempt = 1; attempt <= SPAWN_RETRY_MAX; attempt++) {
+    try {
+      return await runSpawnOnce(bin, args, promptText, env, spawnFn);
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      const isTransient = code !== undefined && TRANSIENT_SPAWN_CODES.has(code);
+      if (!isTransient || attempt >= SPAWN_RETRY_MAX) {
+        throw err;
+      }
+      process.stderr.write(`[triage] spawn error ${code} (attempt ${attempt}/${SPAWN_RETRY_MAX}) — retrying\n`);
+      const delayMs = SPAWN_RETRY_BASE_MS * attempt + Math.floor(Math.random() * 50);
+      await new Promise<void>(r => setTimeout(r, delayMs));
+    }
+  }
+  // Unreachable — loop always throws or returns before here.
+  throw new Error('spawn retry exhausted');
+}
+
+/**
  * Default batch runner: a plain one-shot `claude -p --model <model>` reading
  * the prompt from stdin and accumulating stdout (MCPAT-082 P1 + P2).
  *
  * P1: Passes `--model` (default claude-haiku-4-5; override via MCPAT_TRIAGE_MODEL).
  * P2: Uses a lean CLAUDE_CONFIG_DIR with no SessionStart hooks to cut per-spawn overhead.
+ * MCPAT-083: retries transient spawn errors via spawnClaudeWithRetry; spawnFn injectable for tests.
  */
-export function makeDefaultLlmRunBatch(model?: string): LlmRunBatch {
+export function makeDefaultLlmRunBatch(model?: string, spawnFn?: SpawnFn): LlmRunBatch {
   const resolvedModel = model ?? process.env['MCPAT_TRIAGE_MODEL'] ?? DEFAULT_TRIAGE_MODEL;
+  const resolvedSpawnFn = spawnFn ?? (spawn as SpawnFn);
 
   return (prompt: string): Promise<string> => {
     // Seed lazily on first call — no-op on subsequent calls (idempotent).
     seedLeanConfigDir(LEAN_CONFIG_DIR);
-    return new Promise<string>((resolve, reject) => {
-      const bin = resolveClaudeBinary();
-      const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CONFIG_DIR: LEAN_CONFIG_DIR };
-      for (const k of CLAUDE_ENV_STRIP) delete env[k];
-
-      const child = spawn(
-        bin,
-        buildTriageSpawnArgs(resolvedModel),
-        { shell: false, stdio: ['pipe', 'pipe', 'ignore'], env },
-      );
-      let out = '';
-      let settled = false;
-      const finish = (fn: () => void): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        fn();
-      };
-      const timer = setTimeout(() => finish(() => {
-        try { child.kill(); } catch { /* already dead */ }
-        reject(new Error('timeout'));
-      }), LLM_BATCH_TIMEOUT_MS);
-
-      child.stdout.on('data', (c: Buffer) => { out += c.toString('utf-8'); });
-      child.on('close', () => finish(() => resolve(out)));
-      child.on('error', (err: Error) => finish(() => reject(err)));
-      child.stdin.on('error', () => { /* ignore EPIPE if claude closes stdin early */ });
-      if (child.stdin.writable) {
-        child.stdin.write(prompt, 'utf-8');
-        child.stdin.end();
-      }
-    });
+    const bin = resolveClaudeBinary();
+    const env: NodeJS.ProcessEnv = { ...process.env, CLAUDE_CONFIG_DIR: LEAN_CONFIG_DIR };
+    for (const k of CLAUDE_ENV_STRIP) delete env[k];
+    return spawnClaudeWithRetry(bin, buildTriageSpawnArgs(resolvedModel), prompt, env, resolvedSpawnFn);
   };
 }
 
@@ -173,7 +236,7 @@ export async function runBounded<T>(
 export async function runLlmBatchAdaptive(
   tasks: TaskWithEntry[],
   runBatch: LlmRunBatch,
-  opts: { nowMs: number; gitRun: CmdRunner; threshold: number; repoCaches?: Map<string, RepoCache> },
+  opts: { nowMs: number; gitRun: CmdRunner; thresholds: TriageThresholds; repoCaches?: Map<string, RepoCache> },
 ): Promise<{ decisions: TriageDecision[]; skips: TriageSkip[] }> {
   if (tasks.length === 0) return { decisions: [], skips: [] };
 
@@ -215,7 +278,7 @@ export async function runLlmBatchAdaptive(
   const skips: TriageSkip[] = [];
   for (const { task } of tasks) {
     const verdict = verdictsById.get(task.id);
-    const outcome = mapVerdict(task, verdict, opts.threshold);
+    const outcome = mapVerdict(task, verdict, opts.thresholds);
     if (isDecision(outcome)) {
       decisions.push(outcome);
     } else {
@@ -448,9 +511,10 @@ export async function runTriage(
   const gitRun = opts.gitRun ?? defaultRunner;
   const llmOpts = opts.llm ?? { enabled: false };
   const threshold = llmOpts.threshold ?? 0.75;
+  const thresholds = defaultThresholds(threshold);
   const batchSize = llmOpts.batchSize ?? 10;  // P6: raised from 6 → 10
   const maxTasks = llmOpts.maxTasks ?? Infinity;
-  const concurrency = llmOpts.concurrency ?? 4; // P3
+  const concurrency = llmOpts.concurrency ?? 3; // P3 — lowered 4 → 3 (MCPAT-083) to reduce spawn pressure
   const runBatch = llmOpts.runBatch ?? makeDefaultLlmRunBatch(llmOpts.model);
 
   // ── Phase A: enumerate all open tasks from markdown ───────────────────────
@@ -548,7 +612,7 @@ export async function runTriage(
 
     // ── P3: Run batches concurrently, bounded by concurrency ──────────────
     const batchThunks = batches.map(batch =>
-      () => runLlmBatchAdaptive(batch, runBatch, { nowMs, gitRun, threshold, repoCaches }),
+      () => runLlmBatchAdaptive(batch, runBatch, { nowMs, gitRun, thresholds, repoCaches }),
     );
     const batchResults = await runBounded(batchThunks, concurrency);
 

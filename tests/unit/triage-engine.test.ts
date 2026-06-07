@@ -8,10 +8,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 import { writeRun, readRun, undoRun } from '../../src/triage/audit.js';
 import type { AuditEntry } from '../../src/triage/audit.js';
-import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive, runBounded, makeGhCachedRunner, DEFAULT_TRIAGE_MODEL, buildTriageSpawnArgs } from '../../src/triage/engine.js';
-import type { TriageRunOpts, TaskWithEntry } from '../../src/triage/engine.js';
+import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive, runBounded, makeGhCachedRunner, DEFAULT_TRIAGE_MODEL, buildTriageSpawnArgs, TRANSIENT_SPAWN_CODES, SPAWN_RETRY_MAX, spawnClaudeWithRetry } from '../../src/triage/engine.js';
+import type { TriageRunOpts, TaskWithEntry, SpawnFn } from '../../src/triage/engine.js';
+import { defaultThresholds } from '../../src/triage/llm-triage.js';
 import type { McpTasksConfig } from '../../src/config/loader.js';
 import type { CmdResult } from '../../src/triage/git-signals.js';
 import type { TaskStatus } from '../../src/types/task.js';
@@ -428,7 +431,7 @@ function makeMinimalTaskWithEntry(id: string): TaskWithEntry {
 }
 
 describe('runLlmBatchAdaptive (A-AC1)', () => {
-  const opts = { nowMs: FIXED_NOW, gitRun: noSignalRunner, threshold: 0.75 };
+  const opts = { nowMs: FIXED_NOW, gitRun: noSignalRunner, thresholds: defaultThresholds(0.75) };
 
   it('returns empty results for empty task list', async () => {
     const fakeBatch = async (_p: string): Promise<string> => '[]';
@@ -906,5 +909,200 @@ describe('AC5: gh results cache + Tier-0 resilience', () => {
       gitRun: throwingRunner,
       llm: { enabled: false },
     })).resolves.toHaveProperty('decisions');
+  });
+});
+
+// ── MCPAT-083: spawn-retry helpers ────────────────────────────────────────────
+
+/**
+ * Build a minimal ChildProcess-like mock from two EventEmitters + a stub stdin.
+ * failCount: how many calls should emit ENOENT before succeeding.
+ * successOutput: the string the mock emits on the final successful call.
+ */
+function makeMockSpawnFn(
+  failCount: number,
+  successOutput: string = '[]',
+): { spawnFn: SpawnFn; callCount: () => number } {
+  let count = 0;
+
+  const spawnFn: SpawnFn = (_cmd, _args, _opts): ChildProcess => {
+    count++;
+    const proc = new EventEmitter();
+    const stdoutEmitter = new EventEmitter();
+    const stdinEmitter = new EventEmitter();
+
+    (proc as unknown as Record<string, unknown>)['stdout'] = stdoutEmitter;
+    (proc as unknown as Record<string, unknown>)['stdin'] = Object.assign(stdinEmitter, {
+      writable: true,
+      write: () => true,
+      end: () => {},
+    });
+    (proc as unknown as Record<string, unknown>)['kill'] = () => {};
+
+    if (count <= failCount) {
+      setImmediate(() => {
+        const err = Object.assign(new Error('spawn ENOENT'), { code: 'ENOENT' });
+        proc.emit('error', err);
+      });
+    } else {
+      setImmediate(() => {
+        stdoutEmitter.emit('data', Buffer.from(successOutput, 'utf-8'));
+        proc.emit('close', 0);
+      });
+    }
+
+    return proc as unknown as ChildProcess;
+  };
+
+  return { spawnFn, callCount: () => count };
+}
+
+/** Always-fail mock: emits the given error code on every spawn. */
+function makeAlwaysFailSpawnFn(
+  code: string,
+): { spawnFn: SpawnFn; callCount: () => number } {
+  let count = 0;
+
+  const spawnFn: SpawnFn = (_cmd, _args, _opts): ChildProcess => {
+    count++;
+    const proc = new EventEmitter();
+    const stdoutEmitter = new EventEmitter();
+    const stdinEmitter = new EventEmitter();
+
+    (proc as unknown as Record<string, unknown>)['stdout'] = stdoutEmitter;
+    (proc as unknown as Record<string, unknown>)['stdin'] = Object.assign(stdinEmitter, {
+      writable: true, write: () => true, end: () => {},
+    });
+    (proc as unknown as Record<string, unknown>)['kill'] = () => {};
+
+    setImmediate(() => {
+      const err = Object.assign(new Error(`spawn ${code}`), { code });
+      proc.emit('error', err);
+    });
+
+    return proc as unknown as ChildProcess;
+  };
+
+  return { spawnFn, callCount: () => count };
+}
+
+// ── MCPAT-083: spawn-retry (AC1) ──────────────────────────────────────────────
+
+describe('MCPAT-083: spawn-retry (AC1)', () => {
+  const env = { PATH: process.env['PATH'] ?? '' };
+
+  it('AC1: spawnFn that emits ENOENT once then succeeds → resolves with output', async () => {
+    const { spawnFn, callCount } = makeMockSpawnFn(1, '[]');
+    const result = await spawnClaudeWithRetry('claude', ['-p'], 'prompt', env, spawnFn);
+    expect(result).toBe('[]');
+    expect(callCount()).toBe(2); // 1 fail + 1 success
+  });
+
+  it('AC1: always-ENOENT spawnFn rejects after SPAWN_RETRY_MAX attempts', async () => {
+    const { spawnFn, callCount } = makeAlwaysFailSpawnFn('ENOENT');
+    await expect(
+      spawnClaudeWithRetry('claude', ['-p'], 'prompt', env, spawnFn),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(callCount()).toBe(SPAWN_RETRY_MAX);
+  });
+
+  it('AC1: non-transient code (EACCES) is NOT retried — rejects on first attempt', async () => {
+    const { spawnFn, callCount } = makeAlwaysFailSpawnFn('EACCES');
+    await expect(
+      spawnClaudeWithRetry('claude', ['-p'], 'prompt', env, spawnFn),
+    ).rejects.toMatchObject({ code: 'EACCES' });
+    expect(callCount()).toBe(1);
+  });
+
+  it('AC1: ENOENT SPAWN_RETRY_MAX-1 times then success → resolves within retry limit', async () => {
+    const { spawnFn, callCount } = makeMockSpawnFn(SPAWN_RETRY_MAX - 1, '["ok"]');
+    const result = await spawnClaudeWithRetry('claude', ['-p'], 'prompt', env, spawnFn);
+    expect(result).toBe('["ok"]');
+    expect(callCount()).toBe(SPAWN_RETRY_MAX); // exactly maxAttempts
+  });
+
+  it('AC1: EBUSY is transient — retried like ENOENT', async () => {
+    const { spawnFn, callCount } = makeMockSpawnFn(1, 'output');
+    // Override first call to emit EBUSY (by constructing inline)
+    let innerCount = 0;
+    const busySpawn: SpawnFn = (_cmd, _args, _opts): ChildProcess => {
+      innerCount++;
+      const proc = new EventEmitter();
+      const stdoutEmitter = new EventEmitter();
+      const stdinEmitter = new EventEmitter();
+      (proc as unknown as Record<string, unknown>)['stdout'] = stdoutEmitter;
+      (proc as unknown as Record<string, unknown>)['stdin'] = Object.assign(stdinEmitter, {
+        writable: true, write: () => true, end: () => {},
+      });
+      (proc as unknown as Record<string, unknown>)['kill'] = () => {};
+
+      if (innerCount === 1) {
+        setImmediate(() => proc.emit('error', Object.assign(new Error('EBUSY'), { code: 'EBUSY' })));
+      } else {
+        setImmediate(() => { stdoutEmitter.emit('data', Buffer.from('ok', 'utf-8')); proc.emit('close', 0); });
+      }
+      return proc as unknown as ChildProcess;
+    };
+    const result = await spawnClaudeWithRetry('claude', ['-p'], 'prompt', env, busySpawn);
+    expect(result).toBe('ok');
+    expect(innerCount).toBe(2);
+  });
+
+  it('AC1: TRANSIENT_SPAWN_CODES includes all five expected codes', () => {
+    expect(TRANSIENT_SPAWN_CODES.has('ENOENT')).toBe(true);
+    expect(TRANSIENT_SPAWN_CODES.has('EBUSY')).toBe(true);
+    expect(TRANSIENT_SPAWN_CODES.has('EAGAIN')).toBe(true);
+    expect(TRANSIENT_SPAWN_CODES.has('EMFILE')).toBe(true);
+    expect(TRANSIENT_SPAWN_CODES.has('ETXTBSY')).toBe(true);
+    expect(TRANSIENT_SPAWN_CODES.has('EACCES')).toBe(false);
+    expect(TRANSIENT_SPAWN_CODES.has('ETIMEOUT')).toBe(false);
+  });
+
+  it('AC1: SPAWN_RETRY_MAX is 3', () => {
+    expect(SPAWN_RETRY_MAX).toBe(3);
+  });
+});
+
+// ── MCPAT-083: default concurrency (AC2) ──────────────────────────────────────
+
+describe('MCPAT-083: default concurrency (AC2)', () => {
+  it('AC2: default Tier-2 concurrency is 3 (not 4)', async () => {
+    const projDir = join(tmpRoot, 'ac2-concurrency-proj');
+    const { config, tasksDir } = makeTempConfig(projDir);
+
+    const { writeFileSync } = await import('node:fs');
+    // 9 tasks with batchSize=1 → 9 single-task batches. maxInFlight should not exceed 3.
+    for (let i = 1; i <= 9; i++) {
+      const id = `TEST-${String(i).padStart(3, '0')}`;
+      const md = [
+        '---', 'schema_version: 1', `id: ${id}`, `title: Task ${i}`, 'type: feature',
+        'status: todo', 'priority: medium', 'project: TEST', 'tags: []', 'complexity: 1',
+        'complexity_manual: false', `why: reason ${i}`, 'created: 2026-01-01T00:00:00Z',
+        'updated: 2026-01-01T00:00:00Z', 'last_activity: 2026-01-01T00:00:00Z',
+        'claimed_by: null', 'claimed_at: null', 'claim_ttl_hours: 4', 'parent: null',
+        'children: []', 'dependencies: []', 'subtasks: []', 'git:', '  commits: []',
+        'transitions: []', 'files: []', '---', '', `## Task ${i}`,
+      ].join('\n');
+      writeFileSync(join(tasksDir, `${id}.md`), md, 'utf-8');
+    }
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fakeBatch = async (_prompt: string): Promise<string> => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      inFlight--;
+      return '[]';
+    };
+
+    // No concurrency override — uses the engine default (should be 3 now)
+    await runTriage(config, {
+      nowMs: FIXED_NOW, gitRun: noSignalRunner,
+      llm: { enabled: true, runBatch: fakeBatch, batchSize: 1, threshold: 0.75 },
+    });
+
+    expect(maxInFlight).toBeGreaterThanOrEqual(1);
+    expect(maxInFlight).toBeLessThanOrEqual(3);
   });
 });

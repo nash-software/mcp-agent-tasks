@@ -4,7 +4,7 @@
  * No claude spawn — pure logic.
  */
 import { describe, it, expect } from 'vitest';
-import { buildTriagePrompt, parseTriageVerdicts, mapVerdict, taskView } from '../../src/triage/llm-triage.js';
+import { buildTriagePrompt, parseTriageVerdicts, mapVerdict, taskView, defaultThresholds } from '../../src/triage/llm-triage.js';
 import { isDecision } from '../../src/triage/types.js';
 import type { Task } from '../../src/types/task.js';
 
@@ -90,7 +90,7 @@ describe('parseTriageVerdicts', () => {
 });
 
 describe('mapVerdict', () => {
-  const T = 0.85;
+  const T = defaultThresholds(0.85);
   it('resolves a high-confidence done verdict to done', () => {
     const o = mapVerdict(task({ status: 'in_progress' }), { id: 'MCPAT-001', verdict: 'done', confidence: 0.95, rationale: 'shipped' }, T);
     expect(isDecision(o)).toBe(true);
@@ -123,6 +123,96 @@ describe('mapVerdict', () => {
   it('reports llm-error when no verdict was returned for the task', () => {
     const o = mapVerdict(task(), undefined, T);
     if (!isDecision(o)) expect(o.reason).toBe('llm-error'); else throw new Error('should skip');
+  });
+});
+
+// ── MCPAT-083: tiered confidence thresholds (AC3, AC4) ────────────────────────
+
+describe('defaultThresholds (AC4)', () => {
+  it('base 0.75: done=0.75, obsolete=0.85, duplicate=0.85', () => {
+    const t = defaultThresholds(0.75);
+    expect(t.done).toBe(0.75);
+    expect(t.obsolete).toBe(0.85);
+    expect(t.duplicate).toBe(0.85);
+  });
+
+  it('base 0.9: all three raise to 0.9', () => {
+    const t = defaultThresholds(0.9);
+    expect(t.done).toBe(0.9);
+    expect(t.obsolete).toBe(0.9);
+    expect(t.duplicate).toBe(0.9);
+  });
+
+  it('base 0.5: done=0.5, obsolete and duplicate floor at 0.85', () => {
+    const t = defaultThresholds(0.5);
+    expect(t.done).toBe(0.5);
+    expect(t.obsolete).toBe(0.85);
+    expect(t.duplicate).toBe(0.85);
+  });
+
+  it('no-arg default produces done=0.75, obsolete=0.85, duplicate=0.85', () => {
+    const t = defaultThresholds();
+    expect(t.done).toBe(0.75);
+    expect(t.obsolete).toBe(0.85);
+    expect(t.duplicate).toBe(0.85);
+  });
+});
+
+describe('mapVerdict tiered thresholds (AC3)', () => {
+  const thresholds = defaultThresholds(0.75); // done=0.75, obsolete=0.85, duplicate=0.85
+
+  it('AC3: done @ 0.78 resolves (above 0.75 done threshold)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'done', confidence: 0.78, rationale: 'shipped' }, thresholds);
+    expect(isDecision(o)).toBe(true);
+  });
+
+  it('AC3: obsolete @ 0.78 escalates as llm-unsure (below 0.85 obsolete threshold)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'obsolete', confidence: 0.78, rationale: 'abandoned' }, thresholds);
+    expect(isDecision(o)).toBe(false);
+    if (!isDecision(o)) {
+      expect(o.reason).toBe('llm-unsure');
+      expect(o.detail).toContain('0.78');
+    }
+  });
+
+  it('AC3: obsolete @ 0.88 resolves (above 0.85 obsolete threshold)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'obsolete', confidence: 0.88, rationale: 'abandoned' }, thresholds);
+    expect(isDecision(o)).toBe(true);
+  });
+
+  it('AC3: duplicate @ 0.80 escalates as llm-unsure (below 0.85 duplicate threshold)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'duplicate', confidence: 0.80, rationale: 'dup' }, thresholds);
+    expect(isDecision(o)).toBe(false);
+    if (!isDecision(o)) expect(o.reason).toBe('llm-unsure');
+  });
+
+  it('AC3: duplicate @ 0.87 resolves (above 0.85 duplicate threshold)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'duplicate', confidence: 0.87, rationale: 'dup' }, thresholds);
+    expect(isDecision(o)).toBe(true);
+  });
+
+  it('AC3: done exactly at threshold 0.75 resolves (boundary inclusive)', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'done', confidence: 0.75, rationale: 'shipped' }, thresholds);
+    expect(isDecision(o)).toBe(true);
+  });
+
+  it('AC3: done below threshold 0.74 escalates', () => {
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'done', confidence: 0.74, rationale: 'maybe' }, thresholds);
+    expect(isDecision(o)).toBe(false);
+    if (!isDecision(o)) expect(o.reason).toBe('llm-unsure');
+  });
+
+  it('AC4: base 0.9 raises done threshold — done @ 0.88 escalates', () => {
+    const highThresholds = defaultThresholds(0.9);
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'done', confidence: 0.88, rationale: 'shipped' }, highThresholds);
+    expect(isDecision(o)).toBe(false);
+    if (!isDecision(o)) expect(o.reason).toBe('llm-unsure');
+  });
+
+  it('AC4: base 0.9 raises all thresholds — obsolete @ 0.91 resolves', () => {
+    const highThresholds = defaultThresholds(0.9);
+    const o = mapVerdict(task(), { id: 'MCPAT-001', verdict: 'obsolete', confidence: 0.91, rationale: 'old' }, highThresholds);
+    expect(isDecision(o)).toBe(true);
   });
 });
 
