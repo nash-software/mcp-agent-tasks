@@ -79,3 +79,9 @@ This project uses the handbook tool to maintain a structured knowledge graph.
 
 The handbook is stored in `.handbook/` and tracked in git (except queue/lock files).
 @.handbook/critical-rules.md
+
+## Commit Provenance Standard
+
+Every commit on a feature branch must carry the task ID in the subject: `[PREFIX-NNN] message`.
+The `prepare-commit-msg` hook enforces this automatically.
+Full standard: `docs/standards/task-id-provenance.md`
