@@ -2,19 +2,21 @@
  * Tier-0 triage engine (dry-run enumeration).
  *
  * Enumerates every OPEN task across all registered projects + the GEN global
- * store, probes each for merge evidence, and returns a TriageReport — without
- * writing anything to disk or SQLite.
+ * store by reading markdown files directly — the source of truth — rather than
+ * SqliteIndex (which can be stale between reconcile-on-boot runs).
  *
- * DB open strategy: opens each SqliteIndex read-only (no reconcileIndexOnBoot);
- * if an index is locked or broken, that project is skipped with a stderr warning
- * so a single bad index cannot abort the sweep.
+ * This approach is:
+ *   - Lock-free: no WAL-lock contention with the running tray server
+ *   - Always current: markdown files are written atomically on every task mutation
+ *   - Resilient: parse failures on individual files are caught and counted; they
+ *     never abort the whole sweep
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import type { McpTasksConfig } from '../config/loader.js';
-import { getDbPath, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
-import { SqliteIndex } from '../store/sqlite-index.js';
+import { getDbPath, DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
+import { MarkdownStore } from '../store/markdown-store.js';
 import type { Task, TaskStatus } from '../types/task.js';
 import { probeMerge, defaultRunner } from './git-signals.js';
 import type { CmdRunner } from './git-signals.js';
@@ -26,6 +28,7 @@ export interface TriageReport {
   decisions: TriageDecision[];
   skips: TriageSkip[];
   totalOpen: number;
+  parseErrors: number;
   projects: { prefix: string; open: number; resolved: number }[];
 }
 
@@ -35,7 +38,7 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
 
 interface ProjectEntry {
   prefix: string;
-  dbPath: string;
+  tasksDir: string;
   repoPath: string | null;
 }
 
@@ -44,30 +47,72 @@ function buildProjectEntries(config: McpTasksConfig): ProjectEntry[] {
   const entries: ProjectEntry[] = [];
 
   if (config.projects.length === 0) {
-    // No registered projects — fall back to global DB (repoPath unknown)
-    entries.push({ prefix: 'default', dbPath: getDbPath(config), repoPath: null });
+    // No registered projects — fall back to the directory containing the global DB
+    const dbPath = getDbPath(config);
+    entries.push({ prefix: 'default', tasksDir: dirname(dbPath), repoPath: null });
     return entries;
   }
 
   for (const p of config.projects) {
     const tasksDir = join(p.path, tasksDirName);
-    const dbPath = resolveServerDbPath(tasksDir, config, p.prefix);
-    entries.push({ prefix: p.prefix, dbPath, repoPath: p.path });
+    entries.push({ prefix: p.prefix, tasksDir, repoPath: p.path });
   }
 
   // Add the GEN global store if it exists
   const genTasksDir = join(homedir(), '.mcp-tasks', 'tasks', 'gen');
-  const genDbPath = join(genTasksDir, '.index.db');
-  if (existsSync(genDbPath)) {
-    entries.push({ prefix: 'GEN', dbPath: genDbPath, repoPath: null });
+  if (existsSync(genTasksDir)) {
+    entries.push({ prefix: 'GEN', tasksDir: genTasksDir, repoPath: null });
   }
 
   return entries;
 }
 
 /**
+ * Read all task markdown files in the given directory.
+ * Skips dotfiles, index.yaml, and any non-.md files.
+ * Returns parsed tasks; increments parseErrors for files that fail.
+ */
+function readTasksFromDir(
+  store: MarkdownStore,
+  tasksDir: string,
+): { tasks: Task[]; parseErrors: number } {
+  if (!existsSync(tasksDir)) {
+    return { tasks: [], parseErrors: 0 };
+  }
+
+  let entries: string[];
+  try {
+    entries = readdirSync(tasksDir);
+  } catch {
+    return { tasks: [], parseErrors: 0 };
+  }
+
+  const tasks: Task[] = [];
+  let parseErrors = 0;
+
+  for (const entry of entries) {
+    // Skip dotfiles, index.yaml, and non-.md files
+    if (entry.startsWith('.')) continue;
+    if (entry === 'index.yaml') continue;
+    if (!entry.endsWith('.md')) continue;
+
+    const filePath = join(tasksDir, entry);
+    try {
+      const task = store.read(filePath);
+      tasks.push(task);
+    } catch {
+      // Resilient: parse failure on one file must not abort the sweep
+      parseErrors++;
+    }
+  }
+
+  return { tasks, parseErrors };
+}
+
+/**
  * Run the Tier-0 dry-run triage sweep across all projects.
  * Never writes to disk or SQLite.
+ * Reads markdown files directly for a lock-free, always-current enumeration.
  */
 export function runTier0Dryrun(
   config: McpTasksConfig,
@@ -77,37 +122,23 @@ export function runTier0Dryrun(
   const run = opts?.run ?? defaultRunner;
 
   const entries = buildProjectEntries(config);
+  const store = new MarkdownStore();
   const decisions: TriageDecision[] = [];
   const skips: TriageSkip[] = [];
   const projectStats: Map<string, { open: number; resolved: number }> = new Map();
   const seenIds = new Set<string>();
+  let totalParseErrors = 0;
 
   for (const entry of entries) {
-    // Resilient: a locked/broken index must not abort the whole sweep
-    let index: SqliteIndex | null = null;
-    let tasks: Task[] = [];
-
-    try {
-      index = new SqliteIndex(entry.dbPath);
-      index.init();
-      // listTasks({}) returns all tasks; we filter to open statuses below
-      tasks = index.listTasks({});
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(
-        `[triage] SKIP project ${entry.prefix} (${entry.dbPath}): ${msg}\n`,
-      );
-      continue;
-    } finally {
-      try { index?.close(); } catch { /* ignore */ }
-    }
+    const { tasks, parseErrors } = readTasksFromDir(store, entry.tasksDir);
+    totalParseErrors += parseErrors;
 
     const openTasks = tasks.filter(t => OPEN_STATUSES.has(t.status));
     const stats = { open: 0, resolved: 0 };
     projectStats.set(entry.prefix, stats);
 
     for (const task of openTasks) {
-      // Dedup: global store can surface the same task under multiple project indexes
+      // Dedup: the same task id must not be processed twice across directories
       if (seenIds.has(task.id)) continue;
       seenIds.add(task.id);
 
@@ -144,5 +175,5 @@ export function runTier0Dryrun(
     resolved: s.resolved,
   }));
 
-  return { decisions, skips, totalOpen, projects };
+  return { decisions, skips, totalOpen, parseErrors: totalParseErrors, projects };
 }
