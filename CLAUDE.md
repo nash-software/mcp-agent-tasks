@@ -67,6 +67,16 @@ dist/             — Built output (ESM + CJS, not committed)
 - Task statuses (src/types/task.ts): `draft`, `approved`, `todo`, `in_progress`, `blocked`, `done`, `closed`, `archived`. Core flow: `todo` -> `in_progress` -> `done` -> `closed`; `blocked` from todo/in_progress; transitions enforced by `src/types/transitions.ts`
 - Max 10 subtasks per task; max 100 transitions; max 50 commits in git.commits[]
 
+## LLM Integration Test Gates
+
+`npm test` is hermetic by default — it never spawns a real `claude` process even on a host where claude is on PATH.
+
+**`CLAUDE_CLI_DISABLED=1`** — set by tests in `beforeAll` for any describe block that starts a UI server with an endpoint that can spawn claude (`/api/capture/braindump`, `/api/capture/quick`, `/api/capture/infer`, `/api/advisor/chat`). The `resolveClaudeBinary()` helper in `server-ui.ts` checks this flag first and returns a guaranteed-nonexistent path so the spawn fails fast with ENOENT and every call site takes its graceful-degradation branch.
+
+**`RUN_LLM_INTEGRATION=1`** — opt-in flag for tests that exercise the actual LLM happy-path (real claude response). These tests are wrapped with `describe.skipIf(process.env['RUN_LLM_INTEGRATION'] !== '1', ...)` and are visible-skipped in default runs. CI never sets this flag.
+
+**Never set `RUN_LLM_INTEGRATION` in CI.** The suite must remain deterministic and side-effect-free. Root cause: 2026-06-09 relay-ship OOM where ambient claude availability caused tests to spawn real LLM calls, locking up the build host (MCPAT-086).
+
 ## Handbook Navigation
 
 This project uses the handbook tool to maintain a structured knowledge graph.

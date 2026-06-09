@@ -59,6 +59,7 @@ describe('POST /api/capture/quick — endpoint logic', () => {
   let tempDir: string;
   let savedDb: string | undefined;
   let savedConfig: string | undefined;
+  let savedClaudeDisabled: string | undefined;
 
   beforeAll(async () => {
     const env = makeTempEnv();
@@ -66,8 +67,13 @@ describe('POST /api/capture/quick — endpoint logic', () => {
 
     savedDb = process.env['MCP_TASKS_DB'];
     savedConfig = process.env['MCP_TASKS_CONFIG'];
+    savedClaudeDisabled = process.env['CLAUDE_CLI_DISABLED'];
     process.env['MCP_TASKS_CONFIG'] = env.configPath;
     process.env['MCP_TASKS_DB'] = path.join(tempDir, 'tasks.db');
+    // Prevent real claude spawns — the quick-capture endpoint fires spawnBackgroundRouting()
+    // which calls spawn(resolveClaudeBinary()) asynchronously. On a host where claude is on
+    // PATH this spawns a real LLM call per captured task (slow, non-deterministic, OOM risk).
+    process.env['CLAUDE_CLI_DISABLED'] = '1';
 
     handle = await startUiServer({ port: 0 });
     baseUrl = handle.url;
@@ -79,6 +85,8 @@ describe('POST /api/capture/quick — endpoint logic', () => {
     else process.env['MCP_TASKS_DB'] = savedDb;
     if (savedConfig === undefined) delete process.env['MCP_TASKS_CONFIG'];
     else process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    if (savedClaudeDisabled === undefined) delete process.env['CLAUDE_CLI_DISABLED'];
+    else process.env['CLAUDE_CLI_DISABLED'] = savedClaudeDisabled;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
