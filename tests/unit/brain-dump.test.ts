@@ -58,12 +58,18 @@ describe('POST /api/capture/braindump', () => {
   let tempDir: string;
   let savedDb: string | undefined;
   let savedConfig: string | undefined;
+  let savedClaudeDisabled: string | undefined;
 
   beforeAll(async () => {
     const env = makeTempEnv();
     tempDir = env.tempDir;
     savedDb = process.env['MCP_TASKS_DB'];
     savedConfig = process.env['MCP_TASKS_CONFIG'];
+    savedClaudeDisabled = process.env['CLAUDE_CLI_DISABLED'];
+    // Prevent real claude spawns — endpoint gracefully returns empty candidates on ENOENT.
+    // Without this gate, the braindump endpoint calls spawnSync(resolveClaudeBinary()) and on
+    // a host where claude is on PATH it spawns a real LLM call (slow, non-deterministic, OOM risk).
+    process.env['CLAUDE_CLI_DISABLED'] = '1';
     const server = await startServer(env.configPath, path.join(tempDir, 'tasks.db'));
     handle = server.handle;
     baseUrl = server.baseUrl;
@@ -75,6 +81,8 @@ describe('POST /api/capture/braindump', () => {
     else process.env['MCP_TASKS_DB'] = savedDb;
     if (savedConfig === undefined) delete process.env['MCP_TASKS_CONFIG'];
     else process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    if (savedClaudeDisabled === undefined) delete process.env['CLAUDE_CLI_DISABLED'];
+    else process.env['CLAUDE_CLI_DISABLED'] = savedClaudeDisabled;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -88,7 +96,7 @@ describe('POST /api/capture/braindump', () => {
     const data = await res.json() as { candidates: unknown[]; error?: string };
     expect(Array.isArray(data.candidates)).toBe(true);
     // Either got candidates or a graceful error — but always 200
-  }, 90_000);
+  });
 
   it('returns empty candidates and error for empty text', async () => {
     const res = await fetch(`${baseUrl}/api/capture/braindump`, {
