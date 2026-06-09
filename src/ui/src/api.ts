@@ -382,6 +382,18 @@ export async function markArtifactOpened(filePath: string): Promise<void> {
   })
 }
 
+export async function openArtifact(filePath: string): Promise<void> {
+  const res = await fetch('/api/artifacts/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { message?: string }
+    throw new Error(body.message ?? `Failed to open file (${res.status})`)
+  }
+}
+
 export function searchBrain(query: string): Promise<BrainSearchResponse> {
   return get<BrainSearchResponse>(`/api/brain/search?q=${encodeURIComponent(query)}`)
 }

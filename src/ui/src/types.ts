@@ -118,6 +118,7 @@ export interface ArtifactEntry {
   last_opened_at: string | null
   task_id: string | null
   staleDays: number
+  source?: 'capture' | 'linked-doc'
 }
 
 export interface AcrJob {

@@ -8,10 +8,11 @@ import {
   Copy,
   ExternalLink,
   Files,
+  FolderOpen,
   type LucideIcon,
 } from 'lucide-react'
 import { useArtifacts } from '../hooks/useArtifacts'
-import { markArtifactOpened } from '../api'
+import { markArtifactOpened, openArtifact } from '../api'
 import { PrefixBadge } from '../components/atoms'
 import { ViewHeader } from '../components/ViewHeader'
 import type { ArtifactEntry, PanelState } from '../types'
@@ -94,14 +95,16 @@ interface ArtifactRowProps {
   artifact: ArtifactEntry
   onOpenPanel: (panel: PanelState) => void
   onCopied: (filename: string) => void
+  onOpenError: (msg: string) => void
 }
 
-function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): React.JSX.Element {
+function ArtifactRow({ artifact, onOpenPanel, onCopied, onOpenError }: ArtifactRowProps): React.JSX.Element {
   const [copiedFlash, setCopiedFlash] = useState(false)
   const name = basename(artifact.path)
   const ext = extOf(artifact.path)
   const { Icon, className: iconClass } = getExtConfig(ext)
   const isUnvisited = artifact.last_opened_at === null
+  const isLinkedDoc = artifact.source === 'linked-doc'
 
   const handleCopy = useCallback((): void => {
     const doCopy = async (): Promise<void> => {
@@ -137,6 +140,19 @@ function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): Rea
     }
   }, [artifact.task_id, onOpenPanel])
 
+  const handleOpenInApp = useCallback((e: React.MouseEvent): void => {
+    e.stopPropagation()
+    const doOpen = async (): Promise<void> => {
+      try {
+        await openArtifact(artifact.path)
+        try { await markArtifactOpened(artifact.path) } catch { /* telemetry only */ }
+      } catch (err) {
+        onOpenError(err instanceof Error ? err.message : 'Failed to open file')
+      }
+    }
+    void doOpen()
+  }, [artifact.path, onOpenError])
+
   return (
     <div className="flex items-center gap-3 px-4 py-2 border-b border-surface-3 last:border-b-0 hover:bg-surface-2 transition-colors duration-100 min-h-[40px]">
       {/* File-type icon colored by extension */}
@@ -155,6 +171,11 @@ function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): Rea
               aria-label="Not yet viewed"
             />
           )}
+          {isLinkedDoc && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-badge text-xs font-medium bg-status-blue/15 text-status-blue shrink-0">
+              linked
+            </span>
+          )}
         </div>
         <span
           title={artifact.path}
@@ -169,6 +190,16 @@ function ArtifactRow({ artifact, onOpenPanel, onCopied }: ArtifactRowProps): Rea
 
       {/* Staleness badge */}
       <StaleBadge staleDays={artifact.staleDays} />
+
+      {/* Open-in-app button */}
+      <button
+        onClick={handleOpenInApp}
+        className="shrink-0 p-1 rounded hover:bg-surface-3 text-ink-muted hover:text-ink transition-colors"
+        title="Open in default app"
+        aria-label="Open in default app"
+      >
+        <FolderOpen size={14} />
+      </button>
 
       {/* Copy-path button */}
       <button
@@ -210,10 +241,16 @@ interface ArtifactsViewProps {
 export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsViewProps): React.JSX.Element {
   const { artifacts, isLoading } = useArtifacts()
   const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const [openError, setOpenError] = useState<string | null>(null)
 
   const handleCopied = useCallback((filename: string): void => {
     setToastMsg(`Copied path · ${filename}`)
     setTimeout(() => setToastMsg(null), 2200)
+  }, [])
+
+  const handleOpenError = useCallback((msg: string): void => {
+    setOpenError(msg)
+    setTimeout(() => setOpenError(null), 3000)
   }, [])
 
   // Artifacts carry only a project (→ area). Non-task surface: filter by project + area ONLY so an
@@ -231,7 +268,7 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
         title="Artifacts"
         subtitle={
           !isLoading && sorted.length > 0
-            ? `last 30 days · ${sorted.length} files · ${unvisited} unvisited`
+            ? `${sorted.length} files · ${unvisited} unvisited`
             : undefined
         }
       />
@@ -240,6 +277,13 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
       {toastMsg && (
         <div className="mb-3 px-3 py-2 rounded-input bg-surface-2 border border-surface-3 text-ink-2 text-xs">
           {toastMsg}
+        </div>
+      )}
+
+      {/* Open-error notification */}
+      {openError && (
+        <div className="mb-3 px-3 py-2 rounded-input bg-status-red/10 border border-status-red/20 text-status-red text-xs">
+          {openError}
         </div>
       )}
 
@@ -261,11 +305,7 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
             <>
               <p className="text-ink-2 font-medium text-sm mb-1">No artifacts yet</p>
               <p className="text-ink-muted text-sm max-w-xs mb-2">
-                Artifacts appear here automatically as agents write or edit files during a session.
-              </p>
-              <p className="text-ink-faint text-xs max-w-xs">
-                The passive-capture hook must be installed to record artifacts.
-                Run <code className="font-mono bg-surface-2 px-1 rounded">agent-tasks install-claude-hooks</code> to enable it.
+                Artifacts appear here as agents write files or when tasks have linked docs (spec, plan, or touched files).
               </p>
             </>
           )}
@@ -281,6 +321,7 @@ export function ArtifactsView({ filter, areaMap = {}, onOpenPanel }: ArtifactsVi
               artifact={a}
               onOpenPanel={onOpenPanel}
               onCopied={handleCopied}
+              onOpenError={handleOpenError}
             />
           ))}
         </div>
