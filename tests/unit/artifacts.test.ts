@@ -419,6 +419,7 @@ describe('GET /api/artifacts — linked-doc entries (AC1)', () => {
     // Seed the SQLite index with tasks that have spec_file / plan_file / files[]
     const idx = new SqliteIndex(dbPath);
     idx.init();
+    idx.ensureProject('DOC');
     idx.upsertTask(makeTask('DOC-001', {
       project: 'DOC',
       spec_file: 'docs/spec.md',
@@ -510,6 +511,7 @@ describe('GET /api/artifacts — dedup capture vs linked-doc (AC2)', () => {
     // Seed SQLite with task referencing sharedFile
     const idx = new SqliteIndex(dbPath);
     idx.init();
+    idx.ensureProject('DUP');
     idx.upsertTask(makeTask('DUP-001', { project: 'DUP', files: ['shared.ts'] }));
     idx.close();
 
