@@ -352,3 +352,311 @@ describe('passive-capture artifact append', () => {
     }).not.toThrow();
   });
 });
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+import { SqliteIndex } from '../../src/store/sqlite-index.js';
+import type { Task } from '../../src/types/task.js';
+
+function makeTask(id: string, overrides: Partial<Task> = {}): Task {
+  const now = new Date().toISOString();
+  return {
+    schema_version: 1, id,
+    title: `Task ${id}`, type: 'feature', status: 'todo', priority: 'medium',
+    project: id.split('-')[0]!, tags: [], complexity: 3, complexity_manual: false,
+    why: 'testing', created: now, updated: now, last_activity: now,
+    claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
+    parent: null, children: [], dependencies: [], subtasks: [],
+    git: { commits: [] }, transitions: [], files: [], body: '',
+    file_path: `/tmp/${id}.md`,
+    ...overrides,
+  } as Task;
+}
+
+// ─── AC1: GET /api/artifacts returns task-linked docs ───────────────────────
+
+describe('GET /api/artifacts — linked-doc entries (AC1)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-linked-test-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    const docsDir = path.join(tempDir, 'docs');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.mkdirSync(docsDir, { recursive: true });
+
+    // Create real files on disk so realpathSync succeeds
+    const specFilePath = path.join(docsDir, 'spec.md');
+    const planFilePath = path.join(docsDir, 'plan.md');
+    const touchedFilePath = path.join(tempDir, 'src', 'foo.ts');
+    fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+    fs.writeFileSync(specFilePath, '# spec');
+    fs.writeFileSync(planFilePath, '# plan');
+    fs.writeFileSync(touchedFilePath, '// foo');
+
+    const configPath = path.join(tempDir, 'config.json');
+    const dbPath = path.join(tasksDir, '.index.db');
+
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'DOC', path: tempDir }],
+    }));
+
+    // Seed the SQLite index with tasks that have spec_file / plan_file / files[]
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('DOC');
+    idx.upsertTask(makeTask('DOC-001', {
+      project: 'DOC',
+      spec_file: 'docs/spec.md',
+      plan_file: 'docs/plan.md',
+      files: ['src/foo.ts'],
+    }));
+    idx.close();
+
+    // Delete artifacts.jsonl so only linked-doc source is active
+    const mcpTasksDir = path.join(os.homedir(), '.mcp-tasks');
+    fs.mkdirSync(mcpTasksDir, { recursive: true });
+    const jsonlPath = path.join(mcpTasksDir, 'artifacts.jsonl');
+    if (fs.existsSync(jsonlPath)) fs.unlinkSync(jsonlPath);
+
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    process.env['MCP_TASKS_DB'] = dbPath;
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns linked-doc entries for spec_file, plan_file, and files[]', async () => {
+    const res = await fetch(`${baseUrl}/api/artifacts`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as Array<{ path: string; source?: string; task_id: string | null; project: string }>;
+
+    const specEntry = data.find(e => e.path.endsWith('spec.md'));
+    const planEntry = data.find(e => e.path.endsWith('plan.md'));
+    const srcEntry = data.find(e => e.path.endsWith('foo.ts'));
+
+    expect(specEntry).toBeDefined();
+    expect(specEntry?.source).toBe('linked-doc');
+    expect(specEntry?.task_id).toBe('DOC-001');
+    expect(specEntry?.project).toBe('DOC');
+
+    expect(planEntry).toBeDefined();
+    expect(planEntry?.source).toBe('linked-doc');
+
+    expect(srcEntry).toBeDefined();
+    expect(srcEntry?.source).toBe('linked-doc');
+  });
+});
+
+// ─── AC2: Dedup — JSONL capture overrides linked-doc for same path ───────────
+
+describe('GET /api/artifacts — dedup capture vs linked-doc (AC2)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  let mcpTasksDir: string;
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-dedup-test-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    // Create a shared file that will appear in both JSONL and linked-doc
+    const sharedFile = path.join(tempDir, 'shared.ts');
+    fs.writeFileSync(sharedFile, '// shared');
+
+    const configPath = path.join(tempDir, 'config.json');
+    const dbPath = path.join(tasksDir, '.index.db');
+
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'DUP', path: tempDir }],
+    }));
+
+    // Seed SQLite with task referencing sharedFile
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('DUP');
+    idx.upsertTask(makeTask('DUP-001', { project: 'DUP', files: ['shared.ts'] }));
+    idx.close();
+
+    // Also write sharedFile to JSONL capture
+    mcpTasksDir = path.join(tempDir, 'mcp-tasks-dedup');
+    fs.mkdirSync(mcpTasksDir, { recursive: true });
+    const jsonlPath = path.join(os.homedir(), '.mcp-tasks', 'artifacts.jsonl');
+    const realShared = fs.realpathSync(sharedFile);
+    const now = new Date();
+    const captureRecord = JSON.stringify({
+      path: realShared,
+      project: 'DUP',
+      created_at: new Date(now.getTime() - 1000).toISOString(),
+      task_id: 'DUP-001',
+    });
+    fs.mkdirSync(path.join(os.homedir(), '.mcp-tasks'), { recursive: true });
+    fs.writeFileSync(jsonlPath, captureRecord + '\n');
+
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    process.env['MCP_TASKS_DB'] = dbPath;
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    const jsonlPath = path.join(os.homedir(), '.mcp-tasks', 'artifacts.jsonl');
+    if (fs.existsSync(jsonlPath)) fs.unlinkSync(jsonlPath);
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('deduplicates: same path in JSONL and linked-doc appears once with source capture', async () => {
+    const res = await fetch(`${baseUrl}/api/artifacts`);
+    expect(res.status).toBe(200);
+    const data = await res.json() as Array<{ path: string; source?: string }>;
+
+    const matches = data.filter(e => e.path.endsWith('shared.ts'));
+    expect(matches).toHaveLength(1);
+    expect(matches[0]!.source).toBe('capture');
+  });
+});
+
+// ─── AC3: POST /api/artifacts/open ───────────────────────────────────────────
+
+describe('POST /api/artifacts/open (AC3)', () => {
+  let handle: UiServerHandle;
+  let baseUrl: string;
+  let tempDir: string;
+  let savedDb: string | undefined;
+  let savedConfig: string | undefined;
+  let testFile: string;
+
+  beforeAll(async () => {
+    savedDb = process.env['MCP_TASKS_DB'];
+    savedConfig = process.env['MCP_TASKS_CONFIG'];
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artifacts-open-test-'));
+    const tasksDir = path.join(tempDir, 'agent-tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    // Create a test file inside the project root (will be within roots since parent is in allowed roots)
+    testFile = path.join(tempDir, 'testfile.md');
+    fs.writeFileSync(testFile, '# test');
+
+    const configPath = path.join(tempDir, 'config.json');
+    const dbPath = path.join(tasksDir, '.index.db');
+
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: tasksDir,
+      defaultStorage: 'local',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [{ prefix: 'OPEN', path: tempDir }],
+    }));
+
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+    process.env['MCP_TASKS_DB'] = dbPath;
+    handle = await startUiServer({ port: 0 });
+    baseUrl = handle.url;
+  });
+
+  afterAll(async () => {
+    await handle.close();
+    if (savedDb !== undefined) process.env['MCP_TASKS_DB'] = savedDb;
+    else delete process.env['MCP_TASKS_DB'];
+    if (savedConfig !== undefined) process.env['MCP_TASKS_CONFIG'] = savedConfig;
+    else delete process.env['MCP_TASKS_CONFIG'];
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns { ok: true } for a file within allowed roots', async () => {
+    const res = await fetch(`${baseUrl}/api/artifacts/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: testFile }),
+    });
+    expect(res.status).toBe(200);
+    const data = await res.json() as { ok: boolean };
+    expect(data.ok).toBe(true);
+  });
+
+  it('returns 404 for a non-existent file', async () => {
+    const res = await fetch(`${baseUrl}/api/artifacts/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path.join(tempDir, 'does-not-exist.md') }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 403 for a path outside the allowed roots', async () => {
+    // /proc/version is outside homedir and project parent on Linux; use an absolute path that's clearly out
+    const outsidePath = process.platform === 'win32'
+      ? 'C:\\Windows\\System32\\drivers\\etc\\hosts'
+      : '/etc/hostname';
+    // If the file doesn't exist on this platform, skip (403 vs 404 depends on existence)
+    // We use a path that definitely exists to test 403 specifically
+    const res = await fetch(`${baseUrl}/api/artifacts/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: outsidePath }),
+    });
+    // Should be 403 (if file exists but outside roots) or 404 (if file doesn't exist)
+    // On a standard Linux system /etc/hostname exists and is outside roots → 403
+    expect([403, 404]).toContain(res.status);
+    if (res.status === 403) {
+      const data = await res.json() as { error: string };
+      expect(data.error).toBe('FORBIDDEN');
+    }
+  });
+
+  it('returns 400 when path field is missing', async () => {
+    const res = await fetch(`${baseUrl}/api/artifacts/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});

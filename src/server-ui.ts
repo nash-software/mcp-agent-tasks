@@ -48,6 +48,7 @@ export interface ArtifactEntry {
   last_opened_at: string | null;
   task_id: string | null;
   staleDays: number;
+  source?: 'capture' | 'linked-doc';
 }
 
 // ── ACR status cache ──────────────────────────────────────────────────────────
@@ -3275,14 +3276,97 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
-      // API: artifacts list
+      // API: artifacts list (JSONL capture + task-linked docs merged)
       if (pathname === '/api/artifacts' && req.method === 'GET') {
         try {
-          const entries = readArtifacts();
-          sendJson(res, 200, entries);
+          const captureEntries = readArtifacts().map(e => ({ ...e, source: 'capture' as const }));
+
+          // Synthesize linked-doc entries from task frontmatter (spec_file, plan_file, files[])
+          const linkedDocByPath = new Map<string, ArtifactEntry>();
+          const openedStoreLd = loadOpenedStore();
+          const nowMs = Date.now();
+          for (const pi of projectIndexes) {
+            const projectRoot = dirname(pi.tasksDir);
+            const tasks = pi.index.listTasks({ limit: 10_000 });
+            for (const task of tasks) {
+              const docPaths: string[] = [];
+              if (task.spec_file) docPaths.push(task.spec_file);
+              if (task.plan_file) docPaths.push(task.plan_file);
+              for (const f of task.files) docPaths.push(f);
+              for (const docPath of docPaths) {
+                if (!docPath) continue;
+                const abs = isAbsolute(docPath) ? docPath : resolve(projectRoot, docPath);
+                let real: string;
+                try { real = realpathSync(abs); } catch { continue; }
+                if (linkedDocByPath.has(real)) continue;
+                const createdMs = new Date(task.updated).getTime();
+                linkedDocByPath.set(real, {
+                  path: real,
+                  project: pi.prefix,
+                  created_at: task.updated,
+                  last_opened_at: openedStoreLd[real] ?? null,
+                  task_id: task.id,
+                  staleDays: Math.floor((nowMs - createdMs) / 86_400_000),
+                  source: 'linked-doc',
+                });
+              }
+            }
+          }
+
+          // Merge: JSONL capture entries win on path collision (dedup by resolved path)
+          const merged = new Map<string, ArtifactEntry>();
+          for (const [p, e] of linkedDocByPath) merged.set(p, e);
+          for (const e of captureEntries) merged.set(e.path, e);
+
+          sendJson(res, 200, Array.from(merged.values()));
         } catch {
           sendJson(res, 200, []);
         }
+        return;
+      }
+
+      // API: open artifact in OS default application
+      if (pathname === '/api/artifacts/open' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          (async (): Promise<void> => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString()) as { path?: unknown };
+              if (!body.path || typeof body.path !== 'string') {
+                sendJson(res, 400, { error: 'MISSING_FIELDS', message: 'path is required' });
+                return;
+              }
+              const roots = Array.from(new Set(
+                [homedir(), ...config.projects.map(p => dirname(p.path))]
+                  .filter(r => typeof r === 'string' && isAbsolute(r))
+                  .map(r => { try { return realpathSync(r); } catch { return resolve(r); } }),
+              ));
+              let real: string;
+              try {
+                real = realpathSync(body.path);
+              } catch {
+                sendJson(res, 404, { error: 'NOT_FOUND', message: 'file does not exist' });
+                return;
+              }
+              if (!isPathWithinRoots(real, roots)) {
+                sendJson(res, 403, { error: 'FORBIDDEN', message: 'path is outside the allowed roots' });
+                return;
+              }
+              const { exec } = await import('node:child_process');
+              const openCmd = process.platform === 'win32'
+                ? `start "" "${real}"`
+                : process.platform === 'darwin'
+                ? `open "${real}"`
+                : `xdg-open "${real}"`;
+              exec(openCmd);
+              sendJson(res, 200, { ok: true });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+            }
+          })();
+        });
         return;
       }
 
