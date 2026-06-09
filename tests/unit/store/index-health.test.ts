@@ -413,3 +413,134 @@ describe('ensureHealthyIndex — Step D single DB open + returned index', () => 
     index!.close();
   });
 });
+
+// ── MCPAT-084: stale status CHECK constraint detection and rebuild ────────────
+describe('ensureHealthyIndex — MCPAT-084 stale status CHECK constraint', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    dbPath = path.join(tmpDir, 'tasks.db');
+  });
+  afterEach(() => {
+    rmDirSafe(tmpDir);
+  });
+
+  /** Creates a raw DB whose tasks.status CHECK omits 'closed' (pre-MCPAT-084). */
+  function makeStaleDb(dbPath: string): void {
+    const db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.exec(`
+      CREATE TABLE tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'feature',
+        status TEXT NOT NULL CHECK(status IN ('todo','in_progress','done','blocked','archived','draft','approved')),
+        priority TEXT NOT NULL DEFAULT 'medium',
+        project TEXT NOT NULL,
+        complexity INTEGER,
+        complexity_manual INTEGER NOT NULL DEFAULT 0,
+        why TEXT,
+        parent TEXT,
+        created TEXT NOT NULL,
+        updated TEXT NOT NULL,
+        last_activity TEXT NOT NULL,
+        claimed_by TEXT,
+        claimed_at TEXT,
+        claim_ttl_hours INTEGER DEFAULT 4,
+        branch TEXT,
+        pr_number INTEGER,
+        pr_url TEXT,
+        pr_state TEXT,
+        pr_title TEXT,
+        pr_merged_at TEXT,
+        pr_base_branch TEXT,
+        file_path TEXT NOT NULL DEFAULT '',
+        body TEXT,
+        schema_version INTEGER NOT NULL DEFAULT 1
+      )
+    `);
+    db.close();
+  }
+
+  it('AC1: detects stale constraint and triggers rebuild; rebuilt tasks DDL includes closed', () => {
+    makeStaleDb(dbPath);
+
+    const { result } = ensureHealthyIndex(dbPath, {}, (fresh) => {
+      void fresh.nextId('TEST');
+    });
+
+    expect(result).toBe('rebuilt');
+
+    const ro = new Database(dbPath, { readonly: true });
+    const row = ro.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'",
+    ).get() as { sql: string };
+    ro.close();
+    expect(row.sql).toContain("'closed'");
+  });
+
+  it('AC2: after rebuild, upserting a task with status=closed succeeds without CHECK error', () => {
+    makeStaleDb(dbPath);
+
+    ensureHealthyIndex(dbPath, {}, (fresh) => {
+      void fresh.nextId('TEST');
+    });
+
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    void idx.nextId('TEST');
+    expect(() => idx.upsertTask(makeTask('TEST-1', { status: 'closed' }))).not.toThrow();
+    idx.close();
+  });
+
+  it('AC3: rebuild preserves all existing rows via rebuildFn (count + ids unchanged)', () => {
+    makeStaleDb(dbPath);
+
+    // Seed 3 rows in the stale DB
+    const raw = new Database(dbPath);
+    const now = new Date().toISOString();
+    for (const id of ['TEST-1', 'TEST-2', 'TEST-3']) {
+      raw
+        .prepare(
+          'INSERT INTO tasks (id, title, project, status, file_path, created, updated, last_activity) VALUES (?,?,?,?,?,?,?,?)',
+        )
+        .run(id, `Task ${id}`, 'TEST', 'todo', `/tmp/${id}.md`, now, now, now);
+    }
+    raw.close();
+
+    // rebuildFn simulates reconcile-from-markdown by re-inserting the same rows
+    ensureHealthyIndex(dbPath, {}, (fresh) => {
+      void fresh.nextId('TEST');
+      for (const id of ['TEST-1', 'TEST-2', 'TEST-3']) {
+        fresh.upsertTask(makeTask(id));
+      }
+    });
+
+    expect(countTasks(dbPath)).toBe(3);
+    const ro = new Database(dbPath, { readonly: true });
+    const ids = (ro.prepare('SELECT id FROM tasks ORDER BY id').all() as { id: string }[]).map(
+      (r) => r.id,
+    );
+    ro.close();
+    expect(ids).toEqual(['TEST-1', 'TEST-2', 'TEST-3']);
+  });
+
+  it('AC4: a DB created fresh from current schema.sql is NOT flagged stale', () => {
+    const seed = new SqliteIndex(dbPath);
+    seed.init();
+    void seed.nextId('TEST');
+    seed.upsertTask(makeTask('TEST-1'));
+    seed.close();
+
+    let rebuildCalled = false;
+    const { result, index } = ensureHealthyIndex(dbPath, {}, () => {
+      rebuildCalled = true;
+    });
+    index?.close();
+
+    expect(result).toBe('ok');
+    expect(rebuildCalled).toBe(false);
+  });
+});

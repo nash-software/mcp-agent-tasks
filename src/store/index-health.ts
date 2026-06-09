@@ -119,6 +119,12 @@ export function ensureHealthyIndex(
         if (ratio > bloatRatio && pages >= minPageFloor) {
           reason = `bloated (${(ratio * 100).toFixed(1)}% free pages, ${pages} pages)`;
         }
+        // Stale status CHECK constraint detection (MCPAT-084): pre-MCPAT-084 DBs lack
+        // 'closed' in the tasks.status CHECK. SQLite cannot ALTER a CHECK constraint,
+        // so we route through the existing nuke-and-rebuild path.
+        if (reason === null && probe.hasStaleStatusConstraint()) {
+          reason = 'stale status CHECK constraint (missing closed)';
+        }
       }
     } catch (err) {
       reason = `open/init failed: ${err instanceof Error ? err.message : String(err)}`;
