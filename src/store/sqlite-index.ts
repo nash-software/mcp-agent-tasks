@@ -138,11 +138,12 @@ export class SqliteIndex {
    * boot path (MCPAT-071 Step D).
    *
    * Bump this constant whenever you add a new ALTER TABLE migration below.
-   * Current version 1 covers: body_hash, spec_file, milestone, estimate_hours,
+   * Version 1 covers: body_hash, spec_file, milestone, estimate_hours,
    * plan_file, auto_captured, area, scheduled_for, agent_status, block_reason,
    * triage_note, triage_confidence, closed_at, close_batch.
+   * Version 2 (MCPAT-084): provenance bump for stale status CHECK detection.
    */
-  static readonly DB_SCHEMA_VERSION = 1;
+  static readonly DB_SCHEMA_VERSION = 2;
 
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
@@ -1056,6 +1057,34 @@ export class SqliteIndex {
     try {
       const result = this.db.pragma('quick_check', { simple: true }) as string;
       return result === 'ok';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Detect whether the on-disk `tasks` table was created with a pre-MCPAT-084
+   * status CHECK that omits `'closed'`.
+   *
+   * SQLite cannot ALTER a CHECK constraint, so the only safe fix is a full
+   * nuke-and-rebuild via the existing ensureHealthyIndex path.
+   *
+   * Returns true  → stale; caller should trigger rebuild.
+   * Returns false → constraint is current OR DDL is unreadable (fail-open).
+   * Never throws.
+   */
+  hasStaleStatusConstraint(): boolean {
+    if (!this.db.open) return false;
+    try {
+      const row = this.db
+        .prepare<[], { sql: string }>(
+          "SELECT sql FROM sqlite_master WHERE type='table' AND name='tasks'",
+        )
+        .get();
+      if (!row?.sql) return false;
+      // The canonical status CHECK includes 'closed'; absence means the table
+      // was created before MCPAT-084 added that value.
+      return !row.sql.includes("'closed'");
     } catch {
       return false;
     }
