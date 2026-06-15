@@ -6,14 +6,16 @@
  * and exposes one-click Undo. Tasks the engine couldn't decide land in the
  * "Needs your call" queue, where each can be Closed (resolve → done) or Kept.
  */
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Sparkles, Undo2, Check, ArrowRight, Loader2, AlertTriangle, X } from 'lucide-react'
 import { ViewHeader } from '../components/ViewHeader'
 import {
   fetchTriagePreview, runTriageSweep, applyTriageRun, undoTriageRun, resolveTriageTask,
-  type TriageReport, type TriageDecision, type TriageSkip,
+  fetchTriageLatest,
+  type TriageReport, type TriageDecision, type TriageSkip, type PersistedTriageReport,
 } from '../api'
+import { fmtAgo } from '../lib/format'
 import type { PanelState } from '../types'
 
 interface Props {
@@ -102,10 +104,22 @@ function EscalationRow(
 export function TriageView({ onOpenPanel }: Props): React.JSX.Element {
   const qc = useQueryClient()
   const [report, setReport] = useState<TriageReport | null>(null)
+  const [isRehydrated, setIsRehydrated] = useState(false)
   const [applied, setApplied] = useState<{ applied: number; failed: number } | null>(null)
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
   const preview = useQuery({ queryKey: ['triage', 'preview'], queryFn: fetchTriagePreview, refetchOnWindowFocus: false })
+  const latest = useQuery({ queryKey: ['triage', 'latest'], queryFn: fetchTriageLatest, refetchOnWindowFocus: false })
+
+  // On mount: hydrate from the persisted latest report if no fresh sweep has been run yet.
+  useEffect(() => {
+    if (latest.data && !report) {
+      setReport(latest.data)
+      setIsRehydrated(true)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latest.data])
+
   const data = report ?? preview.data ?? null
   const runId = report?.runId ?? preview.data?.runId ?? null
 
@@ -116,15 +130,20 @@ export function TriageView({ onOpenPanel }: Props): React.JSX.Element {
 
   const sweep = useMutation({
     mutationFn: () => runTriageSweep({ llm: true }), // dry-run; server caches decisions under runId
-    onSuccess: (r) => { setReport(r); setApplied(null); setDismissed(new Set()) },
+    onSuccess: (r) => { setReport(r); setIsRehydrated(false); setApplied(null); setDismissed(new Set()) },
   })
   const applyMut = useMutation({
     mutationFn: (id: string) => applyTriageRun(id),
-    onSuccess: (res) => { setApplied({ applied: res.applied, failed: res.failed }); refreshTasks() },
+    onSuccess: (res) => {
+      setApplied({ applied: res.applied, failed: res.failed })
+      setIsRehydrated(false)
+      refreshTasks()
+      void qc.invalidateQueries({ queryKey: ['triage', 'latest'] })
+    },
   })
   const undo = useMutation({
     mutationFn: (id: string) => undoTriageRun(id),
-    onSuccess: () => { setApplied(null); setReport(null); refreshTasks(); void preview.refetch() },
+    onSuccess: () => { setApplied(null); setReport(null); setIsRehydrated(false); refreshTasks(); void preview.refetch() },
   })
   const resolveMut = useMutation({
     mutationFn: (taskId: string) => resolveTriageTask(taskId),
@@ -217,6 +236,12 @@ export function TriageView({ onOpenPanel }: Props): React.JSX.Element {
             </button>
           )}
         </div>
+
+        {isRehydrated && (latest.data as PersistedTriageReport | null)?.savedAt && (
+          <p className="text-ink-faint text-xs">
+            Last run {fmtAgo((latest.data as PersistedTriageReport).savedAt)}
+          </p>
+        )}
 
         {sweep.isPending && (
           <p className="text-ink-muted text-xs flex items-center gap-1.5">
