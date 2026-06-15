@@ -51,6 +51,22 @@ export function fmtElapsed(ms: number): string {
 }
 
 /**
+ * Format an ISO-8601 date string as a human-readable relative time.
+ * e.g. "just now", "5m ago", "2h ago", "3d ago"
+ */
+export function fmtAgo(isoDate: string): string {
+  const diffMs = Date.now() - Date.parse(isoDate)
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return 'just now'
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  if (diffHr < 24) return `${diffHr}h ago`
+  const diffDay = Math.floor(diffHr / 24)
+  return `${diffDay}d ago`
+}
+
+/**
  * Get the local YYYY-MM-DD date string (matches how server computes "today").
  */
 export function localToday(): string {
