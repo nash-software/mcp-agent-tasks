@@ -5,7 +5,7 @@
  * Audit dir: scratchpads/.triage-runs/ under the process cwd (or package root).
  * One file per run: <runId>.jsonl, atomic write (temp + rename).
  */
-import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McpTasksConfig } from '../config/loader.js';
 import { resolveServerDbPath } from '../config/loader.js';
@@ -16,6 +16,7 @@ import { TaskStore } from '../store/task-store.js';
 import { transitionPath } from './decide.js';
 import type { TriageDecision } from './types.js';
 import type { TaskStatus } from '../types/task.js';
+import type { TriageReport } from './engine.js';
 
 /** One entry per successfully applied decision, written to the run JSONL file. */
 export interface AuditEntry {
@@ -82,6 +83,63 @@ export function readRun(runId: string): AuditEntry[] {
   }
   return entries;
 }
+
+// ── Latest-report persistence ──────────────────────────────────────────────────
+// A single "latest.report.json" file in the audit dir lets TriageView rehydrate
+// its sweep result across page navigations without re-running the AI sweep.
+
+/** A persisted triage report — extends TriageReport with a savedAt ISO-8601 timestamp. */
+export interface PersistedTriageReport extends TriageReport {
+  savedAt: string;
+}
+
+/** Full path to the latest report JSON file. */
+function latestReportPath(): string {
+  return join(auditDir(), 'latest.report.json');
+}
+
+/**
+ * Atomically write the latest triage report to disk.
+ * Uses a temp-file rename to be NTFS/POSIX safe.
+ */
+export function writeLatestReport(report: TriageReport): void {
+  ensureAuditDir();
+  const filePath = latestReportPath();
+  const tmp = `${filePath}.tmp.${process.pid}`;
+  const persisted: PersistedTriageReport = { ...report, savedAt: new Date().toISOString() };
+  writeFileSync(tmp, JSON.stringify(persisted), 'utf-8');
+  renameSync(tmp, filePath);
+}
+
+/**
+ * Read and parse the latest persisted triage report.
+ * Returns null if the file is absent or unreadable.
+ */
+export function readLatestReport(): PersistedTriageReport | null {
+  const filePath = latestReportPath();
+  if (!existsSync(filePath)) return null;
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    return JSON.parse(raw) as PersistedTriageReport;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Delete the latest persisted triage report (called after successful Apply).
+ * Silently ignores missing files.
+ */
+export function deleteLatestReport(): void {
+  const filePath = latestReportPath();
+  try {
+    rmSync(filePath, { force: true });
+  } catch {
+    // Silently ignore deletion errors (file may not exist)
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 
 /** Build a TaskStore for the given project/tasksDir, mirroring cli.ts buildStore. */
 function buildStore(tasksDir: string, project: string, config: McpTasksConfig): TaskStore {
