@@ -787,3 +787,91 @@
 ## [HIGH] TraySupvisor — respawn on ok:true build, skip on ok:false
 
 ## [HIGH] TraySupvisor — health: healthy on start, restarting on unexpected exit
+
+## [HIGH] hasBuildChanged — pure comparison function contract
+
+## [HIGH] lib/version.ts — pure module exports and API contract
+
+## [HIGH] hooks/useBuildVersion — visibility-gated polling lifecycle
+
+## [HIGH] ReloadToast — conditional rendering on visibility prop
+
+## [HIGH] UpdateButton — devTray guard and failed-state tracking
+
+## [HIGH] App.tsx — version hook and reload toast wiring
+
+## [HIGH] Nav.tsx — dev Update button conditional rendering
+
+## [HIGH] Header.tsx — devTray prop in interface and composition
+
+## [HIGH] parseClaudeStreamLine - Claude stream event parsing and filtering
+
+## [HIGH] Transition Path Computation Between Task States
+
+## [HIGH] Tier-0 Triage Decision: Hard Merge Signal Task Resolution
+
+## [HIGH] probeMerge signal detection multi-channel logic
+
+## [HIGH] Parse Triage Verdicts from LLM Output
+
+## [HIGH] Map Individual Triage Verdicts to Task State Transitions
+
+## [HIGH] Audit writeRun / readRun roundtrip and error handling
+
+## [HIGH] runTriage with injected runners (no real claude/git)
+
+## [HIGH] undoRun state reversion and error handling
+
+## [HIGH] install-hooks --all-projects idempotency and skip behavior
+
+## [HIGH] prepare-commit-msg branch extraction and task ID stamping
+
+## [HIGH] Audit writeRun and readRun roundtrip contract
+
+## [HIGH] runTriage injected runners and tier accounting
+
+## [HIGH] undoRun task state reversion contract
+
+## [HIGH] Triage engine batch timeout and size constants
+
+## [HIGH] runLlmBatchAdaptive timeout-driven batch splitting
+
+## [HIGH] Triage tier-2 repo signal injection into prompts
+
+## [HIGH] Tier-2 model selection via flag and constant
+
+## [HIGH] runBounded concurrent batch execution with concurrency limit
+
+## [HIGH] warmCommitLog per-repo cache warming for git history
+
+## [HIGH] makeGhCachedRunner caching and tier-0 resilience
+
+## [HIGH] runTriageEval concurrent dual-model evaluation
+
+## [HIGH] parseTriageVerdicts LLM output parsing and resilience
+
+## [HIGH] mapVerdict confidence-driven state mapping
+
+## [HIGH] buildTriagePrompt repo signal context injection
+
+## [HIGH] extractKeywords title analysis for signal extraction
+
+## [HIGH] gatherRepoSignals task-aware repository analysis
+
+## [HIGH] summarizeSignals human-readable signal serialization
+
+## [HIGH] LLM run spawn — transient ENOENT retry with 3-attempt limit
+
+## [HIGH] Triage verdict mapping — tiered confidence escalation thresholds
+
+## [HIGH] GET /api/artifacts deduplication, filtering, and sorting
+
+## [HIGH] POST /api/artifacts/opened updates last_opened_at timestamp
+
+## [HIGH] GET /api/artifacts returns linked-doc entries for task file references
+
+## [HIGH] POST /api/artifacts/open validates file existence and path traversal guards
+
+## [HIGH] ensureHealthyIndex detects and rebuilds databases with stale status CHECK constraints
+
+## [HIGH] Triage engine report persistence with roundtrip validation
