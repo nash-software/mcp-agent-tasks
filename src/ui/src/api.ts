@@ -752,3 +752,19 @@ export function applyTriageRun(runId: string): Promise<{ applied: number; failed
 export function resolveTriageTask(taskId: string): Promise<{ applied: number; failed: number; taskId: string }> {
   return post<{ applied: number; failed: number; taskId: string }>('/api/triage/resolve', { taskId })
 }
+
+/** A persisted triage report — extends TriageReport with a savedAt ISO-8601 timestamp. */
+export interface PersistedTriageReport extends TriageReport {
+  savedAt: string
+}
+
+/**
+ * Fetch the most recently persisted triage sweep report (MCPAT-087).
+ * Returns null when no report has been saved (server returns 404).
+ */
+export async function fetchTriageLatest(): Promise<PersistedTriageReport | null> {
+  const res = await fetch('/api/triage/latest')
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — /api/triage/latest`)
+  return res.json() as Promise<PersistedTriageReport>
+}
