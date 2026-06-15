@@ -10,8 +10,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { writeRun, readRun, undoRun } from '../../src/triage/audit.js';
-import type { AuditEntry } from '../../src/triage/audit.js';
+import { writeRun, readRun, undoRun, writeLatestReport, readLatestReport, deleteLatestReport } from '../../src/triage/audit.js';
+import type { AuditEntry, PersistedTriageReport } from '../../src/triage/audit.js';
 import { runTriage, LLM_BATCH_TIMEOUT_MS, runLlmBatchAdaptive, runBounded, makeGhCachedRunner, DEFAULT_TRIAGE_MODEL, buildTriageSpawnArgs, TRANSIENT_SPAWN_CODES, SPAWN_RETRY_MAX, spawnClaudeWithRetry } from '../../src/triage/engine.js';
 import type { TriageRunOpts, TaskWithEntry, SpawnFn } from '../../src/triage/engine.js';
 import { defaultThresholds } from '../../src/triage/llm-triage.js';
@@ -1104,5 +1104,57 @@ describe('MCPAT-083: default concurrency (AC2)', () => {
 
     expect(maxInFlight).toBeGreaterThanOrEqual(1);
     expect(maxInFlight).toBeLessThanOrEqual(3);
+  });
+});
+
+// ── MCPAT-087: writeLatestReport / readLatestReport / deleteLatestReport ───────
+
+describe('writeLatestReport / readLatestReport roundtrip', () => {
+  it('roundtrips a TriageReport and adds savedAt', async () => {
+    const report = {
+      decisions: [],
+      skips: [],
+      totalOpen: 3,
+      parseErrors: 0,
+      tier0Count: 0,
+      tier2Count: 0,
+      projects: [],
+      runId: 'ui-12345',
+    };
+    writeLatestReport(report);
+    const persisted: PersistedTriageReport | null = readLatestReport();
+    expect(persisted).not.toBeNull();
+    expect(persisted!.runId).toBe('ui-12345');
+    expect(persisted!.totalOpen).toBe(3);
+    expect(typeof persisted!.savedAt).toBe('string');
+    // savedAt should be a valid ISO-8601 date
+    expect(Date.parse(persisted!.savedAt)).toBeGreaterThan(0);
+  });
+
+  it('readLatestReport returns null when file is absent', () => {
+    // Delete the file first if it exists
+    deleteLatestReport();
+    const result = readLatestReport();
+    expect(result).toBeNull();
+  });
+
+  it('deleteLatestReport removes the file', () => {
+    // Write it, then delete, then read should be null
+    writeLatestReport({
+      decisions: [], skips: [], totalOpen: 1, parseErrors: 0,
+      tier0Count: 0, tier2Count: 0, projects: [], runId: 'ui-del-test',
+    });
+    // Confirm it was written
+    const before = readLatestReport();
+    expect(before).not.toBeNull();
+    // Now delete
+    deleteLatestReport();
+    const after = readLatestReport();
+    expect(after).toBeNull();
+  });
+
+  it('deleteLatestReport is idempotent — calling twice does not throw', () => {
+    deleteLatestReport(); // file already gone
+    expect(() => deleteLatestReport()).not.toThrow();
   });
 });
