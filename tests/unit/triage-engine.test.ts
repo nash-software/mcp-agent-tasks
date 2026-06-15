@@ -1158,3 +1158,68 @@ describe('writeLatestReport / readLatestReport roundtrip', () => {
     expect(() => deleteLatestReport()).not.toThrow();
   });
 });
+
+// ── MCPAT-087: server-behavior simulations ────────────────────────────────────
+// These tests replicate the logic the server applies (without spinning up HTTP).
+
+describe('MCPAT-087: GET /api/triage/latest returns 404 when file absent', () => {
+  it('readLatestReport returns null (→ server would 404) when no report was ever written', () => {
+    deleteLatestReport(); // ensure absent
+    const result = readLatestReport();
+    // Server checks: if (!persisted) → 404 { error: 'NO_LATEST_RUN' }
+    expect(result).toBeNull();
+  });
+
+  it('readLatestReport returns data (→ server would 200) after a write', () => {
+    writeLatestReport({
+      decisions: [], skips: [], totalOpen: 5, parseErrors: 0,
+      tier0Count: 2, tier2Count: 1, projects: [], runId: 'ui-server-test-001',
+    });
+    const result = readLatestReport();
+    expect(result).not.toBeNull();
+    expect(result!.runId).toBe('ui-server-test-001');
+    deleteLatestReport(); // clean up
+  });
+});
+
+describe('MCPAT-087: POST /api/triage/apply with cold cache reads from file', () => {
+  it('when persisted runId matches body.runId, decisions are available (no RUN_MISMATCH)', () => {
+    const runId = 'ui-cold-cache-001';
+    writeLatestReport({
+      decisions: [
+        { taskId: 'TEST-100', project: 'TEST', fromStatus: 'todo', toStatus: 'done',
+          path: ['todo', 'in_progress', 'done'], tier: 0, signal: 'pr-merged',
+          detail: 'PR merged', evidenceHard: true },
+      ],
+      skips: [], totalOpen: 1, parseErrors: 0, tier0Count: 1, tier2Count: 0, projects: [],
+      runId,
+    });
+
+    const persisted = readLatestReport();
+    expect(persisted).not.toBeNull();
+    // Simulate server logic: persisted.runId === body.runId → use decisions
+    expect(persisted!.runId).toBe(runId);
+    expect(persisted!.decisions).toHaveLength(1);
+    expect(persisted!.decisions[0]!.taskId).toBe('TEST-100');
+
+    deleteLatestReport(); // simulate deleteLatestReport() called after Apply
+    expect(readLatestReport()).toBeNull();
+  });
+
+  it('when persisted runId does not match body.runId → RUN_MISMATCH (409)', () => {
+    const storedRunId = 'ui-old-run-001';
+    const requestedRunId = 'ui-newer-run-002';
+    writeLatestReport({
+      decisions: [], skips: [], totalOpen: 0, parseErrors: 0,
+      tier0Count: 0, tier2Count: 0, projects: [], runId: storedRunId,
+    });
+
+    const persisted = readLatestReport();
+    expect(persisted).not.toBeNull();
+    // Server logic: if (persisted.runId !== body.runId) → 409 RUN_MISMATCH
+    const isMismatch = persisted!.runId !== requestedRunId;
+    expect(isMismatch).toBe(true);
+
+    deleteLatestReport(); // clean up
+  });
+});

@@ -21,7 +21,7 @@ import { buildProjectsList } from './projects-list.js';
 import { McpTasksError } from './types/errors.js';
 import { computeBuildId, runBuild, resolvePackageRoot } from './dev/build-runner.js';
 import { runTriage as runTriageSweep, projectTasksDirs, type TriageReport } from './triage/engine.js';
-import { undoRun as undoTriageRun, applyDecisions, writeRun } from './triage/audit.js';
+import { undoRun as undoTriageRun, applyDecisions, writeRun, writeLatestReport, readLatestReport, deleteLatestReport } from './triage/audit.js';
 import { transitionPath } from './triage/decide.js';
 import type { TriageDecision } from './triage/types.js';
 
@@ -3557,6 +3557,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               const runId = `ui-${Date.now()}`;
               rememberTriageRun(runId, report.decisions);
               report.runId = runId;
+              try { writeLatestReport(report); } catch { /* best-effort persistence */ }
               sendJson(res, 200, report);
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
@@ -3564,6 +3565,17 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             }
           })();
         });
+        return;
+      }
+
+      // GET /api/triage/latest — return the most recently persisted sweep report (MCPAT-087)
+      if (pathname === '/api/triage/latest' && req.method === 'GET') {
+        const persisted = readLatestReport();
+        if (!persisted) {
+          sendJson(res, 404, { error: 'NO_LATEST_RUN' });
+        } else {
+          sendJson(res, 200, persisted);
+        }
         return;
       }
 
@@ -3579,10 +3591,19 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 sendJson(res, 400, { error: 'INVALID_BODY', message: 'runId must be a non-empty string' });
                 return;
               }
-              const decisions = triageRunCache.get(body.runId);
+              let decisions = triageRunCache.get(body.runId);
               if (!decisions) {
-                sendJson(res, 404, { error: 'RUN_NOT_FOUND', message: 'no cached run for that runId — re-run the sweep' });
-                return;
+                // Cold-cache fallback: try reading from the persisted latest report (MCPAT-087)
+                const persisted = readLatestReport();
+                if (!persisted) {
+                  sendJson(res, 404, { error: 'RUN_NOT_FOUND', message: 'no cached run for that runId — re-run the sweep' });
+                  return;
+                }
+                if (persisted.runId !== body.runId) {
+                  sendJson(res, 409, { error: 'RUN_MISMATCH', message: `persisted runId ${persisted.runId} does not match ${body.runId}` });
+                  return;
+                }
+                decisions = persisted.decisions;
               }
               const cfg = loadConfig();
               const { applied, failed, entries } = await applyDecisions(decisions, cfg, projectTasksDirs(cfg));
@@ -3590,6 +3611,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 try { await writeRun(body.runId, entries); } catch { /* audit best-effort */ }
               }
               triageRunCache.delete(body.runId);
+              try { deleteLatestReport(); } catch { /* best-effort cleanup */ }
               sendJson(res, 200, { applied, failed, runId: body.runId });
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err);
