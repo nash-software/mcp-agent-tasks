@@ -308,6 +308,7 @@ export type AdvisorChatFrame =
   | { type: 'done' }
   | { type: 'error'; message: string }
   | { type: 'nudge'; targetMode: string }
+  | { type: 'action_draft'; id: string; draftType: string; title: string; project?: string; priority?: string; body?: string }
 
 export async function* streamAdvisorChat(
   messages: ChatMessage[],
@@ -345,12 +346,51 @@ export async function* streamAdvisorChat(
           else if (currentEvent === 'done') { yield { type: 'done' }; return }
           else if (currentEvent === 'error') { yield { type: 'error', message: String(obj['message'] ?? 'unknown') }; return }
           else if (currentEvent === 'nudge') yield { type: 'nudge', targetMode: String(obj['targetMode'] ?? '') }
+          else if (currentEvent === 'action_draft') {
+            yield {
+              type: 'action_draft',
+              id: String(obj['id'] ?? ''),
+              draftType: String(obj['draftType'] ?? ''),
+              title: String(obj['title'] ?? ''),
+              project: obj['project'] !== undefined ? String(obj['project']) : undefined,
+              priority: obj['priority'] !== undefined ? String(obj['priority']) : undefined,
+              body: obj['body'] !== undefined ? String(obj['body']) : undefined,
+            }
+          }
         } catch { /* skip malformed frame */ }
         currentEvent = ''
       }
     }
   }
   yield { type: 'done' }
+}
+
+export interface ApproveActionRequest {
+  type: 'create_task' | 'create_note' | 'set_milestone'
+  title: string
+  project?: string
+  priority?: string
+  body?: string
+  taskId?: string
+}
+
+export interface ApproveActionResponse {
+  success: boolean
+  created_id?: string
+  error?: string
+}
+
+export async function approveAction(req: ApproveActionRequest): Promise<ApproveActionResponse> {
+  const res = await fetch('/api/advisor/actions/approve', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { error?: string; message?: string }
+    return { success: false, error: err.message ?? err.error ?? `HTTP ${res.status}` }
+  }
+  return res.json() as Promise<ApproveActionResponse>
 }
 
 export async function fetchConfig(): Promise<{ conductorLocalUrl?: string; conductorVpsUrl?: string; projectPrefixes?: string[] }> {

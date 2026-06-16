@@ -7,8 +7,9 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Wand2, Send, Layers, FileText, Search, Bot } from 'lucide-react'
 import { streamAdvisorChat, type ChatMessage } from '../api'
 import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, PERSONAS, type Suggestion, type PersonaId } from '../lib/advisor'
-import type { Task } from '../types'
+import type { Task, ActionDraft } from '../types'
 import type { NoteRecord } from '../api'
+import { ActionCard } from './ActionCard'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ interface Props {
   onLive: () => void
   mode: PersonaId
   onModeChange: (mode: PersonaId) => void
+  projects?: string[]
 }
 
 // ── ChatHeader (non-exported inner component) ──────────────────────────────
@@ -51,7 +53,7 @@ function ChatHeader({ live, openCount }: { live: boolean; openCount: number }): 
 
 // ── AdvisorChat ────────────────────────────────────────────────────────────
 
-export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive, mode, onModeChange }: Props): React.JSX.Element {
+export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive, mode, onModeChange, projects = [] }: Props): React.JSX.Element {
   const openCount = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived').length
 
   const greeting: Msg = {
@@ -66,6 +68,8 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
   const [busy, setBusy] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
   const [nudge, setNudge] = useState<PersonaId | null>(null)
+  // Map from message index to action drafts for that message (max 3 per message)
+  const [actionDraftMap, setActionDraftMap] = useState<Map<number, ActionDraft[]>>(new Map())
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -73,6 +77,15 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
       threadRef.current.scrollTop = threadRef.current.scrollHeight
     }
   }, [msgs])
+
+  function handleDraftStatusChange(msgIdx: number, draftId: string, status: ActionDraft['status']): void {
+    setActionDraftMap(prev => {
+      const next = new Map(prev)
+      const drafts = next.get(msgIdx) ?? []
+      next.set(msgIdx, drafts.map(d => d.id === draftId ? { ...d, status } : d))
+      return next
+    })
+  }
 
   async function send(textArg?: string): Promise<void> {
     const text = (textArg ?? val).trim()
@@ -84,12 +97,21 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     setBusy(true)
 
     const apiMessages: ChatMessage[] = [...msgs, userMsg].map(m => ({ role: m.role, content: m.text }))
+    // The assistant message will be at msgs.length + 1 (after the user msg we just appended)
+    // We capture it after setState — use a local variable to track the index
+    let currentMsgIdx = -1
+
+    setMsgs(prev => {
+      currentMsgIdx = prev.length - 1 // last appended (assistant placeholder)
+      return prev
+    })
 
     try {
       for await (const frame of streamAdvisorChat(apiMessages, sessionId, mode)) {
         if (frame.type === 'delta') {
           onLive()
           setMsgs(prev => {
+            currentMsgIdx = prev.length - 1
             const next = [...prev]
             const last = next[next.length - 1]
             if (last && last.role === 'assistant') {
@@ -107,6 +129,25 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
           const validModes: PersonaId[] = ['pm', 'chairman', 'coach']
           const target = frame.targetMode as PersonaId
           if (validModes.includes(target)) setNudge(target)
+        } else if (frame.type === 'action_draft') {
+          const msgIndex = currentMsgIdx >= 0 ? currentMsgIdx : 0
+          setActionDraftMap(prev => {
+            const next = new Map(prev)
+            const existing = next.get(msgIndex) ?? []
+            if (existing.length >= 3) return prev // max 3 per message
+            const draft: ActionDraft = {
+              id: frame.id,
+              type: frame.draftType as ActionDraft['type'],
+              title: frame.title,
+              project: frame.project,
+              priority: frame.priority as ActionDraft['priority'],
+              body: frame.body,
+              source_response_id: String(msgIndex),
+              status: 'pending',
+            }
+            next.set(msgIndex, [...existing, draft])
+            return next
+          })
         }
       }
     } catch {
@@ -149,6 +190,18 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
                 {m.role === 'assistant'
                   ? renderWithChips(m.text, onOpenTask)
                   : m.text}
+              </div>
+            )}
+            {m.role === 'assistant' && (actionDraftMap.get(i) ?? []).length > 0 && (
+              <div className="action-cards">
+                {(actionDraftMap.get(i) ?? []).map(draft => (
+                  <ActionCard
+                    key={draft.id}
+                    draft={draft}
+                    projects={projects}
+                    onStatusChange={(draftId, status) => handleDraftStatusChange(i, draftId, status)}
+                  />
+                ))}
               </div>
             )}
           </div>
