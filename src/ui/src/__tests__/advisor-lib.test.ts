@@ -308,14 +308,24 @@ describe('ID_RE', () => {
 // ── SUGGESTED_PROMPTS ──────────────────────────────────────────────────────
 
 describe('SUGGESTED_PROMPTS', () => {
-  it('has exactly 4 items', () => {
-    expect(SUGGESTED_PROMPTS).toHaveLength(4)
+  it('pm mode has exactly 4 items', () => {
+    expect(SUGGESTED_PROMPTS.pm).toHaveLength(4)
   })
 
-  it('all items are non-empty strings', () => {
-    for (const p of SUGGESTED_PROMPTS) {
-      expect(typeof p).toBe('string')
-      expect(p.length).toBeGreaterThan(0)
+  it('chairman mode has exactly 4 items', () => {
+    expect(SUGGESTED_PROMPTS.chairman).toHaveLength(4)
+  })
+
+  it('coach mode has exactly 4 items', () => {
+    expect(SUGGESTED_PROMPTS.coach).toHaveLength(4)
+  })
+
+  it('all items in each mode are non-empty strings', () => {
+    for (const mode of ['pm', 'chairman', 'coach'] as const) {
+      for (const p of SUGGESTED_PROMPTS[mode]) {
+        expect(typeof p).toBe('string')
+        expect(p.length).toBeGreaterThan(0)
+      }
     }
   })
 })
