@@ -1,4 +1,4 @@
-import type { Task, TaskPriority, TaskArea, TaskType, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine, BatchCloseResponse } from './types'
+import type { Task, TaskPriority, TaskArea, TaskType, Milestone, ActivityEntry, StatsEntry, TodayResponse, ArtifactEntry, AcrStatusResponse, BrainSearchResponse, Skill, AgentLog, ProposalWithMatch, Engine, BatchCloseResponse, Goal } from './types'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(path)
@@ -28,6 +28,47 @@ export function fetchTasks(filters: TaskFilters = {}): Promise<Task[]> {
 
 export function fetchMilestones(): Promise<Milestone[]> {
   return get<Milestone[]>('/api/milestones')
+}
+
+export function fetchGoals(): Promise<Goal[]> {
+  return get<Goal[]>('/api/goals')
+}
+
+export async function createGoal(data: {
+  title: string
+  description?: string
+  metric?: string
+  target_date?: string | null
+}): Promise<Goal> {
+  const res = await fetch('/api/goals', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<Goal>
+}
+
+export async function updateGoal(id: string, data: {
+  title?: string
+  description?: string
+  metric?: string
+  target_date?: string | null
+  status?: Goal['status']
+}): Promise<Goal> {
+  const res = await fetch(`/api/goals/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string }
+    throw new Error(err.message ?? `${res.status} ${res.statusText}`)
+  }
+  return res.json() as Promise<Goal>
 }
 
 export function fetchActivity(): Promise<ActivityEntry[]> {

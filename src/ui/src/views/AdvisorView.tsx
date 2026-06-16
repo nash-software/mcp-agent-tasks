@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { fetchNotes, transitionTask, signoffTask } from '../api'
 import { useTasks } from '../hooks/useTasks'
+import { useGoals } from '../hooks/useGoals'
 import { buildSuggestions, type SuggestionId, type PersonaId } from '../lib/advisor'
 import { AdvisorChat } from '../components/AdvisorChat'
 import { ModeSelector } from '../components/ModeSelector'
@@ -23,6 +24,7 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
 
   // ── Data fetching ─────────────────────────────────────────────────────────
   const { tasks } = useTasks()
+  const { activeGoals } = useGoals()
   const notesQuery = useQuery({
     queryKey: ['notes'],
     queryFn: () => fetchNotes({ limit: 200 }),
@@ -73,9 +75,9 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
   const [live, setLive] = useState(false)
 
   const all = useMemo(
-    () => buildSuggestions(filteredTasks, filteredNotes, target),
+    () => buildSuggestions(filteredTasks, filteredNotes, target, activeGoals),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filteredTasks, filteredNotes, target, seed],
+    [filteredTasks, filteredNotes, target, activeGoals, seed],
   )
   const suggestions = all.filter(s => !dismissed.includes(s.id))
 

@@ -2,9 +2,11 @@ import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Task } from '../types'
 import { useMilestones } from '../hooks/useMilestones'
+import { useGoals } from '../hooks/useGoals'
 import { useTasks } from '../hooks/useTasks'
 import { createMilestone, updateTask } from '../api'
 import { ViewHeader } from '../components/ViewHeader'
+import { GoalsList } from '../components/GoalsList'
 import { type Filter, matchProjectArea, type Area } from '../lib/filter'
 import { milestoneProject } from '../lib/milestone'
 
@@ -109,6 +111,7 @@ function TaskPicker({ milestoneId, candidates, onSelect, onClose, isPending }: T
 export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element {
   const queryClient = useQueryClient()
   const { milestones, isLoading: mlLoading, error: mlError } = useMilestones()
+  const { goals, isLoading: goalsLoading } = useGoals()
   const { tasks, isLoading: tLoading } = useTasks()
 
   // Inline create form state
@@ -244,7 +247,7 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
       )}
       {/* Header */}
       <ViewHeader
-        title="Roadmap"
+        title="Goals &amp; Roadmap"
         right={
           <button
             className="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white text-sm rounded-input transition-colors font-sans"
@@ -254,6 +257,17 @@ export function RoadmapView({ filter, areaMap = {} }: Props): React.JSX.Element 
           </button>
         }
       />
+
+      {/* ── Goals section ─────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wide px-0.5">Goals</h2>
+        <GoalsList goals={goals} isLoading={goalsLoading} />
+      </div>
+
+      {/* ── Milestones section ─────────────────────────────────────────── */}
+      <div className="space-y-2 pt-2 border-t border-surface-3">
+        <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-wide px-0.5">Milestones</h2>
+      </div>
 
       {/* Inline create form */}
       {showForm && (
