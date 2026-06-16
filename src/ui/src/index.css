@@ -533,6 +533,31 @@
 .notes-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; color: var(--muted-2); }
 @media (max-width: 760px) { .notes-grid { grid-template-columns: 1fr; } }
 
+/* ── Notes tag filter ─────────────────────────────────────────────────────── */
+.notes-tag-filter { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 12px; }
+.note-tag-chip { font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--s3); background: transparent; color: var(--text2); cursor: pointer; transition: background 100ms, border-color 100ms; }
+.note-tag-chip:hover { background: var(--s2); }
+.note-tag-chip.active { background: var(--s3); border-color: var(--accent); color: var(--text1); }
+
+/* ── NotePanel slide-over ─────────────────────────────────────────────────── */
+.note-panel-backdrop { position: fixed; inset: 0; z-index: 40; }
+.note-panel { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; z-index: 41; background: var(--s0, #09090b); border-left: 1px solid var(--s3); display: flex; flex-direction: column; }
+.note-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--s3); }
+.note-panel-meta { display: flex; align-items: center; gap: 8px; }
+.note-panel-title { font-size: 14px; font-weight: 600; padding: 12px 16px 4px; line-height: 1.4; color: var(--text1); }
+.note-panel-body { flex: 1; overflow: hidden; padding: 8px 16px; display: flex; flex-direction: column; }
+.note-panel-textarea { width: 100%; flex: 1; resize: none; background: transparent; border: none; outline: none; font-size: 13px; line-height: 1.6; color: var(--text2); font-family: var(--font-sans); }
+.note-panel-textarea:focus { color: var(--text1); }
+.note-panel-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--s3); }
+.note-saved-hint { font-size: 11px; color: var(--muted-2); }
+@media (max-width: 520px) { .note-panel { width: 100%; } }
+
+/* ── Advisor project filter chips ────────────────────────────────────────── */
+.advisor-project-filter { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 0 10px; }
+.adv-proj-chip { font-size: 11px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--s3); background: transparent; color: var(--text2); cursor: pointer; transition: background 100ms, border-color 100ms; }
+.adv-proj-chip:hover { background: var(--s2); }
+.adv-proj-chip.active { background: var(--s3); border-color: var(--accent); color: var(--text1); }
+
 /* ── Phase F — done-row completed view restyle (MCPAT-070-F) ──────────────── */
 .done-row { display: flex; align-items: center; gap: 11px; min-height: var(--row-h); padding: 0 10px 0 12px; border-radius: 6px; cursor: pointer; transition: background 100ms; width: 100%; border: none; background: transparent; text-align: left; }
 .done-row:hover { background: var(--color-surface-1, #111113); }

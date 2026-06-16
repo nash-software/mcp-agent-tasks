@@ -140,6 +140,8 @@ export interface BrainResult {
   title: string
   snippet: string
   source?: string
+  type?: 'note' | 'task'
+  id?: string
 }
 
 export interface BrainSearchResponse {

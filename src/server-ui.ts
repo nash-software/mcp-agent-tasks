@@ -132,6 +132,8 @@ export interface BrainResult {
   title: string;
   snippet: string;
   source?: string;
+  type?: 'note' | 'task';
+  id?: string;
 }
 
 export interface BrainSearchResponse {
@@ -3309,8 +3311,30 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
           sendError(res, 400, 'q parameter must be 500 characters or fewer');
           return;
         }
-        void fetchBrainSearch(q.trim()).then(result => {
-          sendJson(res, 200, result);
+        const trimmedQ = q.trim();
+        void fetchBrainSearch(trimmedQ).then(brainResult => {
+          // Merge local note FTS results alongside brain results
+          const noteResults: BrainResult[] = [];
+          const noteCfg = loadConfig();
+          for (const pi of projectIndexes) {
+            try {
+              const noteStore = new NoteStore(pi.index, noteCfg);
+              const notes = noteStore.search(trimmedQ, pi.prefix !== 'GEN' ? pi.prefix : undefined);
+              for (const note of notes.slice(0, 3)) {
+                noteResults.push({
+                  title: note.title ?? note.body.slice(0, 60),
+                  snippet: note.body.slice(0, 200),
+                  type: 'note',
+                  id: note.id,
+                });
+              }
+            } catch { /* non-critical — skip this project */ }
+          }
+          const combined: BrainSearchResponse = {
+            ...brainResult,
+            results: [...noteResults, ...brainResult.results],
+          };
+          sendJson(res, 200, combined);
         }).catch(() => {
           sendJson(res, 200, { results: [], query: q, offline: true });
         });
