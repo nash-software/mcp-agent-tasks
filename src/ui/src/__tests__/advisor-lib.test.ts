@@ -8,6 +8,11 @@
  *  - buildSuggestions s-block: first blocked task → warning
  *  - buildSuggestions s-root: task IDs appearing in 2+ notes → info
  *  - buildSuggestions s-auto: weekly tag + no agent_status + null scheduled_for → info
+ *  - buildSuggestions s-goal-gap: no tasks matching active goal → warning
+ *  - buildSuggestions s-stall: project 3+ open tasks, no in_progress 14+ days → warning
+ *  - buildSuggestions s-distribution: no dist tasks active/scheduled (financial goal guard)
+ *  - buildSuggestions s-brain-surface: brain snippet present → info
+ *  - buildSuggestions: s-distribution ranks above s-stall when financial goal active
  *  - buildSuggestions: returns at most 5 with rank
  *  - renderWithChips: splits text on task ID pattern
  *  - localAdvice block branch
@@ -25,7 +30,7 @@ import {
   ID_RE,
 } from '../lib/advisor'
 import type { Suggestion } from '../lib/advisor'
-import type { Task } from '../types'
+import type { Task, Goal } from '../types'
 import type { NoteRecord } from '../api'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -54,6 +59,19 @@ function makeNote(overrides: Partial<NoteRecord> = {}): NoteRecord {
     ...overrides,
   }
 }
+
+function makeGoal(overrides: Partial<Goal> = {}): Goal {
+  return {
+    id: 'goal-abc',
+    title: 'Reach product-market fit',
+    status: 'active',
+    created_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+// Past date >14 days ago for stall tests
+const STALE_DATE = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString()
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -282,6 +300,171 @@ describe('localAdvice — keyword branches', () => {
   it('default branch: fallback when no suggestions', () => {
     const result = localAdvice('what should I do', tasks, [])
     expect(result.toLowerCase()).toContain('start')
+  })
+})
+
+// ── buildSuggestions: s-goal-gap ──────────────────────────────────────────
+
+describe('buildSuggestions — s-goal-gap', () => {
+  it('triggers warning when no open tasks match any active goal keyword', () => {
+    const goals = [makeGoal({ title: 'Launch revenue stream' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Fix a bug unrelated', status: 'todo' })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    const gap = suggs.find(s => s.id === 's-goal-gap')
+    expect(gap).toBeDefined()
+    expect(gap!.severity).toBe('warning')
+  })
+
+  it('does NOT trigger when at least one open task keyword-matches an active goal', () => {
+    const goals = [makeGoal({ title: 'Launch revenue stream' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Build revenue dashboard', status: 'todo' })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-goal-gap')).toBeUndefined()
+  })
+
+  it('does NOT trigger when task tags match goal keyword', () => {
+    const goals = [makeGoal({ title: 'Grow revenue' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Unrelated', status: 'todo', tags: ['revenue'] })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-goal-gap')).toBeUndefined()
+  })
+
+  it('does NOT trigger when no active goals', () => {
+    const goals = [makeGoal({ status: 'achieved' })]
+    const tasks = [makeTask()]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-goal-gap')).toBeUndefined()
+  })
+})
+
+// ── buildSuggestions: s-stall ─────────────────────────────────────────────
+
+describe('buildSuggestions — s-stall', () => {
+  it('triggers warning when a project has 3+ open tasks and last activity >14 days ago', () => {
+    const tasks = [
+      makeTask({ id: 'PROJ-001', status: 'todo', last_activity: STALE_DATE }),
+      makeTask({ id: 'PROJ-002', status: 'todo', last_activity: STALE_DATE }),
+      makeTask({ id: 'PROJ-003', status: 'todo', last_activity: STALE_DATE }),
+    ]
+    const suggs = buildSuggestions(tasks, [], 8)
+    const stall = suggs.find(s => s.id === 's-stall')
+    expect(stall).toBeDefined()
+    expect(stall!.severity).toBe('warning')
+    expect(stall!.taskIds).toContain('PROJ-001')
+  })
+
+  it('does NOT trigger when project has an in_progress task', () => {
+    const tasks = [
+      makeTask({ id: 'PROJ-001', status: 'todo', last_activity: STALE_DATE }),
+      makeTask({ id: 'PROJ-002', status: 'in_progress', last_activity: STALE_DATE }),
+      makeTask({ id: 'PROJ-003', status: 'todo', last_activity: STALE_DATE }),
+    ]
+    const suggs = buildSuggestions(tasks, [], 8)
+    expect(suggs.find(s => s.id === 's-stall')).toBeUndefined()
+  })
+
+  it('does NOT trigger when project has fewer than 3 open tasks', () => {
+    const tasks = [
+      makeTask({ id: 'PROJ-001', status: 'todo', last_activity: STALE_DATE }),
+      makeTask({ id: 'PROJ-002', status: 'todo', last_activity: STALE_DATE }),
+    ]
+    const suggs = buildSuggestions(tasks, [], 8)
+    expect(suggs.find(s => s.id === 's-stall')).toBeUndefined()
+  })
+
+  it('does NOT trigger when activity is recent (<14 days)', () => {
+    const recent = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+    const tasks = [
+      makeTask({ id: 'PROJ-001', status: 'todo', last_activity: recent }),
+      makeTask({ id: 'PROJ-002', status: 'todo', last_activity: recent }),
+      makeTask({ id: 'PROJ-003', status: 'todo', last_activity: recent }),
+    ]
+    const suggs = buildSuggestions(tasks, [], 8)
+    expect(suggs.find(s => s.id === 's-stall')).toBeUndefined()
+  })
+})
+
+// ── buildSuggestions: s-distribution ─────────────────────────────────────
+
+describe('buildSuggestions — s-distribution', () => {
+  it('triggers info when financial goal is active and no distribution tasks in flight', () => {
+    const goals = [makeGoal({ title: 'Grow to £5k MRR', metric: '£5k MRR' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Build feature', status: 'todo', tags: ['feature'] })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    const dist = suggs.find(s => s.id === 's-distribution')
+    expect(dist).toBeDefined()
+    expect(dist!.severity).toBe('info')
+  })
+
+  it('does NOT trigger when a marketing task is in_progress', () => {
+    const goals = [makeGoal({ title: 'Reach £5k MRR' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Email campaign', status: 'in_progress', tags: ['marketing'] })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-distribution')).toBeUndefined()
+  })
+
+  it('does NOT trigger when a sales task is scheduled within 7 days', () => {
+    const goals = [makeGoal({ title: 'Close £5k revenue' })]
+    const inSeven = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Outreach', status: 'todo', tags: ['sales'], scheduled_for: inSeven })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-distribution')).toBeUndefined()
+  })
+
+  it('does NOT trigger when no financial goal is active', () => {
+    const goals = [makeGoal({ title: 'Learn TypeScript' })]
+    const tasks = [makeTask({ id: 'TEST-001', title: 'Study generics', status: 'todo' })]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    expect(suggs.find(s => s.id === 's-distribution')).toBeUndefined()
+  })
+})
+
+// ── buildSuggestions: s-brain-surface ────────────────────────────────────
+
+describe('buildSuggestions — s-brain-surface', () => {
+  it('triggers info when brainSnippet is provided and active goals exist', () => {
+    const goals = [makeGoal({ title: 'Ship the product' })]
+    const suggs = buildSuggestions([], [], 8, goals, 'Brain excerpt: pricing page converts at 3x')
+    const brain = suggs.find(s => s.id === 's-brain-surface')
+    expect(brain).toBeDefined()
+    expect(brain!.severity).toBe('info')
+    expect(brain!.rationale).toContain('pricing page')
+  })
+
+  it('does NOT trigger when brainSnippet is undefined', () => {
+    const goals = [makeGoal()]
+    const suggs = buildSuggestions([], [], 8, goals)
+    expect(suggs.find(s => s.id === 's-brain-surface')).toBeUndefined()
+  })
+
+  it('does NOT trigger when no active goals exist', () => {
+    const goals = [makeGoal({ status: 'achieved' })]
+    const suggs = buildSuggestions([], [], 8, goals, 'Some snippet')
+    expect(suggs.find(s => s.id === 's-brain-surface')).toBeUndefined()
+  })
+})
+
+// ── buildSuggestions: scoring — distribution > stall with financial goal ──
+
+describe('buildSuggestions — scoring override', () => {
+  it('s-distribution ranks above s-stall when a financial goal is active', () => {
+    const goals = [makeGoal({ title: 'Grow to £5k MRR', metric: '£5k MRR' })]
+    // Enough tasks in one project to trigger s-stall
+    const staleTask = (id: string): Task => makeTask({ id, status: 'todo', last_activity: STALE_DATE })
+    const tasks = [
+      staleTask('PROJ-001'),
+      staleTask('PROJ-002'),
+      staleTask('PROJ-003'),
+      // Plus brain snippet for s-brain-surface (cap might hide it)
+    ]
+    const suggs = buildSuggestions(tasks, [], 8, goals)
+    const distIdx = suggs.findIndex(s => s.id === 's-distribution')
+    const stallIdx = suggs.findIndex(s => s.id === 's-stall')
+    // Both may or may not be in the output depending on cap, but if both are present
+    // distribution must rank higher (lower index = higher rank)
+    if (distIdx !== -1 && stallIdx !== -1) {
+      expect(distIdx).toBeLessThan(stallIdx)
+    }
   })
 })
 

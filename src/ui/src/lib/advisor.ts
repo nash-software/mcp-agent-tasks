@@ -4,7 +4,7 @@
  * Ported from docs/epics/MCPAT-070/design_handoff/reference/advisor.jsx
  */
 import React from 'react'
-import type { Task } from '../types'
+import type { Task, Goal } from '../types'
 import type { NoteRecord } from '../api'
 import pmJson from '../advisor/personas/pm.json'
 import chairmanJson from '../advisor/personas/chairman.json'
@@ -13,7 +13,7 @@ import coachJson from '../advisor/personas/coach.json'
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type Severity = 'critical' | 'warning' | 'info'
-export type SuggestionId = 's-crit' | 's-cap' | 's-block' | 's-root' | 's-auto'
+export type SuggestionId = 's-crit' | 's-cap' | 's-block' | 's-root' | 's-auto' | 's-goal-gap' | 's-stall' | 's-distribution' | 's-brain-surface'
 export type SuggestionAction = 'commit' | 'hermes' | 'open'
 
 export type PersonaId = 'pm' | 'chairman' | 'coach'
@@ -70,18 +70,24 @@ function todayKey(): string {
 // ── buildSuggestions ───────────────────────────────────────────────────────
 
 /**
- * Derive up to 5 proactive suggestions from the user's live tasks + notes.
+ * Derive up to 5 proactive suggestions from the user's live tasks + notes + goals.
  * Rules (first-match wins per slot, not overall):
- *   s-crit  — critical tasks not in_progress
- *   s-cap   — today's capacity vs target
- *   s-block — first blocked open task
- *   s-root  — task IDs appearing in 2+ notes (shared root cause signal)
- *   s-auto  — weekly-tagged task with no agent_status and no scheduled date
+ *   s-crit        — critical tasks not in_progress
+ *   s-cap         — today's capacity vs target
+ *   s-block       — first blocked open task
+ *   s-root        — task IDs appearing in 2+ notes (shared root cause signal)
+ *   s-auto        — weekly-tagged task with no agent_status and no scheduled date
+ *   s-goal-gap    — no open tasks linked to any active goal (keyword match)
+ *   s-stall       — project with 3+ open tasks, no in_progress in 14+ days
+ *   s-distribution — no distribution/marketing tasks in_progress or scheduled (financial goal guard)
+ *   s-brain-surface — brain search snippet for top active goal
  */
 export function buildSuggestions(
   tasks: Task[],
   notes: NoteRecord[],
   target: number,
+  goals: Goal[] = [],
+  brainSnippet?: string,
 ): Suggestion[] {
   const TODAY_K = todayKey()
   const open = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived')
@@ -201,6 +207,133 @@ export function buildSuggestions(
       actions: ['hermes'],
       basis: 'recurrence pattern',
     })
+  }
+
+  // ── Portfolio-level signals (appended after existing 5, cap is shared) ────
+
+  const activeGoals = goals.filter(g => g.status === 'active')
+
+  // 6 — s-goal-gap: no open tasks linked to any active goal by keyword
+  if (activeGoals.length > 0 && out.length < 5) {
+    const hasMatch = activeGoals.some(goal => {
+      const words = goal.title.toLowerCase().split(/\W+/).filter(w => w.length > 2)
+      return open.some(t => {
+        const haystack = `${t.title} ${(t.tags ?? []).join(' ')}`.toLowerCase()
+        return words.some(w => haystack.includes(w))
+      })
+    })
+    if (!hasMatch) {
+      const g0 = activeGoals[0]
+      out.push({
+        id: 's-goal-gap',
+        severity: 'warning',
+        title: `No tasks linked to your goal "${g0.title.slice(0, 60)}"`,
+        rationale: `You have active goals but none of your open tasks appear to be working toward them. Goals without associated work items stall silently — add at least one task that maps to "${g0.title}".`,
+        taskIds: [],
+        actions: [],
+        basis: 'goal · keyword match',
+      })
+    }
+  }
+
+  // 7 — s-stall: project with 3+ open tasks, no in_progress in 14+ days
+  if (out.length < 5) {
+    const NOW = Date.now()
+    const STALL_MS = 14 * 24 * 60 * 60 * 1000
+    // Group open tasks by project prefix (cap at 20 projects)
+    const byProject = new Map<string, Task[]>()
+    for (const t of open) {
+      const prefix = t.id.split('-')[0] ?? ''
+      if (!prefix) continue
+      if (!byProject.has(prefix)) byProject.set(prefix, [])
+      byProject.get(prefix)!.push(t)
+    }
+    // Check up to 20 most active projects
+    const projects = [...byProject.entries()]
+      .filter(([, ts]) => ts.length >= 3)
+      .slice(0, 20)
+    const stalled = projects.find(([, ts]) => {
+      const hasInProgress = ts.some(t => t.status === 'in_progress')
+      if (hasInProgress) return false
+      const mostRecent = ts.reduce<number>((max, t) => {
+        const ts2 = t.last_activity ? new Date(t.last_activity).getTime() : 0
+        return ts2 > max ? ts2 : max
+      }, 0)
+      return mostRecent > 0 && NOW - mostRecent > STALL_MS
+    })
+    if (stalled) {
+      const [prefix, ts] = stalled
+      out.push({
+        id: 's-stall',
+        severity: 'warning',
+        title: `Project ${prefix} has stalled — ${ts.length} open tasks, none in progress for 14+ days`,
+        rationale: `"${prefix}" has ${ts.length} open tasks but nothing has moved in over two weeks. Either the project is waiting on something external (make that explicit with a blocked status) or it's been deprioritised without a deliberate decision.`,
+        taskIds: ts.slice(0, 3).map(t => t.id),
+        actions: [],
+        basis: 'project · activity',
+      })
+    }
+  }
+
+  // 8 — s-distribution: no distribution/marketing tasks active (only when financial/client goal present)
+  if (out.length < 5 && activeGoals.length > 0) {
+    const FINANCIAL_KEYWORDS = /revenue|mrr|arr|sales|client|customer|£|\$|€|income|profit/i
+    const hasFinancialGoal = activeGoals.some(g =>
+      FINANCIAL_KEYWORDS.test(g.title) || FINANCIAL_KEYWORDS.test(g.metric ?? '') || FINANCIAL_KEYWORDS.test(g.description ?? ''),
+    )
+    if (hasFinancialGoal) {
+      const DIST_TAGS = new Set(['marketing', 'sales', 'distribution', 'clients', 'visibility', 'outreach'])
+      const TODAY_K = todayKey()
+      const sevenDaysLater = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const hasDistributionWork = open.some(t => {
+        const tags = t.tags ?? []
+        if (!tags.some(tag => DIST_TAGS.has(tag))) return false
+        if (t.status === 'in_progress') return true
+        if (t.scheduled_for && t.scheduled_for >= TODAY_K && t.scheduled_for <= sevenDaysLater) return true
+        return false
+      })
+      if (!hasDistributionWork) {
+        out.push({
+          id: 's-distribution',
+          severity: 'info',
+          title: 'No distribution or sales work scheduled in the next 7 days',
+          rationale: `You have a financial goal active but no tasks tagged marketing/sales/distribution/clients are in progress or scheduled this week. Revenue goals stall when all effort goes into building and none into getting it in front of people.`,
+          taskIds: [],
+          actions: [],
+          basis: 'goal · tag audit',
+        })
+      }
+    }
+  }
+
+  // 9 — s-brain-surface: brain search snippet for top active goal
+  if (out.length < 5 && brainSnippet && activeGoals.length > 0) {
+    const g0 = activeGoals[0]
+    out.push({
+      id: 's-brain-surface',
+      severity: 'info',
+      title: `Brain match for your goal "${g0.title.slice(0, 50)}"`,
+      rationale: brainSnippet,
+      taskIds: [],
+      actions: [],
+      basis: 'brain · search',
+    })
+  }
+
+  // Scoring override: when a financial/client goal is active, s-distribution ranks above s-stall
+  const activeGoalsLocal = goals.filter(g => g.status === 'active')
+  const FINANCIAL_KEYWORDS_RANK = /revenue|mrr|arr|sales|client|customer|£|\$|€|income|profit/i
+  const hasFinancialGoalForRank = activeGoalsLocal.some(g =>
+    FINANCIAL_KEYWORDS_RANK.test(g.title) || FINANCIAL_KEYWORDS_RANK.test(g.metric ?? '') || FINANCIAL_KEYWORDS_RANK.test(g.description ?? ''),
+  )
+  if (hasFinancialGoalForRank) {
+    const distIdx = out.findIndex(s => s.id === 's-distribution')
+    const stallIdx = out.findIndex(s => s.id === 's-stall')
+    if (distIdx !== -1 && stallIdx !== -1 && distIdx > stallIdx) {
+      // Swap so distribution appears before stall
+      const [distItem] = out.splice(distIdx, 1)
+      out.splice(stallIdx, 0, distItem)
+    }
   }
 
   return out.slice(0, 5).map((s, i) => ({ rank: i + 1, ...s }))

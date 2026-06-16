@@ -3,6 +3,17 @@ export type TaskType = 'feature' | 'bug' | 'chore' | 'spike' | 'refactor' | 'spe
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low'
 export type TaskArea = 'client' | 'personal' | 'outsource' | 'internal'
 export type MilestoneStatus = 'open' | 'closed'
+export type GoalStatus = 'active' | 'achieved' | 'paused'
+
+export interface Goal {
+  id: string
+  title: string
+  description?: string
+  metric?: string
+  target_date?: string | null
+  status: GoalStatus
+  created_at: string
+}
 
 /** A reference link from one task to another (mirrors src/types/task.ts TaskReference). */
 export interface TaskReference {
