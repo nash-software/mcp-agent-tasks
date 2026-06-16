@@ -31,7 +31,6 @@ export function NoteCard({ note, areaMap, onClick }: NoteCardProps): React.JSX.E
             size={12}
             style={{ color: '#EF4444', marginLeft: 'auto' }}
             aria-label="Brain sync failed"
-            title="Brain sync failed — will retry"
           />
         )}
         <span className="note-at">{relativeTime(note.created_at)}</span>
