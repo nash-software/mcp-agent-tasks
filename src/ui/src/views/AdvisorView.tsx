@@ -8,8 +8,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
 import { fetchNotes, transitionTask, signoffTask } from '../api'
 import { useTasks } from '../hooks/useTasks'
-import { buildSuggestions, type SuggestionId } from '../lib/advisor'
+import { buildSuggestions, type SuggestionId, type PersonaId } from '../lib/advisor'
 import { AdvisorChat } from '../components/AdvisorChat'
+import { ModeSelector } from '../components/ModeSelector'
 import { SuggestionCard } from '../components/SuggestionCard'
 import type { PanelState } from '../types'
 
@@ -33,6 +34,17 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
     const mins = raw !== null ? parseFloat(raw) : NaN
     return isNaN(mins) ? 8 : mins / 60
   })
+
+  // ── Mode (persona) ────────────────────────────────────────────────────────
+  const [mode, setMode] = useState<PersonaId>(() => {
+    const saved = localStorage.getItem('lifeos-advisor-mode')
+    return (saved === 'pm' || saved === 'chairman' || saved === 'coach') ? saved : 'pm'
+  })
+
+  function handleModeChange(newMode: PersonaId): void {
+    setMode(newMode)
+    localStorage.setItem('lifeos-advisor-mode', newMode)
+  }
 
   // ── Suggestions ───────────────────────────────────────────────────────────
   const [seed, setSeed] = useState(0)
@@ -68,6 +80,7 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="advisor-view fade-up">
+      <ModeSelector mode={mode} onModeChange={handleModeChange} />
       <AdvisorChat
         tasks={tasks}
         notes={notes}
@@ -75,6 +88,8 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
         onOpenTask={onOpenTask}
         live={live}
         onLive={() => setLive(true)}
+        mode={mode}
+        onModeChange={handleModeChange}
       />
       <div className="sugg-section">
         <div className="sugg-section-head">

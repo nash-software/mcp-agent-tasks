@@ -266,15 +266,17 @@ export type AdvisorChatFrame =
   | { type: 'session'; sessionId: string }
   | { type: 'done' }
   | { type: 'error'; message: string }
+  | { type: 'nudge'; targetMode: string }
 
 export async function* streamAdvisorChat(
   messages: ChatMessage[],
   sessionId?: string,
+  mode?: string,
 ): AsyncGenerator<AdvisorChatFrame> {
   const res = await fetch('/api/advisor/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, sessionId }),
+    body: JSON.stringify({ messages, sessionId, ...(mode !== undefined ? { mode } : {}) }),
   })
   if (!res.ok || !res.body) {
     yield { type: 'error', message: `HTTP ${res.status}` }
@@ -301,6 +303,7 @@ export async function* streamAdvisorChat(
           else if (currentEvent === 'session') yield { type: 'session', sessionId: String(obj['sessionId'] ?? '') }
           else if (currentEvent === 'done') { yield { type: 'done' }; return }
           else if (currentEvent === 'error') { yield { type: 'error', message: String(obj['message'] ?? 'unknown') }; return }
+          else if (currentEvent === 'nudge') yield { type: 'nudge', targetMode: String(obj['targetMode'] ?? '') }
         } catch { /* skip malformed frame */ }
         currentEvent = ''
       }

@@ -6,12 +6,27 @@
 import React from 'react'
 import type { Task } from '../types'
 import type { NoteRecord } from '../api'
+import pmJson from '../advisor/personas/pm.json'
+import chairmanJson from '../advisor/personas/chairman.json'
+import coachJson from '../advisor/personas/coach.json'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type Severity = 'critical' | 'warning' | 'info'
 export type SuggestionId = 's-crit' | 's-cap' | 's-block' | 's-root' | 's-auto'
 export type SuggestionAction = 'commit' | 'hermes' | 'open'
+
+export type PersonaId = 'pm' | 'chairman' | 'coach'
+
+export interface Persona {
+  id: PersonaId
+  label: string
+  descriptor: string
+  model: string
+  system_prompt: string
+  output_style: string
+  suggested_prompts: readonly string[]
+}
 
 export interface Suggestion {
   rank: number
@@ -34,12 +49,17 @@ export const SEV_LABEL: Record<Severity, string> = {
 
 export const ID_RE = /\b[A-Z]{2,5}-\d+\b/g
 
-export const SUGGESTED_PROMPTS: readonly string[] = [
-  'What should I work on next?',
-  "What's blocking me?",
-  'Draft my standup',
-  'What can Hermes take off my plate?',
-]
+export const PERSONAS: Record<PersonaId, Persona> = {
+  pm: pmJson as Persona,
+  chairman: chairmanJson as Persona,
+  coach: coachJson as Persona,
+}
+
+export const SUGGESTED_PROMPTS: Record<PersonaId, readonly string[]> = {
+  pm: pmJson.suggested_prompts,
+  chairman: chairmanJson.suggested_prompts,
+  coach: coachJson.suggested_prompts,
+}
 
 // ── Today key (ISO date string) ────────────────────────────────────────────
 
