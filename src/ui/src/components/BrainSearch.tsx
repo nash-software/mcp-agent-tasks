@@ -9,7 +9,14 @@ function ResultRow({ result }: { result: BrainResult }): React.JSX.Element {
 
   return (
     <div className="px-3 py-2 rounded bg-slate-800 space-y-0.5">
-      <p className="text-sm font-semibold text-slate-200 truncate">{result.title}</p>
+      <div className="flex items-center gap-1.5">
+        {result.type === 'note' && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/40 text-amber-400 shrink-0">
+            Note
+          </span>
+        )}
+        <p className="text-sm font-semibold text-slate-200 truncate">{result.title}</p>
+      </div>
       <p className="text-xs text-slate-400">{snippet}</p>
       {result.source && (
         <a

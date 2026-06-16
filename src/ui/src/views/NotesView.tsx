@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { StickyNote } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchNotes } from '../api'
 import type { NoteRecord } from '../api'
 import { NoteCard } from '../components/NoteCard'
+import { NotePanel } from '../components/NotePanel'
 import { ViewHeader } from '../components/ViewHeader'
 import { matchProjectArea, type Filter } from '../lib/filter'
 import type { TaskArea } from '../types'
@@ -16,6 +17,9 @@ interface NotesViewProps {
 }
 
 export function NotesView({ filter, areaMap, focusCapture }: NotesViewProps): React.JSX.Element {
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null)
+  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+
   const notesQuery = useQuery({
     queryKey: ['notes'],
     queryFn: () => fetchNotes({ limit: 200 }),
@@ -23,7 +27,13 @@ export function NotesView({ filter, areaMap, focusCapture }: NotesViewProps): Re
   })
 
   const allNotes: NoteRecord[] = notesQuery.data ?? []
-  const shown = allNotes.filter(n => matchProjectArea(filter, n.project, undefined, areaMap))
+  const projectFiltered = allNotes.filter(n => matchProjectArea(filter, n.project, undefined, areaMap))
+  const shown = selectedTag
+    ? projectFiltered.filter(n => (n.tags ?? []).includes(selectedTag))
+    : projectFiltered
+
+  const allTags = Array.from(new Set(projectFiltered.flatMap(n => n.tags ?? []))).sort()
+
   const pinned = shown.filter(n => n.pinned === true)
   const rest = shown.filter(n => !n.pinned)
 
@@ -43,17 +53,42 @@ export function NotesView({ filter, areaMap, focusCapture }: NotesViewProps): Re
         }
       />
 
+      {allTags.length > 0 && (
+        <div className="notes-tag-filter">
+          <button
+            className={`note-tag-chip${selectedTag === null ? ' active' : ''}`}
+            onClick={() => setSelectedTag(null)}
+          >
+            All
+          </button>
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              className={`note-tag-chip${selectedTag === tag ? ' active' : ''}`}
+              onClick={() => setSelectedTag(prev => prev === tag ? null : tag)}
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
+
       {shown.length === 0 && !notesQuery.isLoading && (
         <div className="notes-empty">
           <StickyNote size={32} />
-          <p>No notes yet — use Note mode in the capture bar</p>
+          <p>{selectedTag ? `No notes tagged #${selectedTag}` : 'No notes yet — use Note mode in the capture bar'}</p>
         </div>
       )}
 
       {pinned.length > 0 && (
         <div className="notes-grid">
           {pinned.map(note => (
-            <NoteCard key={note.id} note={note} areaMap={areaMap} />
+            <NoteCard
+              key={note.id}
+              note={note}
+              areaMap={areaMap}
+              onClick={() => setSelectedNoteId(note.id)}
+            />
           ))}
         </div>
       )}
@@ -65,10 +100,20 @@ export function NotesView({ filter, areaMap, focusCapture }: NotesViewProps): Re
       {rest.length > 0 && (
         <div className="notes-grid">
           {rest.map(note => (
-            <NoteCard key={note.id} note={note} areaMap={areaMap} />
+            <NoteCard
+              key={note.id}
+              note={note}
+              areaMap={areaMap}
+              onClick={() => setSelectedNoteId(note.id)}
+            />
           ))}
         </div>
       )}
+
+      <NotePanel
+        noteId={selectedNoteId}
+        onClose={() => setSelectedNoteId(null)}
+      />
     </div>
   )
 }

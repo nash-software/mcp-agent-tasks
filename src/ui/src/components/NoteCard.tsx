@@ -1,5 +1,5 @@
 import React from 'react'
-import { Star } from 'lucide-react'
+import { Star, WifiOff } from 'lucide-react'
 import { PrefixBadge, AreaDot } from './atoms'
 import { areaOfProject } from '../lib/filter'
 import { relativeTime } from '../lib/time'
@@ -9,21 +9,30 @@ import type { TaskArea } from '../types'
 interface NoteCardProps {
   note: NoteRecord
   areaMap: Record<string, TaskArea>
+  onClick?: () => void
 }
 
-export function NoteCard({ note, areaMap }: NoteCardProps): React.JSX.Element {
+export function NoteCard({ note, areaMap, onClick }: NoteCardProps): React.JSX.Element {
   const area = areaOfProject(note.project, areaMap)
   const title = note.title ?? note.body.slice(0, 60)
   const bodyPreview = note.title ? note.body.slice(0, 140) : note.body.slice(60, 200)
   const tags = note.tags ?? []
 
   return (
-    <div className="note-card">
+    <div className="note-card" onClick={onClick} style={onClick ? { cursor: 'pointer' } : undefined}>
       <div className="note-card-head">
         <PrefixBadge project={note.project} />
         {area && <AreaDot area={area} />}
         {note.pinned && (
           <Star size={13} style={{ color: '#F59E0B', fill: '#F59E0B' }} aria-label="Pinned" />
+        )}
+        {note.brain_sync_failed && (
+          <WifiOff
+            size={12}
+            style={{ color: '#EF4444', marginLeft: 'auto' }}
+            aria-label="Brain sync failed"
+            title="Brain sync failed — will retry"
+          />
         )}
         <span className="note-at">{relativeTime(note.created_at)}</span>
       </div>
