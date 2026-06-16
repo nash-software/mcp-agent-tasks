@@ -7,7 +7,7 @@
  *  - shell: false — required to avoid EINVAL on Windows .cmd shim guard.
  *  - Env hygiene: delete (never set to undefined) the six Claude Code env vars that
  *    interfere with the CLI when spawned from within Claude Code.
- *  - No --model flag — let the CLI default; a hardcoded model id breaks on CLI upgrades.
+ *  - Optional --model flag when caller provides a model ID; omit to let the CLI default.
  *  - Kill child on generator return/throw (req.close cleanup) and on timeout.
  *  - settled guard: skip post-close processing once settled.
  */
@@ -73,24 +73,26 @@ export interface SpawnClaudeStreamOpts {
   prompt: string;
   sessionId?: string;
   timeoutMs?: number;
+  model?: string;
 }
 
 /**
  * Spawn a claude CLI process in streaming JSON mode and yield parsed StreamFrame values.
  * Env hygiene: the six Claude Code env vars are deleted from the spawned process environment
  * (delete, never set to undefined — undefined causes EINVAL on Windows).
- * No --model flag: let the CLI pick its default.
+ * Optional --model flag when caller provides a model ID; omit to let the CLI pick its default.
  */
 export async function* spawnClaudeStream(
   opts: SpawnClaudeStreamOpts,
 ): AsyncGenerator<StreamFrame> {
-  const { bin, prompt, sessionId, timeoutMs = 60_000 } = opts
+  const { bin, prompt, sessionId, timeoutMs = 60_000, model } = opts
 
   const args = [
     '-p',
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
+    ...(model ? ['--model', model] : []),
     ...(sessionId ? ['--resume', sessionId] : []),
   ]
 

@@ -6,7 +6,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Wand2, Send, Layers, FileText, Search, Bot } from 'lucide-react'
 import { streamAdvisorChat, type ChatMessage } from '../api'
-import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, type Suggestion } from '../lib/advisor'
+import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, PERSONAS, type Suggestion, type PersonaId } from '../lib/advisor'
 import type { Task } from '../types'
 import type { NoteRecord } from '../api'
 
@@ -24,6 +24,8 @@ interface Props {
   onOpenTask: (id: string) => void
   live: boolean
   onLive: () => void
+  mode: PersonaId
+  onModeChange: (mode: PersonaId) => void
 }
 
 // ── ChatHeader (non-exported inner component) ──────────────────────────────
@@ -49,7 +51,7 @@ function ChatHeader({ live, openCount }: { live: boolean; openCount: number }): 
 
 // ── AdvisorChat ────────────────────────────────────────────────────────────
 
-export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive }: Props): React.JSX.Element {
+export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive, mode, onModeChange }: Props): React.JSX.Element {
   const openCount = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived').length
 
   const greeting: Msg = {
@@ -63,6 +65,7 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
   const [val, setVal] = useState('')
   const [busy, setBusy] = useState(false)
   const [sessionId, setSessionId] = useState<string | undefined>(undefined)
+  const [nudge, setNudge] = useState<PersonaId | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     const text = (textArg ?? val).trim()
     if (!text || busy) return
     setVal('')
+    setNudge(null)
     const userMsg: Msg = { role: 'user', text }
     setMsgs(prev => [...prev, userMsg, { role: 'assistant', text: '' }])
     setBusy(true)
@@ -82,7 +86,7 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     const apiMessages: ChatMessage[] = [...msgs, userMsg].map(m => ({ role: m.role, content: m.text }))
 
     try {
-      for await (const frame of streamAdvisorChat(apiMessages, sessionId)) {
+      for await (const frame of streamAdvisorChat(apiMessages, sessionId, mode)) {
         if (frame.type === 'delta') {
           onLive()
           setMsgs(prev => {
@@ -99,6 +103,10 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
           throw new Error(frame.message)
         } else if (frame.type === 'done') {
           break
+        } else if (frame.type === 'nudge') {
+          const validModes: PersonaId[] = ['pm', 'chairman', 'coach']
+          const target = frame.targetMode as PersonaId
+          if (validModes.includes(target)) setNudge(target)
         }
       }
     } catch {
@@ -149,11 +157,21 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
 
       {showPrompts && (
         <div className="adv-suggested">
-          {SUGGESTED_PROMPTS.map(p => (
+          {SUGGESTED_PROMPTS[mode].map(p => (
             <button key={p} className="prompt-chip" onClick={() => void send(p)}>
               {p}
             </button>
           ))}
+        </div>
+      )}
+
+      {nudge !== null && (
+        <div className="adv-nudge">
+          <span className="adv-nudge-text">Better suited for {PERSONAS[nudge].label}?</span>
+          <button className="adv-nudge-btn primary" onClick={() => { onModeChange(nudge); setNudge(null) }}>
+            Continue with {PERSONAS[nudge].label}
+          </button>
+          <button className="adv-nudge-btn" onClick={() => setNudge(null)}>Ignore</button>
         </div>
       )}
 

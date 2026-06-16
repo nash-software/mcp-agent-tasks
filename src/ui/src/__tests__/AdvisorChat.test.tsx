@@ -142,3 +142,39 @@ describe('AdvisorChat.tsx — streaming send', () => {
     expect(src).toContain('setBusy')
   })
 })
+
+describe('AdvisorChat.tsx — mode and nudge', () => {
+  const src = readSrc('components/AdvisorChat.tsx')
+
+  it('accepts mode prop of PersonaId type', () => {
+    expect(src).toContain('PersonaId')
+    expect(src).toContain('mode:')
+  })
+
+  it('accepts onModeChange callback prop', () => {
+    expect(src).toContain('onModeChange')
+  })
+
+  it('renders SUGGESTED_PROMPTS indexed by mode', () => {
+    expect(src).toContain('SUGGESTED_PROMPTS[mode]')
+  })
+
+  it('nudge state initialized to null', () => {
+    expect(src).toContain('nudge')
+    expect(src).toContain('null')
+  })
+
+  it('handles nudge frame from stream', () => {
+    expect(src).toContain("frame.type === 'nudge'")
+    expect(src).toContain('setNudge')
+  })
+
+  it('renders nudge UI when nudge is set', () => {
+    expect(src).toContain('adv-nudge')
+    expect(src).toContain('Continue with')
+  })
+
+  it('passes mode to streamAdvisorChat', () => {
+    expect(src).toContain('streamAdvisorChat(apiMessages, sessionId, mode)')
+  })
+})
