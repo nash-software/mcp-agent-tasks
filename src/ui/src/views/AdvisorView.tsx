@@ -126,6 +126,7 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
         onLive={() => setLive(true)}
         mode={mode}
         onModeChange={handleModeChange}
+        projects={allProjects}
       />
       <div className="sugg-section">
         <div className="sugg-section-head">

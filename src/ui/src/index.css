@@ -637,3 +637,40 @@
 .sugg-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .sugg-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
 .sugg-basis { display: flex; align-items: center; gap: 6px; margin-top: 11px; padding-top: 11px; border-top: 1px solid color-mix(in srgb, var(--s3) 55%, transparent); font-size: 11px; color: var(--muted-2); font-family: var(--font-mono); }
+
+/* ── Advisor nudge ─────────────────────────────────────────────────────────── */
+.adv-nudge { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: color-mix(in srgb, var(--accent) 8%, transparent); border-top: 1px solid color-mix(in srgb, var(--accent) 20%, transparent); flex-wrap: wrap; }
+.adv-nudge-text { font-size: 12.5px; color: var(--text2); flex: 1; min-width: 0; }
+.adv-nudge-btn { font-size: 12px; padding: 5px 12px; border-radius: 7px; border: 1px solid var(--s3); background: var(--s2); color: var(--text2); transition: background 100ms; }
+.adv-nudge-btn:hover { background: var(--s2-hover); color: var(--text); }
+.adv-nudge-btn.primary { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--accent); }
+.adv-nudge-btn.primary:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+/* ── Action cards ─────────────────────────────────────────────────────────── */
+.action-cards { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; max-width: 420px; }
+.action-card { border: 1px solid var(--s3); border-radius: 10px; background: var(--s1); padding: 10px 12px; font-size: 13px; }
+.action-card.pending .action-card-header { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 9px; }
+.action-card.editing .action-card-edit-fields { display: flex; flex-direction: column; gap: 7px; margin: 9px 0; }
+.action-card.confirmed { display: flex; align-items: center; gap: 7px; color: var(--green); font-size: 12.5px; padding: 7px 12px; }
+.action-confirmed-icon { flex-shrink: 0; }
+.action-confirmed-label { font-size: 12.5px; color: var(--text2); }
+.action-card-type-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 6px; padding: 2px 7px; white-space: nowrap; flex-shrink: 0; }
+.action-card-title { font-size: 13px; color: var(--text); flex: 1; min-width: 0; line-height: 1.4; }
+.action-card-project { font-size: 11px; font-family: var(--font-mono); color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; }
+.action-card-priority { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; }
+.action-card-priority.critical { color: var(--red); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.action-card-priority.high { color: var(--amber); background: color-mix(in srgb, var(--amber) 13%, transparent); }
+.action-card-priority.medium { color: var(--accent); background: var(--accent-soft); }
+.action-card-priority.low { color: var(--muted); background: var(--s2); }
+.action-card-error { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--red); margin-bottom: 8px; flex-wrap: wrap; }
+.action-card-edit-title { width: 100%; padding: 6px 9px; border-radius: 6px; border: 1px solid var(--s3); background: var(--s2); color: var(--text); font-size: 13px; outline: none; transition: border-color 120ms; }
+.action-card-edit-title:focus { border-color: var(--accent); }
+.action-card-edit-project, .action-card-edit-priority { padding: 5px 9px; border-radius: 6px; border: 1px solid var(--s3); background: var(--s2); color: var(--text); font-size: 12.5px; outline: none; }
+.action-card-buttons { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.action-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 5px 11px; border-radius: 7px; border: 1px solid var(--s3); background: var(--s2); color: var(--text2); transition: background 100ms, color 100ms; white-space: nowrap; }
+.action-btn:hover:not(:disabled) { background: var(--s2-hover); color: var(--text); }
+.action-btn:disabled { opacity: 0.45; cursor: default; }
+.action-btn.approve { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); font-weight: 600; }
+.action-btn.approve:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.action-btn.dismiss { color: var(--muted); }
+.action-btn.retry { padding: 3px 8px; font-size: 11px; }

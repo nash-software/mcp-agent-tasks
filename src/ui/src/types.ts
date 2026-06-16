@@ -227,3 +227,20 @@ export interface Proposal {
 export interface ProposalWithMatch extends Proposal {
   _match: string[]
 }
+
+// ── Conversational Action Cards (Phase 4) ─────────────────────────────────
+
+export type ActionDraftType = 'create_task' | 'create_note' | 'set_milestone'
+export type ActionDraftStatus = 'pending' | 'approved' | 'edited' | 'dismissed'
+
+/** A proposed action extracted from an advisor response. Value object — not persisted unless approved. */
+export interface ActionDraft {
+  id: string
+  type: ActionDraftType
+  title: string
+  project?: string
+  priority?: TaskPriority
+  body?: string
+  source_response_id: string
+  status: ActionDraftStatus
+}
