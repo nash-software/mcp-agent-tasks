@@ -3374,6 +3374,7 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                   const mem: AdvisorMemory = {
                     id: crypto.randomUUID(),
                     content: insight.slice(0, 150),
+                    source: 'reflection',
                     source_session_id: sessionId,
                     created_at: createdAt,
                     last_accessed_at: createdAt,
@@ -3426,6 +3427,41 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Advisor memory create (user-saved)
+      if (pathname === '/api/advisor/memories' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { content?: unknown; source_session_id?: unknown };
+            if (typeof body.content !== 'string' || body.content.trim().length === 0) {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'content is required' });
+              return;
+            }
+            const nowIso = new Date().toISOString();
+            const mem: AdvisorMemory = {
+              id: crypto.randomUUID(),
+              content: body.content.trim().slice(0, 150),
+              source: 'user',
+              ...(typeof body.source_session_id === 'string' ? { source_session_id: body.source_session_id } : {}),
+              created_at: nowIso,
+              last_accessed_at: nowIso,
+              access_count: 0,
+              pinned: false,
+              faded: false,
+            };
+            const all = readMemoriesJsonl();
+            all.push(mem);
+            writeMemoriesJsonl(all);
+            sendJson(res, 201, mem);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
       // API: Advisor memory patch (pin/unpin)
       if (pathname.startsWith('/api/advisor/memories/') && req.method === 'PATCH') {
         const memId = pathname.split('/').at(-1) ?? '';
@@ -3456,6 +3492,26 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: Advisor memory delete
+      if (pathname.startsWith('/api/advisor/memories/') && req.method === 'DELETE') {
+        const memId = pathname.split('/').at(-1) ?? '';
+        if (!memId) {
+          sendJson(res, 400, { error: 'INVALID_PARAMS', message: 'memory id is required' });
+          return;
+        }
+        const all = readMemoriesJsonl();
+        const idx = all.findIndex(m => m.id === memId);
+        if (idx === -1) {
+          sendJson(res, 404, { error: 'NOT_FOUND', message: `memory ${memId} not found` });
+          return;
+        }
+        all.splice(idx, 1);
+        writeMemoriesJsonl(all);
+        res.writeHead(204);
+        res.end();
         return;
       }
 
@@ -3692,6 +3748,28 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive',
             });
+
+            // ── memory_candidate fact-detection on latest user message ────────
+            // Simple heuristic patterns that surface user preferences/identity
+            // as memory candidates without requiring an LLM call.
+            const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+            const CANDIDATE_PATTERNS: RegExp[] = [
+              /\bI(?:'m| am) (?:a |an )([^.,!?\n]{5,80})/i,
+              /\bI (?:prefer|like|love|use|work with|work on|work for|work in) ([^.,!?\n]{5,80})/i,
+              /\bmy goal is ([^.,!?\n]{5,80})/i,
+              /\bI(?:'m| am) trying to ([^.,!?\n]{5,80})/i,
+              /\bI usually ([^.,!?\n]{5,60})/i,
+              /\bI always ([^.,!?\n]{5,60})/i,
+              /\bI never ([^.,!?\n]{5,60})/i,
+            ];
+            for (const re of CANDIDATE_PATTERNS) {
+              const m = re.exec(lastUserMsg);
+              if (m) {
+                const candidateText = lastUserMsg.trim().slice(0, 120);
+                res.write(`event: memory_candidate\ndata:${JSON.stringify({ id: crypto.randomUUID(), text: candidateText })}\n\n`);
+                break; // emit at most one candidate per message to avoid noise
+              }
+            }
 
             // ── Stream from claude CLI ──────────────────────────────────────
             const bin = resolveClaudeBinary();

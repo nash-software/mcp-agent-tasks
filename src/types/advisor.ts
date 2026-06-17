@@ -26,14 +26,16 @@ export interface AdvisorSession {
   insights_promoted: string[];
 }
 
-/** A durable fact learned about the user, extracted from advisor session reflections. */
+/** A durable fact learned about the user, extracted from advisor session reflections or saved by the user. */
 export interface AdvisorMemory {
   /** Stable unique identifier (uuid). */
   id: string;
   /** The memory content text (≤150 chars). */
   content: string;
-  /** ID of the AdvisorSession that produced this memory. */
-  source_session_id: string;
+  /** How this memory was created: 'reflection' = extracted from session, 'user' = saved manually. */
+  source: 'reflection' | 'user';
+  /** ID of the AdvisorSession that produced this memory. Optional for user-saved memories. */
+  source_session_id?: string;
   /** ISO-8601 timestamp when this memory was created. */
   created_at: string;
   /** ISO-8601 timestamp of the last time this memory was included in a chat context. */
