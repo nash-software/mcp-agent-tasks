@@ -24,6 +24,8 @@ import { runTriage as runTriageSweep, projectTasksDirs, type TriageReport } from
 import { undoRun as undoTriageRun, applyDecisions, writeRun, writeLatestReport, readLatestReport, deleteLatestReport } from './triage/audit.js';
 import { transitionPath } from './triage/decide.js';
 import type { TriageDecision } from './triage/types.js';
+import type { AdvisorSession, AdvisorMemory } from './types/advisor.js';
+import { selectMemoriesForContext, formatMemoryBlock, computeDecay } from './store/advisor-memory.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -523,6 +525,78 @@ function writeGoals(goals: GoalRecord[]): void {
   const tmp = `${p}.tmp`;
   writeFileSync(tmp, JSON.stringify(goals, null, 2), 'utf-8');
   renameSync(tmp, p);
+}
+
+// ── Advisor session / memory store ────────────────────────────────────────
+
+function advisorSessionsDir(): string {
+  return join(hermesStoreDir(), 'advisor-sessions');
+}
+
+function advisorSessionsJsonlPath(): string {
+  return join(advisorSessionsDir(), 'sessions.jsonl');
+}
+
+function advisorMemoriesJsonlPath(): string {
+  return join(advisorSessionsDir(), 'memories.jsonl');
+}
+
+function readSessionsJsonl(): AdvisorSession[] {
+  const p = advisorSessionsJsonlPath();
+  try {
+    if (!existsSync(p)) return [];
+    const lines = readFileSync(p, 'utf-8').split('\n').filter(l => l.trim() !== '');
+    const sessions: AdvisorSession[] = [];
+    for (const line of lines) {
+      try { sessions.push(JSON.parse(line) as AdvisorSession); } catch { /* skip malformed */ }
+    }
+    return sessions;
+  } catch {
+    return [];
+  }
+}
+
+function appendSessionJsonl(session: AdvisorSession): void {
+  const dir = advisorSessionsDir();
+  mkdirSync(dir, { recursive: true });
+  const file = advisorSessionsJsonlPath();
+  const line = JSON.stringify(session);
+  try {
+    let lines: string[] = [];
+    if (existsSync(file)) {
+      lines = readFileSync(file, 'utf-8').split('\n').filter(l => l.trim() !== '');
+    }
+    lines.push(line);
+    const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+    writeFileSync(tmp, lines.join('\n') + '\n', 'utf-8');
+    renameSync(tmp, file);
+  } catch {
+    try { appendFileSync(file, line + '\n', 'utf-8'); } catch { /* give up */ }
+  }
+}
+
+function readMemoriesJsonl(): AdvisorMemory[] {
+  const p = advisorMemoriesJsonlPath();
+  try {
+    if (!existsSync(p)) return [];
+    const lines = readFileSync(p, 'utf-8').split('\n').filter(l => l.trim() !== '');
+    const memories: AdvisorMemory[] = [];
+    for (const line of lines) {
+      try { memories.push(JSON.parse(line) as AdvisorMemory); } catch { /* skip malformed */ }
+    }
+    return memories;
+  } catch {
+    return [];
+  }
+}
+
+function writeMemoriesJsonl(memories: AdvisorMemory[]): void {
+  const dir = advisorSessionsDir();
+  mkdirSync(dir, { recursive: true });
+  const file = advisorMemoriesJsonlPath();
+  const tmp = `${file}.tmp.${process.pid}.${Date.now()}`;
+  writeFileSync(tmp, memories.map(m => JSON.stringify(m)).join('\n') + (memories.length > 0 ? '\n' : ''), 'utf-8');
+  renameSync(tmp, file);
 }
 
 function isEngine(x: unknown): x is Engine {
@@ -3192,6 +3266,255 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Advisor session close — persist session + fire async reflection
+      if (pathname === '/api/advisor/session/close' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              session_id?: unknown;
+              mode?: unknown;
+              started_at?: unknown;
+              messages?: unknown;
+              goal_snapshot?: unknown;
+            };
+            const VALID_MODES = ['pm', 'chairman', 'coach'] as const;
+            if (typeof body.session_id !== 'string' || body.session_id.trim() === '') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'session_id is required' });
+              return;
+            }
+            if (!VALID_MODES.includes(body.mode as (typeof VALID_MODES)[number])) {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'mode must be pm|chairman|coach' });
+              return;
+            }
+            if (!Array.isArray(body.messages)) {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'messages must be an array' });
+              return;
+            }
+
+            const sessionId = body.session_id.trim();
+            const existing = readSessionsJsonl();
+            if (existing.some(s => s.id === sessionId)) {
+              sendJson(res, 200, { ok: true, skipped: true });
+              return;
+            }
+
+            const nowIso = new Date().toISOString();
+            const rawMessages = body.messages as Array<{ role?: unknown; content?: unknown }>;
+            const fullLog: Array<{ role: 'user' | 'assistant'; content: string }> = rawMessages
+              .filter(m => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+              .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content as string }))
+              .slice(0, 200);
+
+            const session: AdvisorSession = {
+              id: sessionId,
+              mode: body.mode as 'pm' | 'chairman' | 'coach',
+              started_at: typeof body.started_at === 'string' ? body.started_at : nowIso,
+              ended_at: nowIso,
+              goal_snapshot: sanitizeForPrompt(typeof body.goal_snapshot === 'string' ? body.goal_snapshot : ''),
+              summary: null,
+              full_log: fullLog,
+              insights_promoted: [],
+            };
+
+            appendSessionJsonl(session);
+            sendJson(res, 200, { ok: true });
+
+            // Fire async reflection — does not block response
+            void (async () => {
+              try {
+                const logText = JSON.stringify(fullLog).slice(-4000);
+                const reflectPrompt = `You are analyzing an advisor chat session. Extract 2-3 distinct, durable facts learned about the user from this conversation. Each insight should be a single sentence describing a preference, goal, work style, or recurring challenge. Reply ONLY with valid JSON: {"insights":["...","..."]}. Session log:\n${logText}`;
+                const bin = resolveClaudeBinary();
+                let reflectStdout = '';
+                await new Promise<void>((resolve) => {
+                  let child: ReturnType<typeof spawn>;
+                  try {
+                    child = spawn(bin, ['-p', reflectPrompt], {
+                      detached: false,
+                      stdio: ['ignore', 'pipe', 'ignore'],
+                    });
+                  } catch (spawnErr) {
+                    console.error('[advisor/session] reflection skipped:', spawnErr);
+                    resolve();
+                    return;
+                  }
+                  const timer = setTimeout(() => { child.kill(); resolve(); }, 60_000);
+                  child.stdout?.on('data', (chunk: Buffer) => { reflectStdout += chunk.toString(); });
+                  child.on('close', () => { clearTimeout(timer); resolve(); });
+                  child.on('error', (err) => {
+                    clearTimeout(timer);
+                    console.error('[advisor/session] reflection skipped:', err);
+                    resolve();
+                  });
+                });
+
+                if (!reflectStdout.trim()) return;
+                let parsed: { insights?: unknown };
+                try {
+                  const jsonMatch = reflectStdout.match(/\{[\s\S]*\}/);
+                  parsed = jsonMatch ? JSON.parse(jsonMatch[0]) as { insights?: unknown } : {};
+                } catch {
+                  return;
+                }
+                if (!Array.isArray(parsed.insights)) return;
+
+                const insights = (parsed.insights as unknown[])
+                  .filter((i): i is string => typeof i === 'string')
+                  .slice(0, 3);
+                if (insights.length === 0) return;
+
+                const createdAt = new Date().toISOString();
+                const allSessions = readSessionsJsonl();
+                const allMemories = readMemoriesJsonl();
+                const newMemoryIds: string[] = [];
+
+                for (const insight of insights) {
+                  const mem: AdvisorMemory = {
+                    id: crypto.randomUUID(),
+                    content: insight.slice(0, 150),
+                    source: 'reflection',
+                    source_session_id: sessionId,
+                    created_at: createdAt,
+                    last_accessed_at: createdAt,
+                    access_count: 0,
+                    pinned: false,
+                    faded: false,
+                  };
+                  allMemories.push(mem);
+                  newMemoryIds.push(mem.id);
+                }
+
+                const decayed = computeDecay(allMemories, (m) => {
+                  const idx = allSessions.findIndex(s => s.id === m.source_session_id || s.started_at === m.created_at);
+                  return idx === -1 ? 0 : allSessions.length - idx;
+                });
+                writeMemoriesJsonl(decayed);
+              } catch (err) {
+                console.error('[advisor/session] reflection error:', err);
+              }
+            })();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor sessions list
+      if (pathname === '/api/advisor/sessions' && req.method === 'GET') {
+        const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+        const limit = Math.min(100, parseInt(urlParsed.searchParams.get('limit') ?? '10', 10) || 10);
+        const offset = Math.max(0, parseInt(urlParsed.searchParams.get('offset') ?? '0', 10) || 0);
+        const sessions = readSessionsJsonl().reverse().slice(offset, offset + limit);
+        // Strip full_log from list view to keep response small
+        sendJson(res, 200, sessions.map(s => ({ ...s, full_log: [] })));
+        return;
+      }
+
+      // API: Advisor memories list
+      if (pathname === '/api/advisor/memories' && req.method === 'GET') {
+        const memories = readMemoriesJsonl()
+          .filter(m => !m.faded)
+          .sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return b.last_accessed_at.localeCompare(a.last_accessed_at);
+          });
+        sendJson(res, 200, memories);
+        return;
+      }
+
+      // API: Advisor memory create (user-saved)
+      if (pathname === '/api/advisor/memories' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { content?: unknown; source_session_id?: unknown };
+            if (typeof body.content !== 'string' || body.content.trim().length === 0) {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'content is required' });
+              return;
+            }
+            const nowIso = new Date().toISOString();
+            const mem: AdvisorMemory = {
+              id: crypto.randomUUID(),
+              content: body.content.trim().slice(0, 150),
+              source: 'user',
+              ...(typeof body.source_session_id === 'string' ? { source_session_id: body.source_session_id } : {}),
+              created_at: nowIso,
+              last_accessed_at: nowIso,
+              access_count: 0,
+              pinned: false,
+              faded: false,
+            };
+            const all = readMemoriesJsonl();
+            all.push(mem);
+            writeMemoriesJsonl(all);
+            sendJson(res, 201, mem);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor memory patch (pin/unpin)
+      if (pathname.startsWith('/api/advisor/memories/') && req.method === 'PATCH') {
+        const memId = pathname.split('/').at(-1) ?? '';
+        if (!memId) {
+          sendJson(res, 400, { error: 'INVALID_PARAMS', message: 'memory id is required' });
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { pinned?: unknown };
+            if (typeof body.pinned !== 'boolean') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'pinned must be a boolean' });
+              return;
+            }
+            const all = readMemoriesJsonl();
+            const idx = all.findIndex(m => m.id === memId);
+            if (idx === -1) {
+              sendJson(res, 404, { error: 'NOT_FOUND', message: `memory ${memId} not found` });
+              return;
+            }
+            all[idx] = { ...all[idx]!, pinned: body.pinned };
+            writeMemoriesJsonl(all);
+            sendJson(res, 200, all[idx]);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor memory delete
+      if (pathname.startsWith('/api/advisor/memories/') && req.method === 'DELETE') {
+        const memId = pathname.split('/').at(-1) ?? '';
+        if (!memId) {
+          sendJson(res, 400, { error: 'INVALID_PARAMS', message: 'memory id is required' });
+          return;
+        }
+        const all = readMemoriesJsonl();
+        const idx = all.findIndex(m => m.id === memId);
+        if (idx === -1) {
+          sendJson(res, 404, { error: 'NOT_FOUND', message: `memory ${memId} not found` });
+          return;
+        }
+        all.splice(idx, 1);
+        writeMemoriesJsonl(all);
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
       // API: Advisor chat — streaming SSE endpoint backed by claude CLI (stream-json mode)
       if (pathname === '/api/advisor/chat' && req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -3382,11 +3705,26 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               noteLines || '(none)',
             ].join('\n');
 
+            // ── Memory injection ─────────────────────────────────────────────
+            const allMemories = readMemoriesJsonl();
+            const selectedMemories = selectMemoriesForContext(allMemories);
+            const memoryBlock = formatMemoryBlock(selectedMemories);
+            if (selectedMemories.length > 0) {
+              const nowIsoMem = new Date().toISOString();
+              const selectedIds = new Set(selectedMemories.map(m => m.id));
+              writeMemoriesJsonl(allMemories.map(m =>
+                selectedIds.has(m.id)
+                  ? { ...m, access_count: m.access_count + 1, last_accessed_at: nowIsoMem }
+                  : m,
+              ));
+            }
+
             // ── Build the full prompt (system + conversation + context) ─────
             const chairmanSystemPrompt = goalContextPreamble
               ? `${persona.system_prompt}\n\nYou have the following goal context to reason against:\n${goalContextPreamble}`
               : persona.system_prompt;
-            const resolvedSystemPrompt = activeMode === 'chairman' ? chairmanSystemPrompt : persona.system_prompt;
+            const baseSystemPrompt = activeMode === 'chairman' ? chairmanSystemPrompt : persona.system_prompt;
+            const resolvedSystemPrompt = memoryBlock ? `${baseSystemPrompt}\n\n${memoryBlock}` : baseSystemPrompt;
 
             // Action extraction instruction — PM and Chairman only (Coach is reflective, not task-generating).
             const ACTION_EXTRACTION_INSTRUCTION = activeMode === 'pm' || activeMode === 'chairman'
@@ -3410,6 +3748,28 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive',
             });
+
+            // ── memory_candidate fact-detection on latest user message ────────
+            // Simple heuristic patterns that surface user preferences/identity
+            // as memory candidates without requiring an LLM call.
+            const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content ?? '';
+            const CANDIDATE_PATTERNS: RegExp[] = [
+              /\bI(?:'m| am) (?:a |an )([^.,!?\n]{5,80})/i,
+              /\bI (?:prefer|like|love|use|work with|work on|work for|work in) ([^.,!?\n]{5,80})/i,
+              /\bmy goal is ([^.,!?\n]{5,80})/i,
+              /\bI(?:'m| am) trying to ([^.,!?\n]{5,80})/i,
+              /\bI usually ([^.,!?\n]{5,60})/i,
+              /\bI always ([^.,!?\n]{5,60})/i,
+              /\bI never ([^.,!?\n]{5,60})/i,
+            ];
+            for (const re of CANDIDATE_PATTERNS) {
+              const m = re.exec(lastUserMsg);
+              if (m) {
+                const candidateText = lastUserMsg.trim().slice(0, 120);
+                res.write(`event: memory_candidate\ndata:${JSON.stringify({ id: crypto.randomUUID(), text: candidateText })}\n\n`);
+                break; // emit at most one candidate per message to avoid noise
+              }
+            }
 
             // ── Stream from claude CLI ──────────────────────────────────────
             const bin = resolveClaudeBinary();

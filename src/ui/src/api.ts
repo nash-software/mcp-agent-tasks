@@ -298,6 +298,58 @@ export async function deleteNote(id: string): Promise<void> {
   }
 }
 
+// ── Advisor memories ─────────────────────────────────────────────────────
+
+export interface AdvisorMemory {
+  id: string
+  content: string
+  source: 'reflection' | 'user'
+  source_session_id?: string
+  created_at: string
+  last_accessed_at: string
+  access_count: number
+  pinned: boolean
+  faded: boolean
+}
+
+export function fetchMemories(): Promise<AdvisorMemory[]> {
+  return get<AdvisorMemory[]>('/api/advisor/memories')
+}
+
+export async function createMemory(content: string, source_session_id?: string): Promise<AdvisorMemory> {
+  const res = await fetch('/api/advisor/memories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, ...(source_session_id ? { source_session_id } : {}) }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw new Error(err.message ?? `Create memory failed: ${res.status}`)
+  }
+  return res.json() as Promise<AdvisorMemory>
+}
+
+export async function patchMemory(id: string, pinned: boolean): Promise<AdvisorMemory> {
+  const res = await fetch(`/api/advisor/memories/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pinned }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw new Error(err.message ?? `Patch memory failed: ${res.status}`)
+  }
+  return res.json() as Promise<AdvisorMemory>
+}
+
+export async function deleteMemory(id: string): Promise<void> {
+  const res = await fetch(`/api/advisor/memories/${id}`, { method: 'DELETE' })
+  if (res.status !== 204 && !res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string }
+    throw new Error(err.message ?? `Delete memory failed: ${res.status}`)
+  }
+}
+
 // ── Advisor chat ──────────────────────────────────────────────────────────
 
 export interface ChatMessage { role: 'user' | 'assistant'; content: string }
@@ -309,6 +361,7 @@ export type AdvisorChatFrame =
   | { type: 'error'; message: string }
   | { type: 'nudge'; targetMode: string }
   | { type: 'action_draft'; id: string; draftType: string; title: string; project?: string; priority?: string; body?: string }
+  | { type: 'memory_candidate'; id: string; text: string }
 
 export async function* streamAdvisorChat(
   messages: ChatMessage[],
@@ -355,6 +408,12 @@ export async function* streamAdvisorChat(
               project: obj['project'] !== undefined ? String(obj['project']) : undefined,
               priority: obj['priority'] !== undefined ? String(obj['priority']) : undefined,
               body: obj['body'] !== undefined ? String(obj['body']) : undefined,
+            }
+          } else if (currentEvent === 'memory_candidate') {
+            yield {
+              type: 'memory_candidate',
+              id: String(obj['id'] ?? ''),
+              text: String(obj['text'] ?? ''),
             }
           }
         } catch { /* skip malformed frame */ }

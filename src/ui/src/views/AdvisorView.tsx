@@ -13,6 +13,7 @@ import { buildSuggestions, type SuggestionId, type PersonaId } from '../lib/advi
 import { AdvisorChat } from '../components/AdvisorChat'
 import { ModeSelector } from '../components/ModeSelector'
 import { SuggestionCard } from '../components/SuggestionCard'
+import { MemoriesSection } from '../components/MemoriesSection'
 import type { PanelState } from '../types'
 
 interface Props {
@@ -175,6 +176,7 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
           ))
         }
       </div>
+      <MemoriesSection />
     </div>
   )
 }
