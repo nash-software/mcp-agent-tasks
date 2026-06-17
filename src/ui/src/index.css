@@ -674,3 +674,35 @@
 .action-btn.approve:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .action-btn.dismiss { color: var(--muted); }
 .action-btn.retry { padding: 3px 8px; font-size: 11px; }
+
+/* ── Memory chip (inline below assistant bubble) ──────────────────────────── */
+.memory-chip { display: inline-flex; align-items: center; gap: 7px; margin-top: 6px; padding: 5px 10px; border-radius: 20px; background: color-mix(in srgb, var(--accent) 8%, var(--s1)); border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); font-size: 12px; color: var(--text2); max-width: 420px; }
+.memory-chip-icon { color: var(--accent); flex-shrink: 0; }
+.memory-chip-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memory-chip-btn { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500; padding: 3px 9px; border-radius: 6px; border: 1px solid transparent; white-space: nowrap; transition: background 100ms; }
+.memory-chip-btn.save { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent); }
+.memory-chip-btn.save:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.memory-chip-btn.save:disabled { opacity: 0.5; cursor: default; }
+.memory-chip-btn.dismiss { color: var(--muted); background: transparent; }
+.memory-chip-btn.dismiss:hover { color: var(--text2); background: var(--s2); }
+.memory-chip.remembered { color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--s1)); border-color: color-mix(in srgb, var(--green) 22%, transparent); }
+
+/* ── Memories section (collapsible at bottom of AdvisorView) ─────────────── */
+.memories-section { border: 1px solid var(--s3); border-radius: var(--r-card); background: var(--s1); overflow: hidden; }
+.memories-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 14px; background: transparent; border: none; cursor: pointer; text-align: left; transition: background 100ms; }
+.memories-section-head:hover { background: var(--s2); }
+.memories-section-icon { color: var(--accent); flex-shrink: 0; }
+.memories-section-count { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 10px; padding: 1px 7px; }
+.memories-section-sub { font-size: 12px; color: var(--muted); flex: 1; }
+.memories-chevron { color: var(--muted); flex-shrink: 0; }
+.memories-list { border-top: 1px solid var(--s3); display: flex; flex-direction: column; }
+.memory-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--s3); transition: background 80ms; }
+.memory-row:last-child { border-bottom: none; }
+.memory-row:hover { background: var(--s2); }
+.memory-row.pinned .memory-row-content { font-weight: 500; }
+.memory-row-content { flex: 1; font-size: 13px; color: var(--text); line-height: 1.45; }
+.memory-row-actions { display: flex; gap: 5px; flex-shrink: 0; }
+.memory-row-btn { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--muted); transition: background 100ms, color 100ms; }
+.memory-row-btn:hover { background: var(--s3); color: var(--text2); }
+.memory-row-btn.pin.active { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+.memory-row-btn.delete:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }

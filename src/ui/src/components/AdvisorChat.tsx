@@ -5,11 +5,12 @@
  */
 import React, { useState, useRef, useEffect } from 'react'
 import { Wand2, Send, Layers, FileText, Search, Bot } from 'lucide-react'
-import { streamAdvisorChat, type ChatMessage } from '../api'
+import { streamAdvisorChat, createMemory, type ChatMessage } from '../api'
 import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, PERSONAS, type Suggestion, type PersonaId } from '../lib/advisor'
 import type { Task, ActionDraft } from '../types'
 import type { NoteRecord } from '../api'
 import { ActionCard } from './ActionCard'
+import { MemoryChip, type MemoryCandidate } from './MemoryChip'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,9 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
   const [nudge, setNudge] = useState<PersonaId | null>(null)
   // Map from message index to action drafts for that message (max 3 per message)
   const [actionDraftMap, setActionDraftMap] = useState<Map<number, ActionDraft[]>>(new Map())
+  // Map from message index to memory candidates for that message (max 1 per message)
+  const [memoryCandidateMap, setMemoryCandidateMap] = useState<Map<number, MemoryCandidate>>(new Map())
+  const [savingMemory, setSavingMemory] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -83,6 +87,23 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
       const next = new Map(prev)
       const drafts = next.get(msgIdx) ?? []
       next.set(msgIdx, drafts.map(d => d.id === draftId ? { ...d, status } : d))
+      return next
+    })
+  }
+
+  async function handleMemorySave(candidate: MemoryCandidate): Promise<void> {
+    setSavingMemory(true)
+    try {
+      await createMemory(candidate.text, sessionId)
+    } finally {
+      setSavingMemory(false)
+    }
+  }
+
+  function handleMemoryDismiss(msgIdx: number): void {
+    setMemoryCandidateMap(prev => {
+      const next = new Map(prev)
+      next.delete(msgIdx)
       return next
     })
   }
@@ -148,6 +169,14 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
             next.set(msgIndex, [...existing, draft])
             return next
           })
+        } else if (frame.type === 'memory_candidate') {
+          const msgIndex = currentMsgIdx >= 0 ? currentMsgIdx : 0
+          setMemoryCandidateMap(prev => {
+            if (prev.has(msgIndex)) return prev // only first candidate per message
+            const next = new Map(prev)
+            next.set(msgIndex, { id: frame.id, text: frame.text })
+            return next
+          })
         }
       }
     } catch {
@@ -203,6 +232,14 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
                   />
                 ))}
               </div>
+            )}
+            {m.role === 'assistant' && memoryCandidateMap.has(i) && (
+              <MemoryChip
+                candidate={memoryCandidateMap.get(i)!}
+                onSave={handleMemorySave}
+                onDismiss={() => handleMemoryDismiss(i)}
+                saving={savingMemory}
+              />
             )}
           </div>
         ))}
