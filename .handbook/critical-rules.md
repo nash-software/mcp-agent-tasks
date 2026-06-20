@@ -875,3 +875,33 @@
 ## [HIGH] ensureHealthyIndex detects and rebuilds databases with stale status CHECK constraints
 
 ## [HIGH] Triage engine report persistence with roundtrip validation
+
+## [HIGH] CLAUDE_CLI_DISABLED environment gate prevents LLM invocation in test endpoints
+
+## [HIGH] buildSuggestions — s-goal-gap warning trigger
+
+## [HIGH] buildSuggestions — s-stall project inactivity detection
+
+## [HIGH] buildSuggestions — s-distribution task flow detection
+
+## [HIGH] buildSuggestions — s-brain-surface snippet surfacing
+
+## [HIGH] buildSuggestions — scoring override for financial goals
+
+## [HIGH] note_create → note body searchable via note_search
+
+## [HIGH] POST /api/advisor/actions/approve endpoint validation
+
+## [HIGH] server-ui action extraction with SSE event emission
+
+## [HIGH] streamAdvisorChat action_draft SSE frame parsing
+
+## [HIGH] selectMemoriesForContext memory selection algorithm
+
+## [HIGH] computeDecay memory decay and fade logic
+
+## [HIGH] formatMemoryBlock memory block rendering
+
+## [HIGH] POST /api/advisor/session/close endpoint validation
+
+## [HIGH] POST /api/capture/infer confidence classification and fallback
