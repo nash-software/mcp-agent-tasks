@@ -352,7 +352,16 @@ export async function deleteMemory(id: string): Promise<void> {
 
 // ── Advisor chat ──────────────────────────────────────────────────────────
 
-export interface ChatMessage { role: 'user' | 'assistant'; content: string }
+export interface AdvisorSession {
+  id: string
+  mode: 'pm' | 'chairman' | 'coach'
+  started_at: string
+  ended_at: string
+  goal_snapshot: string
+  summary: string | null
+  full_log: Array<{ role: 'user' | 'assistant'; content: string }>
+  insights_promoted: string[]
+}
 
 export type AdvisorChatFrame =
     { type: 'delta'; text: string }
@@ -364,14 +373,14 @@ export type AdvisorChatFrame =
   | { type: 'memory_candidate'; id: string; text: string }
 
 export async function* streamAdvisorChat(
-  messages: ChatMessage[],
+  message: string,
   sessionId?: string,
   mode?: string,
 ): AsyncGenerator<AdvisorChatFrame> {
   const res = await fetch('/api/advisor/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, sessionId, ...(mode !== undefined ? { mode } : {}) }),
+    body: JSON.stringify({ message, sessionId, ...(mode !== undefined ? { mode } : {}) }),
   })
   if (!res.ok || !res.body) {
     yield { type: 'error', message: `HTTP ${res.status}` }
@@ -422,6 +431,36 @@ export async function* streamAdvisorChat(
     }
   }
   yield { type: 'done' }
+}
+
+export async function fetchAdvisorSessions(limit = 20, offset = 0): Promise<AdvisorSession[]> {
+  const res = await fetch(`/api/advisor/sessions?limit=${limit}&offset=${offset}`)
+  if (!res.ok) return []
+  return res.json() as Promise<AdvisorSession[]>
+}
+
+export async function fetchAdvisorSession(id: string): Promise<AdvisorSession | null> {
+  const res = await fetch(`/api/advisor/sessions/${encodeURIComponent(id)}`)
+  if (!res.ok) return null
+  return res.json() as Promise<AdvisorSession>
+}
+
+export async function closeAdvisorSession(
+  sessionId: string,
+  mode: string,
+  startedAt: string,
+  goalSnapshot?: string,
+): Promise<void> {
+  await fetch('/api/advisor/session/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      session_id: sessionId,
+      mode,
+      started_at: startedAt,
+      goal_snapshot: goalSnapshot ?? '',
+    }),
+  })
 }
 
 export interface ApproveActionRequest {

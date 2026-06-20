@@ -175,6 +175,6 @@ describe('AdvisorChat.tsx — mode and nudge', () => {
   })
 
   it('passes mode to streamAdvisorChat', () => {
-    expect(src).toContain('streamAdvisorChat(apiMessages, sessionId, mode)')
+    expect(src).toContain('streamAdvisorChat(text, sessionId, mode)')
   })
 })

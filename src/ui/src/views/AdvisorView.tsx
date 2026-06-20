@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw } from 'lucide-react'
-import { fetchNotes, transitionTask, signoffTask } from '../api'
+import { fetchNotes, transitionTask, signoffTask, closeAdvisorSession } from '../api'
 import { useTasks } from '../hooks/useTasks'
 import { useGoals } from '../hooks/useGoals'
 import { buildSuggestions, type SuggestionId, type PersonaId } from '../lib/advisor'
@@ -59,6 +59,12 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
     return isNaN(mins) ? 8 : mins / 60
   })
 
+  // ── Session tracking ──────────────────────────────────────────────────────
+  // Refs (not state) so the cleanup useEffect closure always reads the latest values.
+  const sessionIdRef = useRef<string | undefined>(undefined)
+  const sessionStartedAtRef = useRef<string | undefined>(undefined)
+  const modeRef = useRef<PersonaId>('pm')
+
   // ── Mode (persona) ────────────────────────────────────────────────────────
   const [mode, setMode] = useState<PersonaId>(() => {
     const saved = localStorage.getItem('lifeos-advisor-mode')
@@ -67,8 +73,31 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
 
   function handleModeChange(newMode: PersonaId): void {
     setMode(newMode)
+    modeRef.current = newMode
     localStorage.setItem('lifeos-advisor-mode', newMode)
   }
+
+  function handleSessionStart(id: string, startedAt: string): void {
+    sessionIdRef.current = id
+    sessionStartedAtRef.current = startedAt
+  }
+
+  const goalSnapshot = activeGoals[0]?.title ?? ''
+
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
+
+  useEffect(() => {
+    return () => {
+      const id = sessionIdRef.current
+      const startedAt = sessionStartedAtRef.current
+      if (id && startedAt) {
+        void closeAdvisorSession(id, modeRef.current, startedAt, goalSnapshot)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Suggestions ───────────────────────────────────────────────────────────
   const [seed, setSeed] = useState(0)
@@ -128,6 +157,7 @@ export function AdvisorView({ onOpenPanel }: Props): React.JSX.Element {
         mode={mode}
         onModeChange={handleModeChange}
         projects={allProjects}
+        onSessionStart={handleSessionStart}
       />
       <div className="sugg-section">
         <div className="sugg-section-head">
