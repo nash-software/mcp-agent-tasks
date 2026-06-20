@@ -35,7 +35,7 @@
     "build:server": "tsup",
     "build:ui": "npm --prefix src/ui ci --prefer-offline && npm --prefix src/ui run build",
     "postinstall": "node scripts/postinstall-ui.mjs",
-    "type-check": "tsc --noEmit && npm --prefix src/ui run type-check",
+    "type-check": "node scripts/check-ui-deps.js && tsc --noEmit && npm --prefix src/ui run type-check",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit"
