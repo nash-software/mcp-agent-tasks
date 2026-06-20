@@ -59,7 +59,7 @@ describe('streamAdvisorChat — happy path', () => {
       body: sseStream(sseBody),
     }))
 
-    const frames = await collect(streamAdvisorChat([{ role: 'user', content: 'hello' }]))
+    const frames = await collect(streamAdvisorChat('hello'))
 
     expect(frames.find(f => f.type === 'delta')).toEqual({ type: 'delta', text: 'hello' })
     expect(frames.find(f => f.type === 'session')).toEqual({ type: 'session', sessionId: 'abc' })
@@ -73,7 +73,7 @@ describe('streamAdvisorChat — happy path', () => {
     })
     vi.stubGlobal('fetch', mockFetch)
 
-    await collect(streamAdvisorChat([{ role: 'user', content: 'hi' }], 'sess-123'))
+    await collect(streamAdvisorChat('hi', 'sess-123'))
 
     expect(mockFetch).toHaveBeenCalledWith('/api/advisor/chat', expect.objectContaining({
       method: 'POST',
@@ -89,7 +89,7 @@ describe('streamAdvisorChat — happy path', () => {
       body: sseStream(sseBody),
     }))
 
-    const frames = await collect(streamAdvisorChat([{ role: 'user', content: 'test' }]))
+    const frames = await collect(streamAdvisorChat('test'))
     const doneFrames = frames.filter(f => f.type === 'done')
     expect(doneFrames.length).toBeGreaterThanOrEqual(1)
   })
@@ -103,7 +103,7 @@ describe('streamAdvisorChat — error path', () => {
       body: null,
     }))
 
-    const frames = await collect(streamAdvisorChat([{ role: 'user', content: 'hi' }]))
+    const frames = await collect(streamAdvisorChat('hi'))
     expect(frames[0]).toEqual({ type: 'error', message: 'HTTP 500' })
   })
 
@@ -113,7 +113,7 @@ describe('streamAdvisorChat — error path', () => {
       body: null,
     }))
 
-    const frames = await collect(streamAdvisorChat([{ role: 'user', content: 'hi' }]))
+    const frames = await collect(streamAdvisorChat('hi'))
     expect(frames[0].type).toBe('error')
   })
 
@@ -124,7 +124,7 @@ describe('streamAdvisorChat — error path', () => {
       body: sseStream(sseBody),
     }))
 
-    const frames = await collect(streamAdvisorChat([{ role: 'user', content: 'hi' }]))
+    const frames = await collect(streamAdvisorChat('hi'))
     expect(frames.find(f => f.type === 'error')).toEqual({ type: 'error', message: 'timeout' })
   })
 })
