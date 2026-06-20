@@ -107,7 +107,7 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      body: JSON.stringify({ message: 'hello' }),
     });
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     await res.text(); // consume body
@@ -117,7 +117,7 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'what should I do' }] }),
+      body: JSON.stringify({ message: 'what should I do' }),
     });
     const text = await res.text();
     const frames = parseSseFrames(text);
@@ -125,7 +125,7 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
     expect(errFrame).toBeDefined();
   });
 
-  it('400 on missing messages field', async () => {
+  it('400 on missing message field', async () => {
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -134,29 +134,20 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
     expect(res.status).toBe(400);
   });
 
-  it('400 on messages not being an array', async () => {
+  it('400 on empty message string', async () => {
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: 'not-an-array' }),
+      body: JSON.stringify({ message: '' }),
     });
     expect(res.status).toBe(400);
   });
 
-  it('400 on message item missing role', async () => {
+  it('400 on non-string message', async () => {
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ content: 'hello' }] }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it('400 on message item missing content', async () => {
-    const res = await fetch(`${baseUrl}/api/advisor/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user' }] }),
+      body: JSON.stringify({ message: 42 }),
     });
     expect(res.status).toBe(400);
   });
@@ -166,19 +157,9 @@ describe('POST /api/advisor/chat — ENOENT path (CLAUDE_CLI_DISABLED=1)', () =>
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        messages: [{ role: 'user', content: 'hi' }],
+        message: 'hi',
         sessionId: '--output-format',
       }),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it('400 on more than 50 messages', async () => {
-    const many = Array.from({ length: 51 }, () => ({ role: 'user', content: 'x' }));
-    const res = await fetch(`${baseUrl}/api/advisor/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: many }),
     });
     expect(res.status).toBe(400);
   });
@@ -280,7 +261,7 @@ describe('POST /api/advisor/chat — happy path (fake claude binary)', () => {
     const res = await fetch(`${baseUrl}/api/advisor/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ role: 'user', content: 'hello' }] }),
+      body: JSON.stringify({ message: 'hello' }),
     });
     expect(res.headers.get('content-type')).toContain('text/event-stream');
     const text = await res.text();

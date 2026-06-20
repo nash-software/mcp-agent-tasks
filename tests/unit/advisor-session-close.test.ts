@@ -77,17 +77,15 @@ describe('POST /api/advisor/session/close', () => {
   });
 
   it('persists session to JSONL and returns 200 {ok:true}', async () => {
+    const uniqueId = `test-session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const res = await fetch(`${baseUrl}/api/advisor/session/close`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        session_id: 'test-session-001',
+        session_id: uniqueId,
         mode: 'pm',
         started_at: new Date().toISOString(),
-        messages: [
-          { role: 'user', content: 'Hello advisor' },
-          { role: 'assistant', content: 'Hello! How can I help?' },
-        ],
+        goal_snapshot: 'test goal',
       }),
     });
     expect(res.status).toBe(200);
@@ -102,7 +100,6 @@ describe('POST /api/advisor/session/close', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         mode: 'pm',
-        messages: [],
       }),
     });
     expect(res.status).toBe(400);
@@ -115,19 +112,17 @@ describe('POST /api/advisor/session/close', () => {
       body: JSON.stringify({
         session_id: 'test-session-002',
         mode: 'invalid-mode',
-        messages: [],
       }),
     });
     expect(res.status).toBe(400);
   });
 
   it('returns {ok:true, skipped:true} for duplicate session_id', async () => {
-    const sessionId = 'test-session-idempotent';
+    const sessionId = `test-idempotent-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const payload = {
       session_id: sessionId,
       mode: 'coach',
       started_at: new Date().toISOString(),
-      messages: [{ role: 'user', content: 'Hello' }],
     };
 
     // First call

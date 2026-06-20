@@ -5,7 +5,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react'
 import { Wand2, Send, Layers, FileText, Search, Bot } from 'lucide-react'
-import { streamAdvisorChat, createMemory, type ChatMessage } from '../api'
+import { streamAdvisorChat, createMemory } from '../api'
 import { renderWithChips, localAdvice, SUGGESTED_PROMPTS, PERSONAS, type Suggestion, type PersonaId } from '../lib/advisor'
 import type { Task, ActionDraft } from '../types'
 import type { NoteRecord } from '../api'
@@ -29,6 +29,7 @@ interface Props {
   mode: PersonaId
   onModeChange: (mode: PersonaId) => void
   projects?: string[]
+  onSessionStart?: (sessionId: string, startedAt: string) => void
 }
 
 // ── ChatHeader (non-exported inner component) ──────────────────────────────
@@ -54,7 +55,7 @@ function ChatHeader({ live, openCount }: { live: boolean; openCount: number }): 
 
 // ── AdvisorChat ────────────────────────────────────────────────────────────
 
-export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive, mode, onModeChange, projects = [] }: Props): React.JSX.Element {
+export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLive, mode, onModeChange, projects = [], onSessionStart }: Props): React.JSX.Element {
   const openCount = tasks.filter(t => t.status !== 'done' && t.status !== 'closed' && t.status !== 'archived').length
 
   const greeting: Msg = {
@@ -117,7 +118,6 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     setMsgs(prev => [...prev, userMsg, { role: 'assistant', text: '' }])
     setBusy(true)
 
-    const apiMessages: ChatMessage[] = [...msgs, userMsg].map(m => ({ role: m.role, content: m.text }))
     // The assistant message will be at msgs.length + 1 (after the user msg we just appended)
     // We capture it after setState — use a local variable to track the index
     let currentMsgIdx = -1
@@ -128,7 +128,7 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     })
 
     try {
-      for await (const frame of streamAdvisorChat(apiMessages, sessionId, mode)) {
+      for await (const frame of streamAdvisorChat(text, sessionId, mode)) {
         if (frame.type === 'delta') {
           onLive()
           setMsgs(prev => {
@@ -142,6 +142,9 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
           })
         } else if (frame.type === 'session') {
           setSessionId(frame.sessionId)
+          if (!sessionId) {
+            onSessionStart?.(frame.sessionId, new Date().toISOString())
+          }
         } else if (frame.type === 'error') {
           throw new Error(frame.message)
         } else if (frame.type === 'done') {

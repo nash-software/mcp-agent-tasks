@@ -13,6 +13,7 @@ import { CaptureOverlay } from './components/CaptureOverlay'
 import { NewTaskModal } from './components/NewTaskModal'
 import { ProjectsModal } from './components/ProjectsModal'
 import { LiveFeedSection } from './components/LiveFeedSection'
+import { AdvisorHistory } from './components/AdvisorHistory'
 import { CommandPalette, type PaletteCommand } from './components/CommandPalette'
 import { FilterBar, type FilterBarProject } from './components/FilterBar'
 import { HermesView } from './views/HermesView'
@@ -772,7 +773,7 @@ export function App(): React.JSX.Element {
 
       {/* ambient right rail — P1-05 persistent ACR / Knowledge / Activity */}
       <aside className="ambient bg-surface-1 border-l border-surface-3 overflow-hidden">
-        <LiveFeedSection onOpenPanel={setPanel} />
+        {view === 'advisor' ? <AdvisorHistory /> : <LiveFeedSection onOpenPanel={setPanel} />}
       </aside>
 
       {/* panel — P1-04 peek / detail slide-in (absolute inside .main) */}
