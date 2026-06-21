@@ -50,6 +50,60 @@ export type PlayModelHint = 'cheap' | 'mid' | 'high'
 
 export type ArtifactKind = PlayArtifactKind
 
+// ── Semantic entity types (read-only on client, written by consolidation pass) ──
+
+export type EntityStatus = 'active' | 'softening' | 'reconciled' | 'dormant'
+
+export interface TimeBoundSummary {
+  text: string
+  reconciled_at: string
+  prior_value: string
+  new_value: string
+}
+
+export interface BeliefRecord {
+  id: string
+  statement: string
+  downward_arrow: string[]
+  first_surfaced: string
+  last_surfaced: string
+  surfaced_count: number
+  status: EntityStatus
+  disconfirming_evidence: { ts: string; note: string; source_session: string }[]
+  reconciliation?: TimeBoundSummary
+  linked_fears?: string[]
+  linked_commitments?: string[]
+}
+
+export interface FearRecord {
+  id: string
+  name: string
+  body_location?: string
+  felt_age?: string
+  origin?: string
+  what_shifts_it?: string[]
+  sessions: string[]
+  status: EntityStatus
+}
+
+export interface ValueRecord {
+  id: string
+  value: string
+  ladder: string[]
+  source_session: string
+  confidence: number
+}
+
+export interface CommitmentRecord {
+  id: string
+  improvement_goal: string
+  counter_behaviours: string[]
+  hidden_commitment: string
+  big_assumption: string
+  tests_run: { ts: string; test: string; outcome: string }[]
+  status: EntityStatus
+}
+
 export interface ArtifactVersion {
   ts: string
   body: string

@@ -3612,6 +3612,45 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Advisor state log — GET /api/advisor/state-log?limit=N
+      if (pathname === '/api/advisor/state-log' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const { recentState } = await import('./store/advisor-state.js');
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const limit = Math.min(500, parseInt(urlParsed.searchParams.get('limit') ?? '100', 10) || 100);
+            const entries = await recentState(limit);
+            sendJson(res, 200, entries);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'STATE_LOG_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor entities — GET /api/advisor/entities?type=belief|fear|value|commitment
+      if (pathname === '/api/advisor/entities' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const { listEntities } = await import('./store/advisor-entities.js');
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const type = urlParsed.searchParams.get('type');
+            const VALID_TYPES = new Set(['belief', 'fear', 'value', 'commitment']);
+            if (!type || !VALID_TYPES.has(type)) {
+              sendJson(res, 400, { error: 'INVALID_TYPE', message: 'type must be belief|fear|value|commitment' });
+              return;
+            }
+            const entities = await listEntities(type as Parameters<typeof listEntities>[0]);
+            sendJson(res, 200, entities);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ENTITIES_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
       // API: Advisor sessions list
       if (pathname === '/api/advisor/sessions' && req.method === 'GET') {
         const urlParsed = new URL(req.url ?? '/', `http://localhost`);
