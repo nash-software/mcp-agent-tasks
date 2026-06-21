@@ -905,3 +905,23 @@
 ## [HIGH] POST /api/advisor/session/close endpoint validation
 
 ## [HIGH] POST /api/capture/infer confidence classification and fallback
+
+## [HIGH] listArtifacts filtering and enumeration contract
+
+## [HIGH] getArtifact retrieval contract
+
+## [HIGH] createArtifact duplicate prevention
+
+## [HIGH] appendVersion append-only invariant
+
+## [HIGH] beliefs entity CRUD operations contract
+
+## [HIGH] entity type isolation contract
+
+## [HIGH] appendEpisodic and readEpisodic round-trip contract
+
+## [HIGH] queryEpisodic filtering contract
+
+## [HIGH] appendState and recentState contract
+
+## [HIGH] stateRange time-window query contract
