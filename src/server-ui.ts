@@ -27,6 +27,7 @@ import type { TriageDecision } from './triage/types.js';
 import type { AdvisorSession, AdvisorMemory, RunLLM } from './types/advisor.js';
 import { selectMemoriesForContext, formatMemoryBlock, computeDecay } from './store/advisor-memory.js';
 import { classifyState, gate, appendState, recentState } from './store/advisor-state.js';
+import { consolidateSession, consolidateAll } from './store/advisor-consolidation.js';
 import { routePlay, getPlayProtocol, getPlayLabel } from './lib/advisor-plays.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -3396,11 +3397,56 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 console.error('[advisor/session] reflection error:', err);
               }
             })();
+
+            // Fire async consolidation pass — coach mode only; idempotent and non-blocking.
+            // Upgrades episodic records to semantic entities (beliefs, fears, values, commitments).
+            if (session.mode === 'coach' && fullLog.length > 0) {
+              void (async () => {
+                try {
+                  const sessionRunLLM: RunLLM = async (prompt: string) => {
+                    const bin = resolveClaudeBinary();
+                    const result = spawnSync(bin, ['-p', prompt.slice(0, 2000)], {
+                      encoding: 'utf-8',
+                      timeout: 30_000,
+                    });
+                    if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+                    return result.stdout;
+                  };
+                  await consolidateSession(sessionId, sessionRunLLM);
+                } catch (err) {
+                  console.error('[advisor/session] consolidation error:', err);
+                }
+              })();
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: Advisor consolidation — manual trigger / nightly cron target.
+      // NIGHTLY CRON: see nightly cron comment in src/store/advisor-consolidation.ts
+      if (pathname === '/api/advisor/consolidate' && req.method === 'POST') {
+        void (async () => {
+          try {
+            const consolidateRunLLM: RunLLM = async (prompt: string) => {
+              const bin = resolveClaudeBinary();
+              const result = spawnSync(bin, ['-p', prompt.slice(0, 2000)], {
+                encoding: 'utf-8',
+                timeout: 30_000,
+              });
+              if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+              return result.stdout;
+            };
+            const stats = await consolidateAll(consolidateRunLLM);
+            sendJson(res, 200, { ok: true, processed: stats.processed, skipped: stats.skipped });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'CONSOLIDATION_ERROR', message: msg });
+          }
+        })();
         return;
       }
 
