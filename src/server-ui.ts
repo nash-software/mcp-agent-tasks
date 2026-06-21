@@ -3539,6 +3539,79 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
         return;
       }
 
+      // API: Advisor brain-dump triage — decomposes a raw dump into ThreadCandidate streams.
+      // Emits `thread_candidate` SSE frames; user picks one to start a focused coach session.
+      if (pathname === '/api/advisor/triage' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { dump?: unknown; session_id?: unknown };
+            if (typeof body.dump !== 'string' || body.dump.trim() === '') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'dump is required' });
+              return;
+            }
+            const dump = sanitizeForPrompt(body.dump.slice(0, 4000));
+            // session_id reserved for future open-loop episodic writes
+            void (typeof body.session_id === 'string' ? body.session_id : `triage-${Date.now()}`);
+
+            res.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            });
+
+            void (async () => {
+              try {
+                const triagePrompt = [
+                  'You are a coach assistant that decomposes a brain dump into distinct threads.',
+                  'Identify up to 4 distinct threads. For each thread output a JSON object:',
+                  '{"id":"t1","label":"Thread label","play":"somatic_pendulation","charge":0.7,"framing":"One-line framing of the thread"}',
+                  'play must be one of: ladder, downward_arrow, odyssey, best_possible_self, immunity, focusing, somatic_pendulation, ifs_parts, byron_katie, fear_setting, regret_min',
+                  'charge is 0-1 (emotional intensity).',
+                  'Output one JSON object per line. No other text.',
+                  '',
+                  `Brain dump:\n${dump}`,
+                ].join('\n');
+
+                const bin = resolveClaudeBinary();
+                const result = spawnSync(bin, ['-p', triagePrompt], {
+                  encoding: 'utf-8',
+                  timeout: 30_000,
+                });
+
+                if (!result.error && result.status === 0 && result.stdout.trim()) {
+                  const lines = result.stdout.trim().split('\n');
+                  for (const line of lines) {
+                    try {
+                      const candidate = JSON.parse(line.trim()) as {
+                        id?: unknown; label?: unknown; play?: unknown; charge?: unknown; framing?: unknown;
+                      };
+                      if (typeof candidate.id === 'string' && typeof candidate.label === 'string') {
+                        res.write(`event: thread_candidate\ndata:${JSON.stringify({
+                          id: candidate.id,
+                          label: candidate.label,
+                          play: typeof candidate.play === 'string' ? candidate.play : 'ladder',
+                          charge: typeof candidate.charge === 'number' ? candidate.charge : 0.5,
+                          framing: typeof candidate.framing === 'string' ? candidate.framing : '',
+                        })}\n\n`);
+                      }
+                    } catch { /* skip unparseable lines */ }
+                  }
+                }
+              } catch { /* LLM unavailable — emit done with no candidates */ }
+
+              res.write(`event: done\ndata:{}\n\n`);
+              if (!res.writableEnded) res.end();
+            })();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
       // API: Advisor sessions list
       if (pathname === '/api/advisor/sessions' && req.method === 'GET') {
         const urlParsed = new URL(req.url ?? '/', `http://localhost`);
