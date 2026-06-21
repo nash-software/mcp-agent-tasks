@@ -128,6 +128,23 @@ export interface StateLogEntry {
   triggers?: string[];
 }
 
+/** Injectable LLM runner seam — pass a mock in tests, real runner in production. */
+export type RunLLM = (prompt: string, opts?: { tier?: PrismTier; cold?: boolean }) => Promise<string>;
+
+/** Result of the per-turn state classifier. */
+export interface StateClassification {
+  mode: StateMode;
+  arousal: number;   // 0..1
+  valence: number;   // -1..1
+  triggers?: string[];
+}
+
+/** Result of the state-gate decision (runs before play selection — invariant #2). */
+export interface GateResult {
+  action: 'proceed' | 'ground' | 'refer';
+  reason: string;
+}
+
 /** A living versioned document produced by a play — append-only versions[]. */
 export interface Artifact {
   id: string;

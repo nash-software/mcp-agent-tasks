@@ -15,10 +15,8 @@
  *   type RunLLM = (prompt: string, opts?: { tier?: PrismTier; cold?: boolean }) => Promise<string>
  */
 
-import type { PrismTier } from '../types/advisor.js';
-
-/** Injectable LLM runner — pass a mock in tests, real runner in production. */
-export type RunLLM = (prompt: string, opts?: { tier?: PrismTier; cold?: boolean }) => Promise<string>;
+import type { RunLLM } from '../types/advisor.js';
+export type { RunLLM } from '../types/advisor.js';
 
 /**
  * Consolidate a single session: extract candidate entities from the episodic log,

@@ -373,7 +373,7 @@ export type AdvisorChatFrame =
   | { type: 'memory_candidate'; id: string; text: string }
   // ── Coaching layer frames (T0.1) ─────────────────────────────────────────
   | { type: 'thread_candidate'; id: string; label: string; play: string; charge: number }
-  | { type: 'play_active'; play: string; reason: string }
+  | { type: 'play_active'; play: string; label: string; reason: string }
   | { type: 'challenge'; id: string; counterpoint: string; tests?: string[] }
   | { type: 'state_flag'; mode: string; action: 'ground' | 'pause' | 'refer' }
   | { type: 'artifact_draft'; id: string; kind: string; title: string; body: string }
@@ -430,6 +430,21 @@ export async function* streamAdvisorChat(
               type: 'memory_candidate',
               id: String(obj['id'] ?? ''),
               text: String(obj['text'] ?? ''),
+            }
+          } else if (currentEvent === 'state_flag') {
+            yield {
+              type: 'state_flag',
+              mode: String(obj['mode'] ?? ''),
+              action: (obj['action'] === 'ground' || obj['action'] === 'refer' || obj['action'] === 'pause')
+                ? obj['action']
+                : 'pause',
+            }
+          } else if (currentEvent === 'play_active') {
+            yield {
+              type: 'play_active',
+              play: String(obj['play'] ?? ''),
+              label: String(obj['label'] ?? ''),
+              reason: String(obj['reason'] ?? ''),
             }
           }
         } catch { /* skip malformed frame */ }

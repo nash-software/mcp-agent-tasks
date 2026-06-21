@@ -9,6 +9,17 @@ import type { NoteRecord } from '../api'
 import pmJson from '../advisor/personas/pm.json'
 import chairmanJson from '../advisor/personas/chairman.json'
 import coachJson from '../advisor/personas/coach.json'
+import ladderJson from '../advisor/plays/ladder.json'
+import downwardArrowJson from '../advisor/plays/downward_arrow.json'
+import odysseyJson from '../advisor/plays/odyssey.json'
+import bestPossibleSelfJson from '../advisor/plays/best_possible_self.json'
+import immunityJson from '../advisor/plays/immunity.json'
+import focusingJson from '../advisor/plays/focusing.json'
+import somaticPendulationJson from '../advisor/plays/somatic_pendulation.json'
+import ifsPartsJson from '../advisor/plays/ifs_parts.json'
+import byronKatieJson from '../advisor/plays/byron_katie.json'
+import fearSettingJson from '../advisor/plays/fear_setting.json'
+import regretMinJson from '../advisor/plays/regret_min.json'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -17,6 +28,59 @@ export type SuggestionId = 's-crit' | 's-cap' | 's-block' | 's-root' | 's-auto' 
 export type SuggestionAction = 'commit' | 'hermes' | 'open'
 
 export type PersonaId = 'pm' | 'chairman' | 'coach'
+
+// ── Play system types (T1.2) ───────────────────────────────────────────────
+
+export type PlayId =
+  | 'ladder'
+  | 'downward_arrow'
+  | 'odyssey'
+  | 'best_possible_self'
+  | 'immunity'
+  | 'focusing'
+  | 'somatic_pendulation'
+  | 'ifs_parts'
+  | 'byron_katie'
+  | 'fear_setting'
+  | 'regret_min'
+
+export type PlayEntityType = 'belief' | 'fear' | 'value' | 'commitment'
+export type PlayArtifactKind = 'odyssey_plan' | 'immunity_map' | 'values_charter' | 'fear_map' | 'future_self_letter' | 'belief_ledger'
+export type PlayModelHint = 'cheap' | 'mid' | 'high'
+
+export interface Play {
+  id: PlayId
+  label: string
+  intent: string
+  trigger_signals: string[]
+  protocol: string[]
+  opening_moves: string[]
+  deepening_questions: string[]
+  do_not: string[]
+  writes: PlayEntityType[]
+  artifact?: PlayArtifactKind
+  exit_criteria: string
+  model_hint: PlayModelHint
+  safe_when_dysregulated: boolean
+}
+
+export const PLAYS: Record<PlayId, Play> = {
+  ladder: ladderJson as Play,
+  downward_arrow: downwardArrowJson as Play,
+  odyssey: odysseyJson as Play,
+  best_possible_self: bestPossibleSelfJson as Play,
+  immunity: immunityJson as Play,
+  focusing: focusingJson as Play,
+  somatic_pendulation: somaticPendulationJson as Play,
+  ifs_parts: ifsPartsJson as Play,
+  byron_katie: byronKatieJson as Play,
+  fear_setting: fearSettingJson as Play,
+  regret_min: regretMinJson as Play,
+}
+
+export function getPlay(id: PlayId): Play | undefined {
+  return PLAYS[id]
+}
 
 export interface Persona {
   id: PersonaId

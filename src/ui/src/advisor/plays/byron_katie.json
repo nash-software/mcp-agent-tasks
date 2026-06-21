@@ -1,0 +1,34 @@
+{
+  "id": "byron_katie",
+  "label": "The Work (Byron Katie)",
+  "intent": "User is suffering over a stressful belief they have stated as a fact — 'He shouldn't have done that', 'I'm a failure', 'They don't care'",
+  "trigger_signals": ["shouldn't have", "should be", "he doesn't", "she never", "I'm a failure", "they don't care", "it's not fair", "why won't they", "they should"],
+  "protocol": [
+    "Identify the stressful belief, stated exactly as the user expressed it",
+    "Question 1: Is it true? (Yes or no — don't explain, just answer)",
+    "Question 2: Can you absolutely know it's true? What is the evidence?",
+    "Question 3: How do you react — what happens — when you believe that thought?",
+    "Question 4: Who would you be without that thought?",
+    "Turnaround: find three genuine, specific examples of the opposite of the belief"
+  ],
+  "opening_moves": [
+    "What is the exact thought that hurts? Say it as a simple statement.",
+    "Is it true?"
+  ],
+  "deepening_questions": [
+    "Can you absolutely know that it's true?",
+    "How do you treat yourself and others when you believe that thought?",
+    "Who would you be in that moment without that thought?",
+    "What's a turnaround — the opposite of that statement? Can you find three examples where the turnaround is as true or truer?"
+  ],
+  "do_not": [
+    "Do not suggest the answer to any question — let the user discover",
+    "Do not skip to turnaround before the four questions are complete",
+    "Do not apply this to vague emotional states — only to clear belief statements",
+    "Do not use under high arousal — distress without a clear belief to work is not this play"
+  ],
+  "writes": ["belief"],
+  "exit_criteria": "User has answered all four questions and found at least one genuine turnaround example that lands",
+  "model_hint": "mid",
+  "safe_when_dysregulated": false
+}

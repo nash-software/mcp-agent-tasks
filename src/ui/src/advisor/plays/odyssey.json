@@ -1,0 +1,33 @@
+{
+  "id": "odyssey",
+  "label": "Odyssey Planning",
+  "intent": "User is at a life-direction crossroads, wants to explore multiple futures rather than commit prematurely",
+  "trigger_signals": ["don't know what I want", "stuck at a crossroads", "multiple paths", "life direction", "career change", "what should I do with my life", "five years from now", "alternate futures"],
+  "protocol": [
+    "Map three distinct 5-year scenarios: (1) current trajectory, (2) a meaningful pivot, (3) a wild-card 'what if everything changes'",
+    "For each scenario: title it, describe a day in that life, rate confidence / excitement / coherence",
+    "Surface the trade-offs each scenario protects against",
+    "Look for values that appear across all three — those are non-negotiables",
+    "Identify the first small experiment that would yield signal about one scenario"
+  ],
+  "opening_moves": [
+    "If you kept doing exactly what you're doing now, where would you be in five years?",
+    "Is there an alternate path you keep returning to in your mind?"
+  ],
+  "deepening_questions": [
+    "What would you have to give up to take that path?",
+    "What would that version of you regret most if you never tried?",
+    "Which scenario feels most like you, even if it scares you?",
+    "What's the smallest experiment you could run to find out if that direction is right?"
+  ],
+  "do_not": [
+    "Do not converge on one option prematurely",
+    "Do not evaluate scenarios as 'realistic' vs 'unrealistic' — generate freely first",
+    "Do not let the user skip a scenario because it feels implausible"
+  ],
+  "writes": ["value"],
+  "artifact": "odyssey_plan",
+  "exit_criteria": "Three scenarios are articulated with titles; the user identifies one next experiment",
+  "model_hint": "high",
+  "safe_when_dysregulated": true
+}

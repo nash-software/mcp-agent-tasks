@@ -24,8 +24,10 @@ import { runTriage as runTriageSweep, projectTasksDirs, type TriageReport } from
 import { undoRun as undoTriageRun, applyDecisions, writeRun, writeLatestReport, readLatestReport, deleteLatestReport } from './triage/audit.js';
 import { transitionPath } from './triage/decide.js';
 import type { TriageDecision } from './triage/types.js';
-import type { AdvisorSession, AdvisorMemory } from './types/advisor.js';
+import type { AdvisorSession, AdvisorMemory, RunLLM } from './types/advisor.js';
 import { selectMemoriesForContext, formatMemoryBlock, computeDecay } from './store/advisor-memory.js';
+import { classifyState, gate, appendState, recentState } from './store/advisor-state.js';
+import { routePlay, getPlayProtocol, getPlayLabel } from './lib/advisor-plays.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3584,8 +3586,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               },
               coach: {
                 model: 'claude-sonnet-4-6',
-                system_prompt: 'You are the Coach Advisor inside Life OS, a trusted thinking partner who helps with both professional blockers and personal growth. You use empathetic, conversational language. You ask one clarifying question when the situation is ambiguous.',
-                output_style: 'Conversational, empathetic tone. 2-4 sentences. Ask one follow-up question if useful. Validate before advising.',
+                system_prompt: 'You are the Coach Advisor inside Life OS. You are a mirror, not an oracle. Your role is to reflect, not to advise. You hold space for the user\'s own knowing to emerge — you do not supply the answer, belief, or insight; the user discovers it. Ask one question at a time. Listen for what is underneath what is said. Use language like "I\'m hearing...", "It sounds like...", "What\'s that like for you?" Validate experience before anything else. Never give unsolicited advice or solutions. Trust the user\'s process over your own interpretation.',
+                output_style: 'One question at a time. 1-3 sentences max. Validate first, then ask. Never advise unless explicitly asked. Never supply the insight — hold the space for it to emerge.',
               },
             };
             const persona = ADVISOR_PERSONAS[activeMode];
@@ -3729,9 +3731,67 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             // Resume turns (has sessionId): only the new user message — Claude already
             // has the context from the first turn via --resume.
             const sanitizedMessage = sanitizeForPrompt(message.slice(0, 4000));
+
+            // ── State gate (coach mode only, T1.4) ───────────────────────────
+            // Runs BEFORE play selection and LLM spawn — invariant #2.
+            // Classifies nervous-system state, gates to: proceed | ground | refer.
+            const REFERRAL_NOTICE = "I want to be honest with you — what you're describing sounds really intense. Please consider talking to someone you trust, or a therapist or counsellor who can give you their full attention. I'm still here, but some of what you're sharing is beyond what I'm best placed to help with alone.";
+            const SOMATIC_GROUND_INSTRUCTION = "[COACH GROUNDING MODE] The user's nervous system is activated. Follow somatic pendulation: (1) Name what is happening plainly, without amplifying. (2) Ask where they feel it in their body — not why. (3) Find a resource: a place in the body that feels okay or neutral. (4) Gently move attention between the activation and the resource. Do NOT do downward-arrow or belief analysis. Do NOT ask why questions. Do NOT rush insight. Regulate first; reflect later.";
+            let gateAction: 'proceed' | 'ground' | 'refer' = 'proceed';
+            if (activeMode === 'coach') {
+              const serverRunLLM: RunLLM = async (prompt: string) => {
+                const bin = resolveClaudeBinary();
+                const result = spawnSync(bin, ['-p', prompt.slice(0, 800)], { encoding: 'utf-8', timeout: 8000 });
+                if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+                return result.stdout;
+              };
+              try {
+                const recentEntries = await recentState(5);
+                const classification = await classifyState(sanitizedMessage, recentEntries, serverRunLLM);
+                const gateResult = gate(classification, recentEntries);
+                gateAction = gateResult.action;
+                await appendState({
+                  ts: new Date().toISOString(),
+                  session_id: sessionId,
+                  arousal: classification.arousal,
+                  valence: classification.valence,
+                  mode: classification.mode,
+                  triggers: classification.triggers,
+                });
+              } catch { /* gate failure → proceed (non-blocking) */ }
+            }
+            // Refer path — short-circuit before spawning LLM
+            if (gateAction === 'refer') {
+              res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+              res.write(`event: state_flag\ndata:${JSON.stringify({ mode: 'refer', action: 'refer' })}\n\n`);
+              res.write(`event: text\ndata:${JSON.stringify({ text: REFERRAL_NOTICE })}\n\n`);
+              res.write(`event: done\ndata:{}\n\n`);
+              res.end();
+              return;
+            }
+
+            // ── Play router (T1.5) — coach mode, gate=proceed ────────────────
+            // Only routes when activeMode=coach and gate returned proceed.
+            // Ground path skips the router and forces somatic_pendulation instead.
+            let activePlay: string | null = null;
+            let playProtocol = '';
+            if (activeMode === 'coach' && gateAction === 'proceed') {
+              const routedPlay = routePlay(sanitizedMessage, false);
+              if (routedPlay !== null) {
+                activePlay = routedPlay;
+                playProtocol = getPlayProtocol(routedPlay);
+              }
+            } else if (activeMode === 'coach' && gateAction === 'ground') {
+              // Ground always forces somatic_pendulation — gate already set SOMATIC_GROUND_INSTRUCTION
+              activePlay = 'somatic_pendulation';
+            }
+
+            // Ground path — inject somatic pendulation protocol into the prompt
+            const groundPrefix = gateAction === 'ground' ? `${SOMATIC_GROUND_INSTRUCTION}\n\n` : '';
+            const playPrefix = playProtocol ? `${playProtocol}\n\n` : '';
             const fullPrompt = sessionId
-              ? sanitizedMessage
-              : `${systemContent}\n\nUser: ${sanitizedMessage}`;
+              ? `${groundPrefix}${playPrefix}${sanitizedMessage}`
+              : `${groundPrefix}${playPrefix}${systemContent}\n\nUser: ${sanitizedMessage}`;
 
             // Pre-append user turn to the session log. For first turns we don't know
             // the sessionId yet (it comes from the session frame); we'll store it then.
@@ -3748,6 +3808,14 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive',
             });
+            // Emit state_flag for ground path (after SSE headers so stream is open)
+            if (gateAction === 'ground') {
+              res.write(`event: state_flag\ndata:${JSON.stringify({ mode: 'ground', action: 'ground' })}\n\n`);
+            }
+            // Emit play_active when a play is routed (T1.5)
+            if (activePlay !== null) {
+              res.write(`event: play_active\ndata:${JSON.stringify({ play: activePlay, reason: gateAction === 'ground' ? 'state-gate forced grounding' : 'trigger-signal match', label: getPlayLabel(activePlay as Parameters<typeof getPlayLabel>[0]) })}\n\n`);
+            }
 
             // ── memory_candidate fact-detection on latest user message ────────
             // Simple heuristic patterns that surface user preferences/identity

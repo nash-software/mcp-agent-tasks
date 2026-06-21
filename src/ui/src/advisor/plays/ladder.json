@@ -1,0 +1,32 @@
+{
+  "id": "ladder",
+  "label": "Laddering",
+  "intent": "User wants to clarify what they actually want or why something matters",
+  "trigger_signals": ["what do I actually want", "why do I want", "what matters", "what am I really after", "why does this feel important", "I should but"],
+  "protocol": [
+    "Ask 'What would having that give you?' on each stated want — ladder upward",
+    "Continue until the user names a terminal value (connection, freedom, meaning, security, etc.)",
+    "Reflect the value back without elaborating — let the user confirm or refine",
+    "Explore what life looks like when this value is honoured vs. thwarted",
+    "Link the original want back to the value: does it actually serve it?"
+  ],
+  "opening_moves": [
+    "What would having that give you?",
+    "And if you had that — what would that do for you?"
+  ],
+  "deepening_questions": [
+    "And that matters because…?",
+    "If you had that, what would be different?",
+    "What would you be able to do — or be — that you can't now?",
+    "Is there something even more fundamental underneath that?"
+  ],
+  "do_not": [
+    "Do not supply the terminal value — the user must name it",
+    "Do not jump to solutions before the value is clear",
+    "Do not validate the original want before laddering"
+  ],
+  "writes": ["value"],
+  "exit_criteria": "User names a terminal value and confirms it resonates; the ladder circles back on itself",
+  "model_hint": "mid",
+  "safe_when_dysregulated": true
+}

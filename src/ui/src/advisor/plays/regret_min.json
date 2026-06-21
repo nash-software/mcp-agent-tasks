@@ -1,0 +1,32 @@
+{
+  "id": "regret_min",
+  "label": "Regret Minimisation",
+  "intent": "User faces a significant fork-in-the-road decision and is stuck between options",
+  "trigger_signals": ["should I leave", "should I stay", "big decision", "don't know which path", "life-changing choice", "opportunity I might regret", "regret not trying", "what if I look back"],
+  "protocol": [
+    "Project to age 80 looking back: for each option, ask 'Would the 80-year-old version of you regret not doing this?'",
+    "Explore both directions: regret of action (doing it and having it go wrong) vs regret of inaction (not doing it at all)",
+    "Identify what each option protects or sacrifices",
+    "Separate reversible from irreversible decisions: 'Is this as permanent as it feels?'",
+    "Return to values: which option is more aligned with what the user named as important?"
+  ],
+  "opening_moves": [
+    "Imagine you're 80, looking back on this moment. Which choice do you think you'd regret not having made?",
+    "Is there a version of this choice that feels more like you?"
+  ],
+  "deepening_questions": [
+    "What would you lose if you chose option A? What would you protect?",
+    "What would you lose if you chose option B? What would you gain?",
+    "Is this decision as irreversible as it feels right now?",
+    "If the 80-year-old version of you were advising you right now, what would they say?"
+  ],
+  "do_not": [
+    "Do not choose for the user",
+    "Do not let the session collapse into pros/cons — it is a values and regret exercise, not a balance sheet",
+    "Do not treat the 80-year-old frame as purely analytical — it is meant to cut through short-term fear"
+  ],
+  "writes": ["value"],
+  "exit_criteria": "The user identifies which option the 80-year-old version of them would clearly endorse, even if they don't act on it immediately",
+  "model_hint": "mid",
+  "safe_when_dysregulated": true
+}

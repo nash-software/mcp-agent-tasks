@@ -1,0 +1,33 @@
+{
+  "id": "best_possible_self",
+  "label": "Best Possible Self",
+  "intent": "User has low motivation, foggy direction, or has lost connection to what they're building toward",
+  "trigger_signals": ["lost motivation", "don't know why I'm doing this", "can't see the point", "burned out", "going through the motions", "what's the point", "feel flat", "no sense of purpose"],
+  "protocol": [
+    "Invite the user to imagine a future self who has worked hard and succeeded — not perfectly, but meaningfully",
+    "Ask them to describe that self in detail: what do they look like, what are they doing, who is around them?",
+    "Surface the values embedded in that vision without naming them for the user",
+    "Trace back: what would need to be true today for that future to be possible?",
+    "Write a short letter from that future self to the current self"
+  ],
+  "opening_moves": [
+    "Imagine a version of you five years from now who has worked hard and things have gone well — not perfectly, but meaningfully. What is that person doing?",
+    "What does that future version of you feel, most days?"
+  ],
+  "deepening_questions": [
+    "Who is around that future version of you?",
+    "What have you stopped doing to become that person?",
+    "What does that person know that you don't know yet?",
+    "What would that future you say to you right now?"
+  ],
+  "do_not": [
+    "Do not suggest what the future self 'should' look like",
+    "Do not confuse the vision with a to-do list",
+    "Do not rush to action planning before the vision is vivid"
+  ],
+  "writes": ["value"],
+  "artifact": "future_self_letter",
+  "exit_criteria": "The user describes a vivid future self with at least three concrete details and names one thing that feels different about that version",
+  "model_hint": "mid",
+  "safe_when_dysregulated": true
+}

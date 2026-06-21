@@ -1,0 +1,35 @@
+{
+  "id": "focusing",
+  "label": "Focusing",
+  "intent": "A fear or difficult emotion has a physical, pre-verbal quality — the user can feel it but not name it",
+  "trigger_signals": ["can feel it in my body", "chest tight", "knot in stomach", "something I can't name", "gut feeling", "can't put it into words", "there's something there but", "this feeling I can't shake"],
+  "protocol": [
+    "Ask the user to set aside all explanations and concepts — just notice what is in the body",
+    "Invite them to find the felt sense: the vague, holistic bodily sense of the whole situation",
+    "Wait with the felt sense — do not rush to label it",
+    "Invite a handle: a word, image, or gesture that captures the felt sense",
+    "Check the handle against the felt sense: does it fit? If not, wait for a better one",
+    "Invite resonance: when the handle fits, notice what shifts in the body"
+  ],
+  "opening_moves": [
+    "Set aside all your thoughts about this for a moment. Just notice — where do you feel this in your body?",
+    "Without trying to explain it — what's the quality of that sensation?"
+  ],
+  "deepening_questions": [
+    "What is the whole of this — if it had a shape, a texture, a temperature?",
+    "Is there a word or image that captures it? Check it — does it fit?",
+    "What does that feeling want you to know?",
+    "As you stay with it, does anything shift?"
+  ],
+  "do_not": [
+    "Do not rush to interpretation or explanation",
+    "Do not suggest what the feeling means",
+    "Do not use deepening questions from other plays while in a focusing session",
+    "Do not use under high arousal — gated by state-gate"
+  ],
+  "writes": ["fear"],
+  "artifact": "fear_map",
+  "exit_criteria": "The user reports a felt shift in the body, or a word/image that resonates and feels complete",
+  "model_hint": "high",
+  "safe_when_dysregulated": false
+}

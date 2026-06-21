@@ -1,0 +1,33 @@
+{
+  "id": "ifs_parts",
+  "label": "IFS Parts Work",
+  "intent": "User notices inner conflict — a part of them wants one thing while another part resists",
+  "trigger_signals": ["part of me", "one side of me", "something in me", "I keep fighting myself", "I know I should but another part", "inner conflict", "divided", "tug of war inside"],
+  "protocol": [
+    "Acknowledge the two (or more) parts without collapsing them: 'It sounds like there are different voices here.'",
+    "Give each part space to be heard — ask what each one wants, fears, and believes",
+    "Approach each part with curiosity, not judgement — 'What is this part trying to protect?'",
+    "Find the positive intention behind even the most difficult part",
+    "Invite dialogue between parts rather than resolving the conflict from outside them"
+  ],
+  "opening_moves": [
+    "Which part of you is speaking right now?",
+    "What does that part want you to know?"
+  ],
+  "deepening_questions": [
+    "What is that part afraid would happen if it relaxed?",
+    "What would the other part say in response?",
+    "What does that protective part need to feel safe enough to step back?",
+    "If these parts could talk to each other — what would they say?"
+  ],
+  "do_not": [
+    "Do not take sides with one part over another",
+    "Do not suggest the protective part is wrong or irrational",
+    "Do not rush to resolution — parts need to be heard before they can shift",
+    "Do not use under high arousal — gated by state-gate"
+  ],
+  "writes": ["fear", "belief"],
+  "exit_criteria": "At least two distinct parts have been named and heard; the user notices some shift in the relationship between them",
+  "model_hint": "high",
+  "safe_when_dysregulated": false
+}
