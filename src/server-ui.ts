@@ -28,6 +28,7 @@ import type { AdvisorSession, AdvisorMemory, RunLLM } from './types/advisor.js';
 import { selectMemoriesForContext, formatMemoryBlock, computeDecay } from './store/advisor-memory.js';
 import { classifyState, gate, appendState, recentState } from './store/advisor-state.js';
 import { consolidateSession, consolidateAll } from './store/advisor-consolidation.js';
+import { listArtifacts, getArtifact, createArtifact, appendVersion } from './store/advisor-artifacts.js';
 import { routePlay, getPlayProtocol, getPlayLabel } from './lib/advisor-plays.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -3447,6 +3448,94 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             sendJson(res, 500, { error: 'CONSOLIDATION_ERROR', message: msg });
           }
         })();
+        return;
+      }
+
+      // API: Advisor artifacts — list all or filtered by kind
+      if (pathname === '/api/advisor/artifacts' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const kind = urlParsed.searchParams.get('kind') ?? undefined;
+            const artifacts = await listArtifacts(kind as Parameters<typeof listArtifacts>[0]);
+            sendJson(res, 200, artifacts);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor artifacts — get single artifact by id
+      if (pathname.startsWith('/api/advisor/artifacts/') && req.method === 'GET' && !pathname.includes('/versions')) {
+        const artifactId = pathname.slice('/api/advisor/artifacts/'.length);
+        if (!artifactId) { sendJson(res, 400, { error: 'MISSING_ID' }); return; }
+        void (async () => {
+          try {
+            const artifact = await getArtifact(artifactId);
+            if (!artifact) { sendJson(res, 404, { error: 'NOT_FOUND' }); return; }
+            sendJson(res, 200, artifact);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor artifacts — create artifact
+      if (pathname === '/api/advisor/artifacts' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              id?: unknown; kind?: unknown; title?: unknown; body?: unknown;
+            };
+            if (typeof body.id !== 'string' || typeof body.kind !== 'string' || typeof body.title !== 'string' || typeof body.body !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'id, kind, title, body are required strings' });
+              return;
+            }
+            const now = new Date().toISOString();
+            await createArtifact({
+              id: body.id,
+              kind: body.kind as Parameters<typeof createArtifact>[0]['kind'],
+              title: body.title,
+              created_at: now,
+              updated_at: now,
+              versions: [{ ts: now, body: body.body }],
+              linked_entities: [],
+            });
+            sendJson(res, 201, { ok: true, id: body.id });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor artifacts — append version (append-only invariant)
+      if (pathname.match(/^\/api\/advisor\/artifacts\/[^/]+\/versions$/) && req.method === 'POST') {
+        const artifactId = pathname.slice('/api/advisor/artifacts/'.length).replace('/versions', '');
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { body?: unknown };
+            if (typeof body.body !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'body is required' });
+              return;
+            }
+            const now = new Date().toISOString();
+            await appendVersion(artifactId, { ts: now, body: body.body });
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        });
         return;
       }
 

@@ -48,6 +48,23 @@ export type PlayEntityType = 'belief' | 'fear' | 'value' | 'commitment'
 export type PlayArtifactKind = 'odyssey_plan' | 'immunity_map' | 'values_charter' | 'fear_map' | 'future_self_letter' | 'belief_ledger'
 export type PlayModelHint = 'cheap' | 'mid' | 'high'
 
+export type ArtifactKind = PlayArtifactKind
+
+export interface ArtifactVersion {
+  ts: string
+  body: string
+}
+
+export interface Artifact {
+  id: string
+  kind: ArtifactKind
+  title: string
+  created_at: string
+  updated_at: string
+  versions: ArtifactVersion[]
+  linked_entities: string[]
+}
+
 export interface Play {
   id: PlayId
   label: string
