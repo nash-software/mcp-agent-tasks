@@ -371,6 +371,13 @@ export type AdvisorChatFrame =
   | { type: 'nudge'; targetMode: string }
   | { type: 'action_draft'; id: string; draftType: string; title: string; project?: string; priority?: string; body?: string }
   | { type: 'memory_candidate'; id: string; text: string }
+  // ── Coaching layer frames (T0.1) ─────────────────────────────────────────
+  | { type: 'thread_candidate'; id: string; label: string; play: string; charge: number }
+  | { type: 'play_active'; play: string; reason: string }
+  | { type: 'challenge'; id: string; counterpoint: string; tests?: string[] }
+  | { type: 'state_flag'; mode: string; action: 'ground' | 'pause' | 'refer' }
+  | { type: 'artifact_draft'; id: string; kind: string; title: string; body: string }
+  | { type: 'entity_update'; id: string; entityType: string; summary: string }
 
 export async function* streamAdvisorChat(
   message: string,
