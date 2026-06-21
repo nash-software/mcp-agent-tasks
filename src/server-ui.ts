@@ -24,8 +24,12 @@ import { runTriage as runTriageSweep, projectTasksDirs, type TriageReport } from
 import { undoRun as undoTriageRun, applyDecisions, writeRun, writeLatestReport, readLatestReport, deleteLatestReport } from './triage/audit.js';
 import { transitionPath } from './triage/decide.js';
 import type { TriageDecision } from './triage/types.js';
-import type { AdvisorSession, AdvisorMemory } from './types/advisor.js';
+import type { AdvisorSession, AdvisorMemory, RunLLM } from './types/advisor.js';
 import { selectMemoriesForContext, formatMemoryBlock, computeDecay } from './store/advisor-memory.js';
+import { classifyState, gate, appendState, recentState } from './store/advisor-state.js';
+import { consolidateSession, consolidateAll } from './store/advisor-consolidation.js';
+import { listArtifacts, getArtifact, createArtifact, appendVersion } from './store/advisor-artifacts.js';
+import { routePlay, getPlayProtocol, getPlayLabel } from './lib/advisor-plays.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -3394,11 +3398,256 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
                 console.error('[advisor/session] reflection error:', err);
               }
             })();
+
+            // Fire async consolidation pass — coach mode only; idempotent and non-blocking.
+            // Upgrades episodic records to semantic entities (beliefs, fears, values, commitments).
+            if (session.mode === 'coach' && fullLog.length > 0) {
+              void (async () => {
+                try {
+                  const sessionRunLLM: RunLLM = async (prompt: string) => {
+                    const bin = resolveClaudeBinary();
+                    const result = spawnSync(bin, ['-p', prompt.slice(0, 2000)], {
+                      encoding: 'utf-8',
+                      timeout: 30_000,
+                    });
+                    if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+                    return result.stdout;
+                  };
+                  await consolidateSession(sessionId, sessionRunLLM);
+                } catch (err) {
+                  console.error('[advisor/session] consolidation error:', err);
+                }
+              })();
+            }
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
           }
         });
+        return;
+      }
+
+      // API: Advisor consolidation — manual trigger / nightly cron target.
+      // NIGHTLY CRON: see nightly cron comment in src/store/advisor-consolidation.ts
+      if (pathname === '/api/advisor/consolidate' && req.method === 'POST') {
+        void (async () => {
+          try {
+            const consolidateRunLLM: RunLLM = async (prompt: string) => {
+              const bin = resolveClaudeBinary();
+              const result = spawnSync(bin, ['-p', prompt.slice(0, 2000)], {
+                encoding: 'utf-8',
+                timeout: 30_000,
+              });
+              if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+              return result.stdout;
+            };
+            const stats = await consolidateAll(consolidateRunLLM);
+            sendJson(res, 200, { ok: true, processed: stats.processed, skipped: stats.skipped });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'CONSOLIDATION_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor artifacts — list all or filtered by kind
+      if (pathname === '/api/advisor/artifacts' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const kind = urlParsed.searchParams.get('kind') ?? undefined;
+            const artifacts = await listArtifacts(kind as Parameters<typeof listArtifacts>[0]);
+            sendJson(res, 200, artifacts);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor artifacts — get single artifact by id
+      if (pathname.startsWith('/api/advisor/artifacts/') && req.method === 'GET' && !pathname.includes('/versions')) {
+        const artifactId = pathname.slice('/api/advisor/artifacts/'.length);
+        if (!artifactId) { sendJson(res, 400, { error: 'MISSING_ID' }); return; }
+        void (async () => {
+          try {
+            const artifact = await getArtifact(artifactId);
+            if (!artifact) { sendJson(res, 404, { error: 'NOT_FOUND' }); return; }
+            sendJson(res, 200, artifact);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor artifacts — create artifact
+      if (pathname === '/api/advisor/artifacts' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+              id?: unknown; kind?: unknown; title?: unknown; body?: unknown;
+            };
+            if (typeof body.id !== 'string' || typeof body.kind !== 'string' || typeof body.title !== 'string' || typeof body.body !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'id, kind, title, body are required strings' });
+              return;
+            }
+            const now = new Date().toISOString();
+            await createArtifact({
+              id: body.id,
+              kind: body.kind as Parameters<typeof createArtifact>[0]['kind'],
+              title: body.title,
+              created_at: now,
+              updated_at: now,
+              versions: [{ ts: now, body: body.body }],
+              linked_entities: [],
+            });
+            sendJson(res, 201, { ok: true, id: body.id });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor artifacts — append version (append-only invariant)
+      if (pathname.match(/^\/api\/advisor\/artifacts\/[^/]+\/versions$/) && req.method === 'POST') {
+        const artifactId = pathname.slice('/api/advisor/artifacts/'.length).replace('/versions', '');
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', async () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { body?: unknown };
+            if (typeof body.body !== 'string') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'body is required' });
+              return;
+            }
+            const now = new Date().toISOString();
+            await appendVersion(artifactId, { ts: now, body: body.body });
+            sendJson(res, 200, { ok: true });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'ARTIFACT_ERROR', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor brain-dump triage — decomposes a raw dump into ThreadCandidate streams.
+      // Emits `thread_candidate` SSE frames; user picks one to start a focused coach session.
+      if (pathname === '/api/advisor/triage' && req.method === 'POST') {
+        const chunks: Buffer[] = [];
+        req.on('data', (c: Buffer) => chunks.push(c));
+        req.on('end', () => {
+          try {
+            const body = JSON.parse(Buffer.concat(chunks).toString()) as { dump?: unknown; session_id?: unknown };
+            if (typeof body.dump !== 'string' || body.dump.trim() === '') {
+              sendJson(res, 400, { error: 'INVALID_BODY', message: 'dump is required' });
+              return;
+            }
+            const dump = sanitizeForPrompt(body.dump.slice(0, 4000));
+            // session_id reserved for future open-loop episodic writes
+            void (typeof body.session_id === 'string' ? body.session_id : `triage-${Date.now()}`);
+
+            res.writeHead(200, {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            });
+
+            void (async () => {
+              try {
+                const triagePrompt = [
+                  'You are a coach assistant that decomposes a brain dump into distinct threads.',
+                  'Identify up to 4 distinct threads. For each thread output a JSON object:',
+                  '{"id":"t1","label":"Thread label","play":"somatic_pendulation","charge":0.7,"framing":"One-line framing of the thread"}',
+                  'play must be one of: ladder, downward_arrow, odyssey, best_possible_self, immunity, focusing, somatic_pendulation, ifs_parts, byron_katie, fear_setting, regret_min',
+                  'charge is 0-1 (emotional intensity).',
+                  'Output one JSON object per line. No other text.',
+                  '',
+                  `Brain dump:\n${dump}`,
+                ].join('\n');
+
+                const bin = resolveClaudeBinary();
+                const result = spawnSync(bin, ['-p', triagePrompt], {
+                  encoding: 'utf-8',
+                  timeout: 30_000,
+                });
+
+                if (!result.error && result.status === 0 && result.stdout.trim()) {
+                  const lines = result.stdout.trim().split('\n');
+                  for (const line of lines) {
+                    try {
+                      const candidate = JSON.parse(line.trim()) as {
+                        id?: unknown; label?: unknown; play?: unknown; charge?: unknown; framing?: unknown;
+                      };
+                      if (typeof candidate.id === 'string' && typeof candidate.label === 'string') {
+                        res.write(`event: thread_candidate\ndata:${JSON.stringify({
+                          id: candidate.id,
+                          label: candidate.label,
+                          play: typeof candidate.play === 'string' ? candidate.play : 'ladder',
+                          charge: typeof candidate.charge === 'number' ? candidate.charge : 0.5,
+                          framing: typeof candidate.framing === 'string' ? candidate.framing : '',
+                        })}\n\n`);
+                      }
+                    } catch { /* skip unparseable lines */ }
+                  }
+                }
+              } catch { /* LLM unavailable — emit done with no candidates */ }
+
+              res.write(`event: done\ndata:{}\n\n`);
+              if (!res.writableEnded) res.end();
+            })();
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 400, { error: 'INVALID_BODY', message: msg });
+          }
+        });
+        return;
+      }
+
+      // API: Advisor state log — GET /api/advisor/state-log?limit=N
+      if (pathname === '/api/advisor/state-log' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const { recentState } = await import('./store/advisor-state.js');
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const limit = Math.min(500, parseInt(urlParsed.searchParams.get('limit') ?? '100', 10) || 100);
+            const entries = await recentState(limit);
+            sendJson(res, 200, entries);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'STATE_LOG_ERROR', message: msg });
+          }
+        })();
+        return;
+      }
+
+      // API: Advisor entities — GET /api/advisor/entities?type=belief|fear|value|commitment
+      if (pathname === '/api/advisor/entities' && req.method === 'GET') {
+        void (async () => {
+          try {
+            const { listEntities } = await import('./store/advisor-entities.js');
+            const urlParsed = new URL(req.url ?? '/', `http://localhost`);
+            const type = urlParsed.searchParams.get('type');
+            const VALID_TYPES = new Set(['belief', 'fear', 'value', 'commitment']);
+            if (!type || !VALID_TYPES.has(type)) {
+              sendJson(res, 400, { error: 'INVALID_TYPE', message: 'type must be belief|fear|value|commitment' });
+              return;
+            }
+            const entities = await listEntities(type as Parameters<typeof listEntities>[0]);
+            sendJson(res, 200, entities);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            sendJson(res, 500, { error: 'ENTITIES_ERROR', message: msg });
+          }
+        })();
         return;
       }
 
@@ -3584,8 +3833,8 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               },
               coach: {
                 model: 'claude-sonnet-4-6',
-                system_prompt: 'You are the Coach Advisor inside Life OS, a trusted thinking partner who helps with both professional blockers and personal growth. You use empathetic, conversational language. You ask one clarifying question when the situation is ambiguous.',
-                output_style: 'Conversational, empathetic tone. 2-4 sentences. Ask one follow-up question if useful. Validate before advising.',
+                system_prompt: 'You are the Coach Advisor inside Life OS. You are a mirror, not an oracle. Your role is to reflect, not to advise. You hold space for the user\'s own knowing to emerge — you do not supply the answer, belief, or insight; the user discovers it. Ask one question at a time. Listen for what is underneath what is said. Use language like "I\'m hearing...", "It sounds like...", "What\'s that like for you?" Validate experience before anything else. Never give unsolicited advice or solutions. Trust the user\'s process over your own interpretation.',
+                output_style: 'One question at a time. 1-3 sentences max. Validate first, then ask. Never advise unless explicitly asked. Never supply the insight — hold the space for it to emerge.',
               },
             };
             const persona = ADVISOR_PERSONAS[activeMode];
@@ -3729,9 +3978,67 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
             // Resume turns (has sessionId): only the new user message — Claude already
             // has the context from the first turn via --resume.
             const sanitizedMessage = sanitizeForPrompt(message.slice(0, 4000));
+
+            // ── State gate (coach mode only, T1.4) ───────────────────────────
+            // Runs BEFORE play selection and LLM spawn — invariant #2.
+            // Classifies nervous-system state, gates to: proceed | ground | refer.
+            const REFERRAL_NOTICE = "I want to be honest with you — what you're describing sounds really intense. Please consider talking to someone you trust, or a therapist or counsellor who can give you their full attention. I'm still here, but some of what you're sharing is beyond what I'm best placed to help with alone.";
+            const SOMATIC_GROUND_INSTRUCTION = "[COACH GROUNDING MODE] The user's nervous system is activated. Follow somatic pendulation: (1) Name what is happening plainly, without amplifying. (2) Ask where they feel it in their body — not why. (3) Find a resource: a place in the body that feels okay or neutral. (4) Gently move attention between the activation and the resource. Do NOT do downward-arrow or belief analysis. Do NOT ask why questions. Do NOT rush insight. Regulate first; reflect later.";
+            let gateAction: 'proceed' | 'ground' | 'refer' = 'proceed';
+            if (activeMode === 'coach') {
+              const serverRunLLM: RunLLM = async (prompt: string) => {
+                const bin = resolveClaudeBinary();
+                const result = spawnSync(bin, ['-p', prompt.slice(0, 800)], { encoding: 'utf-8', timeout: 8000 });
+                if (result.error || result.status !== 0) throw new Error('LLM unavailable');
+                return result.stdout;
+              };
+              try {
+                const recentEntries = await recentState(5);
+                const classification = await classifyState(sanitizedMessage, recentEntries, serverRunLLM);
+                const gateResult = gate(classification, recentEntries);
+                gateAction = gateResult.action;
+                await appendState({
+                  ts: new Date().toISOString(),
+                  session_id: sessionId,
+                  arousal: classification.arousal,
+                  valence: classification.valence,
+                  mode: classification.mode,
+                  triggers: classification.triggers,
+                });
+              } catch { /* gate failure → proceed (non-blocking) */ }
+            }
+            // Refer path — short-circuit before spawning LLM
+            if (gateAction === 'refer') {
+              res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+              res.write(`event: state_flag\ndata:${JSON.stringify({ mode: 'refer', action: 'refer' })}\n\n`);
+              res.write(`event: text\ndata:${JSON.stringify({ text: REFERRAL_NOTICE })}\n\n`);
+              res.write(`event: done\ndata:{}\n\n`);
+              res.end();
+              return;
+            }
+
+            // ── Play router (T1.5) — coach mode, gate=proceed ────────────────
+            // Only routes when activeMode=coach and gate returned proceed.
+            // Ground path skips the router and forces somatic_pendulation instead.
+            let activePlay: string | null = null;
+            let playProtocol = '';
+            if (activeMode === 'coach' && gateAction === 'proceed') {
+              const routedPlay = routePlay(sanitizedMessage, false);
+              if (routedPlay !== null) {
+                activePlay = routedPlay;
+                playProtocol = getPlayProtocol(routedPlay);
+              }
+            } else if (activeMode === 'coach' && gateAction === 'ground') {
+              // Ground always forces somatic_pendulation — gate already set SOMATIC_GROUND_INSTRUCTION
+              activePlay = 'somatic_pendulation';
+            }
+
+            // Ground path — inject somatic pendulation protocol into the prompt
+            const groundPrefix = gateAction === 'ground' ? `${SOMATIC_GROUND_INSTRUCTION}\n\n` : '';
+            const playPrefix = playProtocol ? `${playProtocol}\n\n` : '';
             const fullPrompt = sessionId
-              ? sanitizedMessage
-              : `${systemContent}\n\nUser: ${sanitizedMessage}`;
+              ? `${groundPrefix}${playPrefix}${sanitizedMessage}`
+              : `${groundPrefix}${playPrefix}${systemContent}\n\nUser: ${sanitizedMessage}`;
 
             // Pre-append user turn to the session log. For first turns we don't know
             // the sessionId yet (it comes from the session frame); we'll store it then.
@@ -3748,6 +4055,14 @@ export async function startUiServer(opts: { port: number; openBrowser?: boolean 
               'Cache-Control': 'no-cache',
               'Connection': 'keep-alive',
             });
+            // Emit state_flag for ground path (after SSE headers so stream is open)
+            if (gateAction === 'ground') {
+              res.write(`event: state_flag\ndata:${JSON.stringify({ mode: 'ground', action: 'ground' })}\n\n`);
+            }
+            // Emit play_active when a play is routed (T1.5)
+            if (activePlay !== null) {
+              res.write(`event: play_active\ndata:${JSON.stringify({ play: activePlay, reason: gateAction === 'ground' ? 'state-gate forced grounding' : 'trigger-signal match', label: getPlayLabel(activePlay as Parameters<typeof getPlayLabel>[0]) })}\n\n`);
+            }
 
             // ── memory_candidate fact-detection on latest user message ────────
             // Simple heuristic patterns that surface user preferences/identity

@@ -1,0 +1,33 @@
+{
+  "id": "immunity",
+  "label": "Immunity to Change",
+  "intent": "User has a pattern that resists willpower — they know what they should do and still don't do it",
+  "trigger_signals": ["keep meaning to", "should be doing", "can't seem to", "always sabotage", "why do I keep doing this", "knowing and not doing", "stuck in the same pattern", "self-sabotage"],
+  "protocol": [
+    "Name the improvement goal: what does the user genuinely want to change?",
+    "Surface counter-behaviours: what do they actually do instead, even when they know better?",
+    "Uncover the hidden commitment: what does the counter-behaviour protect? Ask 'what would be the downside of fully committing to the goal?'",
+    "Surface the big assumption: 'If I gave up [hidden commitment], I assume that...'",
+    "Design a small, safe-to-fail test of the big assumption"
+  ],
+  "opening_moves": [
+    "What's the thing you keep meaning to do but don't?",
+    "When you don't follow through, what do you tend to do instead?"
+  ],
+  "deepening_questions": [
+    "What would be the downside of fully succeeding at that goal?",
+    "What are you protecting by NOT doing the thing?",
+    "If you imagine letting go of that protection — what feels scary?",
+    "What assumption would have to be wrong for the change to feel safe?"
+  ],
+  "do_not": [
+    "Do not reframe the counter-behaviour as laziness or weakness",
+    "Do not suggest the hidden commitment is irrational",
+    "Do not propose action plans before the big assumption is surfaced"
+  ],
+  "writes": ["commitment", "belief"],
+  "artifact": "immunity_map",
+  "exit_criteria": "The user names a big assumption they hold that makes the change feel unsafe, and identifies one small test of that assumption",
+  "model_hint": "high",
+  "safe_when_dysregulated": true
+}

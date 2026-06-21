@@ -1,0 +1,33 @@
+{
+  "id": "downward_arrow",
+  "label": "Downward Arrow",
+  "intent": "A worry or fear is stated — user wants to trace it to the core belief underneath",
+  "trigger_signals": ["worried that", "afraid that", "fear that", "what if", "catastrophe", "worst case", "people will think", "what would happen if"],
+  "protocol": [
+    "Take the feared outcome at face value: 'And if that happened, what would that mean?'",
+    "Arrow downward, not sideways — resist problem-solving or reassurance",
+    "Continue until the statement is absolute ('I am...', 'People always...', 'I will never...')",
+    "Surface the core belief explicitly: 'So the belief underneath might be...'",
+    "Invite the user to examine the belief with evidence, not to refute it"
+  ],
+  "opening_moves": [
+    "If that happened, what would it mean about you?",
+    "And if that were true, what would that say about you?"
+  ],
+  "deepening_questions": [
+    "And if that were true, what would that mean?",
+    "What would be the worst part of that?",
+    "What would that say about you as a person?",
+    "And if that's true — then what?"
+  ],
+  "do_not": [
+    "Do not reassure — reassurance interrupts the arrow",
+    "Do not problem-solve the feared outcome",
+    "Do not supply the bedrock belief — the user must reach it",
+    "Do not use this play under high arousal — state-gate applies"
+  ],
+  "writes": ["belief"],
+  "exit_criteria": "An absolute core belief is named (e.g., 'I am fundamentally flawed') and the user recognises it as such",
+  "model_hint": "high",
+  "safe_when_dysregulated": false
+}

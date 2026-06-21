@@ -905,3 +905,41 @@
 ## [HIGH] POST /api/advisor/session/close endpoint validation
 
 ## [HIGH] POST /api/capture/infer confidence classification and fallback
+
+## [HIGH] listArtifacts filtering and enumeration contract
+
+## [HIGH] getArtifact retrieval contract
+
+## [HIGH] createArtifact duplicate prevention
+
+## [HIGH] appendVersion append-only invariant
+
+## [HIGH] beliefs entity CRUD operations contract
+
+## [HIGH] entity type isolation contract
+
+## [HIGH] appendEpisodic and readEpisodic round-trip contract
+
+## [HIGH] queryEpisodic filtering contract
+
+## [HIGH] appendState and recentState contract
+
+## [HIGH] stateRange time-window query contract
+
+## [HIGH] ActionCard emission role-based gating
+
+## [HIGH] Gate action default proceed when not coach
+
+## [HIGH] state_flag data contract shape and actions
+
+## [HIGH] classifyState heuristic fallback when LLM unavailable
+
+## [HIGH] classifyState LLM confirmation with fallback
+
+## [HIGH] Gate proceed path for low arousal and grounded states
+
+## [HIGH] Gate ground path for rumination and high arousal
+
+## [HIGH] Gate refer path for crisis and sustained distress
+
+## [HIGH] Gate crisis language overrides sustained distress ordering

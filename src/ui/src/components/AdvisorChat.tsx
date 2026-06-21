@@ -11,6 +11,7 @@ import type { Task, ActionDraft } from '../types'
 import type { NoteRecord } from '../api'
 import { ActionCard } from './ActionCard'
 import { MemoryChip, type MemoryCandidate } from './MemoryChip'
+import { StateRibbon } from './StateRibbon'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,10 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
   // Map from message index to memory candidates for that message (max 1 per message)
   const [memoryCandidateMap, setMemoryCandidateMap] = useState<Map<number, MemoryCandidate>>(new Map())
   const [savingMemory, setSavingMemory] = useState(false)
+  // Coaching layer state (T1.7)
+  const [stateAction, setStateAction] = useState<'ground' | 'refer' | null>(null)
+  const [activePlay, setActivePlay] = useState<string | null>(null)
+  const [activePlayLabel, setActivePlayLabel] = useState<string | null>(null)
   const threadRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -114,6 +119,10 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
     if (!text || busy) return
     setVal('')
     setNudge(null)
+    // Reset coaching ribbon for each new message
+    setStateAction(null)
+    setActivePlay(null)
+    setActivePlayLabel(null)
     const userMsg: Msg = { role: 'user', text }
     setMsgs(prev => [...prev, userMsg, { role: 'assistant', text: '' }])
     setBusy(true)
@@ -180,6 +189,13 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
             next.set(msgIndex, { id: frame.id, text: frame.text })
             return next
           })
+        } else if (frame.type === 'state_flag') {
+          if (frame.action === 'ground' || frame.action === 'refer') {
+            setStateAction(frame.action)
+          }
+        } else if (frame.type === 'play_active') {
+          setActivePlay(frame.play)
+          setActivePlayLabel(frame.label)
         }
       }
     } catch {
@@ -206,6 +222,12 @@ export function AdvisorChat({ tasks, notes, suggestions, onOpenTask, live, onLiv
   return (
     <div className="adv-chat">
       <ChatHeader live={live} openCount={openCount} />
+
+      <StateRibbon
+        stateAction={stateAction}
+        activePlay={activePlay}
+        activePlayLabel={activePlayLabel}
+      />
 
       <div className="adv-thread" ref={threadRef}>
         {msgs.map((m, i) => (

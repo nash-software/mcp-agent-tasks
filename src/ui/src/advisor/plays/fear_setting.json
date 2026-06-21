@@ -1,0 +1,32 @@
+{
+  "id": "fear_setting",
+  "label": "Fear-Setting",
+  "intent": "User is catastrophising or spiralling about a decision — their imagination is generating worst-case scenarios unchecked",
+  "trigger_signals": ["what if it all goes wrong", "terrified it will fail", "catastrophe", "lose everything", "worst case", "can't stop imagining", "paralysed by fear of failure", "too scary to try"],
+  "protocol": [
+    "Define the feared outcome specifically — what exactly is the user afraid will happen?",
+    "Prevent: what could the user do to make each feared outcome less likely?",
+    "Repair: if the feared outcome happened anyway, what could they do to recover? Who would help?",
+    "Calculate the cost of inaction: what is the cost of NOT trying — in 6 months, 1 year, 3 years?",
+    "Compare: which is scarier — the feared outcome or the cost of inaction?"
+  ],
+  "opening_moves": [
+    "Let's define the fear specifically. What exactly is the worst thing that could happen?",
+    "Is there more than one feared outcome? Let's list them."
+  ],
+  "deepening_questions": [
+    "For each of those — what could you do to make it less likely?",
+    "If it happened anyway, how would you recover? What resources do you have?",
+    "What is the cost of NOT making this decision — in one year? Three years?",
+    "Which is actually scarier: the defined worst case, or staying where you are?"
+  ],
+  "do_not": [
+    "Do not dismiss the fears as irrational",
+    "Do not rush to the comparison before the define/prevent/repair steps are complete",
+    "Do not let the session become a reassurance exercise — the point is to face the fear, not neutralise it"
+  ],
+  "writes": [],
+  "exit_criteria": "The user has defined, prevented, and repaired each feared outcome, and compared it to the cost of inaction",
+  "model_hint": "mid",
+  "safe_when_dysregulated": true
+}

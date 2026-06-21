@@ -646,6 +646,80 @@
 .adv-nudge-btn.primary { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--accent); }
 .adv-nudge-btn.primary:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 
+/* ── StateRibbon — coach state gate + active play indicator (T1.7) ────────── */
+.state-ribbon { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--s3); }
+.state-ribbon-flag { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 6px; }
+.state-ribbon-flag.refer { background: color-mix(in srgb, var(--red, #ef4444) 12%, transparent); color: var(--red, #ef4444); border: 1px solid color-mix(in srgb, var(--red, #ef4444) 24%, transparent); }
+.state-ribbon-flag.ground { background: color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent); color: var(--amber, #f59e0b); border: 1px solid color-mix(in srgb, var(--amber, #f59e0b) 24%, transparent); }
+.state-ribbon-play { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--text2); padding: 4px 10px; background: var(--s2); border-radius: 6px; border: 1px solid var(--s3); }
+
+/* ── Challenge card ──────────────────────────────────────────────────────── */
+.challenge-card { background: color-mix(in srgb, var(--violet, #7c3aed) 7%, var(--s2)); border: 1px solid color-mix(in srgb, var(--violet, #7c3aed) 18%, transparent); border-radius: 8px; padding: 10px 12px; margin-top: 6px; }
+.challenge-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.challenge-card-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--violet, #7c3aed); opacity: 0.85; }
+.challenge-card-dismiss { background: none; border: none; cursor: pointer; font-size: 15px; color: var(--text2); padding: 0 2px; line-height: 1; opacity: 0.6; }
+.challenge-card-dismiss:hover { opacity: 1; }
+.challenge-card-counterpoint { font-size: 13px; color: var(--text1); margin: 0 0 6px; line-height: 1.5; }
+.challenge-card-toggle { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--violet, #7c3aed); padding: 0; text-decoration: underline; }
+.challenge-card-test-list { margin: 6px 0 0 0; padding-left: 16px; font-size: 12.5px; color: var(--text2); line-height: 1.6; }
+
+/* ── Artifact card + section ─────────────────────────────────────────────── */
+.artifacts-section { margin-top: 16px; }
+.artifacts-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.artifacts-section-title { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text2); }
+.artifacts-section-count { font-size: 11px; background: var(--s3); color: var(--text2); border-radius: 10px; padding: 1px 7px; }
+.artifacts-section-loading { font-size: 13px; color: var(--text2); }
+.artifacts-section-list { display: flex; flex-direction: column; gap: 8px; }
+.artifact-card { background: var(--s2); border: 1px solid var(--s3); border-radius: 8px; padding: 10px 12px; }
+.artifact-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+.artifact-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.artifact-card-kind { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text2); }
+.artifact-card-title { font-size: 13.5px; font-weight: 500; color: var(--text1); }
+.artifact-card-history-btn { font-size: 11px; background: var(--s3); border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; color: var(--text2); }
+.artifact-card-content { font-size: 12.5px; color: var(--text1); white-space: pre-wrap; word-break: break-word; margin: 0; font-family: inherit; }
+.artifact-card-history { margin-top: 8px; border-top: 1px solid var(--s3); padding-top: 8px; }
+.artifact-card-history-label { font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+.artifact-card-version { margin-bottom: 6px; }
+.artifact-card-version-ts { font-size: 10.5px; color: var(--text2); display: block; }
+.artifact-card-version-body { font-size: 12px; color: var(--text1); white-space: pre-wrap; margin: 2px 0 0 0; font-family: inherit; opacity: 0.7; }
+
+/* ── StateChartView ──────────────────────────────────────────────────────── */
+.state-chart-view { padding: 16px; max-width: 600px; }
+.state-chart-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.state-chart-title { font-size: 15px; font-weight: 600; color: var(--text1); }
+.state-chart-subtitle { font-size: 12px; color: var(--text2); }
+.state-chart-loading, .state-chart-empty { font-size: 13px; color: var(--text2); padding: 16px 0; }
+.state-chart-svg { width: 100%; height: 80px; display: block; margin-bottom: 4px; }
+.state-chart-arousal { fill: none; stroke: var(--amber, #f59e0b); stroke-width: 1.5; }
+.state-chart-valence { fill: none; stroke: var(--green, #22c55e); stroke-width: 1.5; opacity: 0.7; }
+.state-chart-legend { display: flex; gap: 16px; font-size: 11px; margin-bottom: 12px; }
+.state-chart-legend-arousal { color: var(--amber, #f59e0b); }
+.state-chart-legend-valence { color: var(--green, #22c55e); }
+.state-chart-table { display: flex; flex-direction: column; gap: 2px; }
+.state-chart-row { display: flex; gap: 12px; font-size: 12px; padding: 3px 0; border-top: 1px solid var(--s3); }
+.state-chart-row-ts { color: var(--text2); min-width: 120px; }
+.state-chart-row-mode { color: var(--text1); min-width: 80px; }
+.state-chart-row-arousal { color: var(--amber, #f59e0b); }
+
+/* ── EntityTimeline ──────────────────────────────────────────────────────── */
+.entity-timeline { padding: 16px; max-width: 600px; }
+.entity-timeline-header { margin-bottom: 12px; }
+.entity-timeline-title { font-size: 15px; font-weight: 600; color: var(--text1); }
+.entity-timeline-tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+.entity-timeline-tab { background: none; border: 1px solid var(--s3); border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 12px; color: var(--text2); }
+.entity-timeline-tab.active { background: var(--s3); color: var(--text1); font-weight: 500; }
+.entity-timeline-loading, .entity-timeline-empty { font-size: 13px; color: var(--text2); padding: 12px 0; }
+.entity-timeline-list { display: flex; flex-direction: column; gap: 8px; }
+.entity-card { background: var(--s2); border: 1px solid var(--s3); border-radius: 8px; padding: 10px 12px; }
+.entity-card--belief { border-left: 3px solid var(--amber, #f59e0b); }
+.entity-card--fear { border-left: 3px solid var(--red, #ef4444); }
+.entity-card--value { border-left: 3px solid var(--green, #22c55e); }
+.entity-card--commitment { border-left: 3px solid var(--blue, #3b82f6); }
+.entity-card--reconciled { opacity: 0.75; }
+.entity-card-statement { font-size: 13.5px; font-weight: 500; color: var(--text1); margin-bottom: 4px; }
+.entity-card-meta { font-size: 11.5px; color: var(--text2); }
+.entity-card-reconciled-badge { font-size: 10.5px; color: var(--amber, #f59e0b); background: color-mix(in srgb, var(--amber, #f59e0b) 12%, transparent); border-radius: 4px; padding: 1px 6px; display: inline-block; margin-bottom: 4px; }
+
 /* ── Action cards ─────────────────────────────────────────────────────────── */
 .action-cards { display: flex; flex-direction: column; gap: 7px; margin-top: 8px; max-width: 420px; }
 .action-card { border: 1px solid var(--s3); border-radius: 10px; background: var(--s1); padding: 10px 12px; font-size: 13px; }
@@ -705,4 +779,43 @@
 .memory-row-btn { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--muted); transition: background 100ms, color 100ms; }
 .memory-row-btn:hover { background: var(--s3); color: var(--text2); }
 .memory-row-btn.pin.active { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* ── ModeSelector — persona tab bar (MCPAT-096) ───────────────────────────── */
+.mode-selector { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 2px; }
+.mode-tab { display: flex; flex-direction: column; gap: 2px; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--s3); background: var(--s1); color: var(--text2); cursor: pointer; transition: background 100ms, border-color 100ms, color 100ms; text-align: left; flex: 1; min-width: 80px; }
+.mode-tab:hover { background: var(--s2); color: var(--text); }
+.mode-tab.active { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); color: var(--accent); }
+.mode-tab-label { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.mode-tab-desc { font-size: 11px; opacity: 0.75; line-height: 1.3; }
+.mode-tab.active .mode-tab-desc { opacity: 0.8; }
+
+/* ── Persona chip colours (PM / Chairman / Coach) ──────────────────────────── */
+.adv-hist-chip { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 999px; border: 1px solid transparent; line-height: 1.4; flex-shrink: 0; }
+.adv-hist-chip.mode-pm      { background: color-mix(in srgb, var(--accent) 12%, transparent);  border-color: color-mix(in srgb, var(--accent) 30%, transparent);  color: var(--accent); }
+.adv-hist-chip.mode-chairman { background: color-mix(in srgb, var(--green)  12%, transparent);  border-color: color-mix(in srgb, var(--green)  30%, transparent);  color: var(--green); }
+.adv-hist-chip.mode-coach   { background: color-mix(in srgb, #f59e0b 12%, transparent);          border-color: color-mix(in srgb, #f59e0b 30%, transparent);          color: #f59e0b; }
+
+/* ── AdvisorHistory — right-rail session list + detail (MCPAT-102) ─────────── */
+.adv-hist { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.adv-hist-head { padding: 12px 14px 8px; border-bottom: 1px solid var(--s3); flex-shrink: 0; }
+.adv-hist-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.adv-hist-empty { padding: 20px 14px; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.adv-hist-row { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border: none; border-bottom: 1px solid color-mix(in srgb, var(--s3) 60%, transparent); background: transparent; cursor: pointer; text-align: left; width: 100%; transition: background 80ms; }
+.adv-hist-row:hover { background: var(--s2); }
+.adv-hist-row-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.adv-hist-title { font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.adv-hist-date { font-size: 11px; color: var(--muted); align-self: flex-end; }
+
+/* detail view */
+.adv-hist-detail { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.adv-hist-detail-loading { padding: 20px 14px; font-size: 12.5px; color: var(--muted); }
+.adv-hist-detail-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--s3); flex-shrink: 0; }
+.adv-hist-back { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--s3); background: var(--s2); color: var(--text2); cursor: pointer; flex-shrink: 0; transition: background 80ms; }
+.adv-hist-back:hover { background: var(--s3); color: var(--text); }
+.adv-hist-detail-date { font-size: 11.5px; color: var(--muted); margin-left: auto; }
+.adv-hist-transcript { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; }
+.adv-hist-unavail { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+.adv-hist-detail-foot { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--s3); flex-shrink: 0; }
+.adv-hist-foot-btn { flex: 1; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--s3); background: var(--s2); color: var(--text2); font-size: 12px; cursor: pointer; transition: background 80ms, color 80ms; }
+.adv-hist-foot-btn:hover { background: var(--s3); color: var(--text); }
 .memory-row-btn.delete:hover { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }

@@ -1,0 +1,34 @@
+{
+  "id": "somatic_pendulation",
+  "label": "Somatic Pendulation",
+  "intent": "User is activated, overwhelmed, or dysregulated — needs resourcing and nervous system regulation before any other work",
+  "trigger_signals": ["overwhelmed", "can't think straight", "flooding", "spinning", "too much", "panicking", "can't calm down", "heart racing", "shutting down", "frozen", "shaking"],
+  "protocol": [
+    "Name what is happening, plainly: 'It sounds like your system is activated right now.'",
+    "Ask where the activation lives in the body — not why, just where",
+    "Find a resource: a place in the body that feels okay, or neutral, or even slightly pleasant",
+    "Pendulate: move attention gently between the activation and the resource",
+    "Do not deepen or analyse the story while pendulating — stay with sensation",
+    "Pause before any reflection: 'How is your system settling?'"
+  ],
+  "opening_moves": [
+    "Where do you feel that in your body right now?",
+    "Is there a place in your body that feels okay — even a little bit?"
+  ],
+  "deepening_questions": [
+    "Can you rest your attention on that place that feels okay for a moment?",
+    "Now, gently — can you touch the activation and come back to the resource?",
+    "What's happening in your body as you do that?",
+    "When you're ready — what's shifted?"
+  ],
+  "do_not": [
+    "Do not ask 'why' questions — why amplifies the story and increases arousal",
+    "Do not do downward-arrow or belief work while pendulating",
+    "Do not push for insight — this is resourcing, not analysis",
+    "Do not rush: regulation takes longer than analysis"
+  ],
+  "writes": [],
+  "exit_criteria": "User reports the nervous system has settled enough to think clearly, or explicitly asks to move on",
+  "model_hint": "mid",
+  "safe_when_dysregulated": true
+}
