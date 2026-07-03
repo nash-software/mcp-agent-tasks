@@ -1,4 +1,5 @@
 import { execSync, execFileSync } from 'node:child_process'; // execSync used in isGitRepo/listBranches
+import type { CommitRef } from '../types/task.js';
 
 export interface GitInferenceResult {
   branch: string | undefined;
@@ -297,4 +298,60 @@ export function inferGitContext(
     firstCommitDate,
     lastCommitDate,
   };
+}
+
+/** Resolve the first ref that exists (local branch, then origin/<branch>). */
+function resolveExistingRef(projectPath: string, branch: string): string | undefined {
+  for (const candidate of [branch, `origin/${branch}`]) {
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', candidate], {
+        cwd: projectPath,
+        stdio: 'pipe',
+      });
+      return candidate;
+    } catch {
+      // try next candidate
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Find commits on the default branch (or the given branch) whose message
+ * contains the task ID as a whole word. Catches squash-merges that landed on
+ * the default branch with the task ID in the commit subject.
+ */
+export function findCommitsByTaskId(
+  projectPath: string,
+  taskId: string,
+  branch?: string,
+): CommitRef[] {
+  if (!isGitRepo(projectPath)) return [];
+  const targetBranch = branch ?? getDefaultBranch(projectPath);
+  const ref = resolveExistingRef(projectPath, targetBranch);
+  if (!ref) return [];
+
+  const SEP = '\x1f';
+  let output: string;
+  try {
+    output = execFileSync(
+      'git',
+      ['log', ref, `--grep=${taskId}`, '-E', `--format=%H${SEP}%s${SEP}%aI`, '--max-count=50'],
+      { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe', timeout: 20_000 },
+    );
+  } catch {
+    return [];
+  }
+
+  const wordBoundary = new RegExp(`\\b${taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+  const commits: CommitRef[] = [];
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue;
+    const [sha, message, authoredAt] = line.split(SEP);
+    if (!sha || message === undefined) continue;
+    // git --grep matched loosely; enforce a whole-word match to avoid HRLD-04 → HRLD-042
+    if (!wordBoundary.test(message)) continue;
+    commits.push({ sha, message, authored_at: authoredAt ?? new Date().toISOString() });
+  }
+  return commits;
 }

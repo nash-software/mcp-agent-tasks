@@ -854,6 +854,52 @@ program
     }
   });
 
+// ── reconcile-github ───────────────────────────────────────────────────────────
+
+program
+  .command('reconcile-github')
+  .description('Reconcile non-done tasks against GitHub: detect shipped work via merged PRs + default-branch commits, transition to done')
+  .option('--project <dir>', 'project directory (default: current directory)')
+  .option('--prefix <ID>', 'project ID prefix (default: derived from package.json or dir name)')
+  .option('--dry-run', 'preview only; do not write changes', false)
+  .action(async (options: { project?: string; prefix?: string; dryRun: boolean }) => {
+    const { reconcileTasksGithub } = await import('./tools/task-reconcile-github.js');
+    try {
+      const summary = await reconcileTasksGithub({
+        projectPath: options.project ?? process.cwd(),
+        idPrefix: options.prefix,
+        dryRun: options.dryRun,
+      });
+
+      if (summary.scanned === 0) {
+        console.log('(no reconcilable tasks found)');
+        return;
+      }
+
+      const rows = summary.results.map(r => ({
+        id: r.taskId,
+        title: r.title.slice(0, 40),
+        from: r.fromStatus,
+        action: r.action,
+        method: r.method,
+        evidence: r.evidence?.prNumber
+          ? `PR #${r.evidence.prNumber}`
+          : r.evidence?.sha
+            ? r.evidence.sha.slice(0, 7)
+            : '',
+      }));
+      console.log(formatTable(rows));
+      console.log('');
+      console.log(
+        `Scanned ${summary.scanned} | Reconciled ${summary.reconciled} | No signal ${summary.noSignal}${summary.dryRun ? ' (dry-run)' : ''}`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`✗ ${msg}`);
+      process.exit(1);
+    }
+  });
+
 // ── setup ─────────────────────────────────────────────────────────────────────
 
 program

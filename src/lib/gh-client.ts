@@ -5,6 +5,8 @@ export interface MergedPr {
   title: string;
   headRefName: string;
   mergedAt: string;
+  body: string;
+  url: string;
 }
 
 // gh is a native Windows exe — cmd.exe resolves it fine.
@@ -24,15 +26,17 @@ export function listMergedPrs(projectPath: string, limit = 300): MergedPr[] {
   if (!isGhAvailable()) return [];
   try {
     const out = execFileSync(
-      'gh', ['pr', 'list', '--state', 'merged', '--json', 'number,title,headRefName,mergedAt', '--limit', String(limit)],
+      'gh', ['pr', 'list', '--state', 'merged', '--json', 'number,title,headRefName,mergedAt,body,url', '--limit', String(limit)],
       { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe', timeout: 30_000, shell: SHELL },
     );
-    const raw = JSON.parse(out) as Array<{ number: number; title: string; headRefName: string; mergedAt: string }>;
+    const raw = JSON.parse(out) as Array<{ number: number; title: string; headRefName: string; mergedAt: string; body?: string; url?: string }>;
     return raw.map(p => ({
       number: p.number,
       title: p.title,
       headRefName: p.headRefName,
       mergedAt: p.mergedAt,
+      body: p.body ?? '',
+      url: p.url ?? '',
     }));
   } catch {
     return [];
@@ -45,11 +49,20 @@ export function findPrByBranch(projectPath: string, branch: string): MergedPr | 
   const cleanBranch = branch.replace(/^origin\//, '');
   try {
     const out = execFileSync(
-      'gh', ['pr', 'list', '--state', 'merged', '--head', cleanBranch, '--json', 'number,title,headRefName,mergedAt', '--limit', '1'],
+      'gh', ['pr', 'list', '--state', 'merged', '--head', cleanBranch, '--json', 'number,title,headRefName,mergedAt,body,url', '--limit', '1'],
       { cwd: projectPath, encoding: 'utf-8', stdio: 'pipe', timeout: 15_000, shell: SHELL },
     );
-    const raw = JSON.parse(out) as MergedPr[];
-    return raw[0];
+    const raw = JSON.parse(out) as Array<Partial<MergedPr> & { number: number }>;
+    const first = raw[0];
+    if (!first) return undefined;
+    return {
+      number: first.number,
+      title: first.title ?? '',
+      headRefName: first.headRefName ?? '',
+      mergedAt: first.mergedAt ?? '',
+      body: first.body ?? '',
+      url: first.url ?? '',
+    };
   } catch {
     return undefined;
   }

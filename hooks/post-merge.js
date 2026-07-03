@@ -6,8 +6,23 @@
 'use strict';
 
 const { execSync } = require('child_process');
-const { existsSync, readdirSync } = require('fs');
+const { existsSync, readdirSync, mkdirSync, appendFileSync } = require('fs');
+const os = require('os');
 const path = require('path');
+
+// Append a structured failure record to the nervous-system ledger so a silent
+// post-merge close failure becomes something the health pulse can watch.
+// Dependency-free and non-fatal — must never throw or break the git hook.
+function escalate(project, taskId, error) {
+  try {
+    const stateDir = path.join(os.homedir(), '.claude', 'state');
+    mkdirSync(stateDir, { recursive: true });
+    const record = { ts: new Date().toISOString(), project, taskId, error: String(error || 'unknown') };
+    appendFileSync(path.join(stateDir, 'agent-tasks-failures.jsonl'), JSON.stringify(record) + '\n');
+  } catch {
+    // Never let escalation break the hook.
+  }
+}
 
 function run(cmd, opts) {
   try {
@@ -96,6 +111,7 @@ function main() {
       closed.push(id);
     } else {
       console.warn(`[agent-tasks] post-merge: failed to close ${id}`);
+      escalate(repoRoot, id, `link-pr returned no output for PR #${pr.number}`);
     }
   }
 
