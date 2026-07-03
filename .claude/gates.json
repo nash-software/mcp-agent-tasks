@@ -1,0 +1,18 @@
+{
+  "project": "mcp-agent-tasks",
+  "verifyOn": "local",
+  "gates": {
+    "type-check": "npm run type-check",
+    "test": "npm test",
+    "build": "npm run build"
+  },
+  "notes": [
+    "lint script is an alias for tsc --noEmit — type-check gate already covers it (type-check also checks src/ui).",
+    "build = tsup + UI build; UI build requires src/ui dependencies (build:ui runs npm ci there first).",
+    "SQLite WAL lock: agent-tasks/.index.db is held by any live mcp-agent-tasks server — never git checkout/reset across branches here on Windows (use worktrees)."
+  ],
+  "output": {
+    "format": "per-gate pass/fail, terse",
+    "example": "type-check: PASS | test: PASS | build: PASS"
+  }
+}
