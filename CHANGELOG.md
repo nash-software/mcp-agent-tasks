@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+**Reliability — server heartbeat into the factory health ledger + reconcile-github wired into two automatic triggers.**
+
+### Reliability
+- health: server heartbeat + lifecycle/error events into `health.jsonl` (`daemon:mcp-agent-tasks`), dead-man switch armed in `health-expectations.json`
+- hooks: post-merge failure escalation routed into the watched ledger, with a detached `reconcile-github` fallback per failed prefix
+- health: stamp-gated daily `reconcile-github` sweep wired into server startup for GitHub-side merges the post-merge hook never saw locally
+
 ## [v2026.06.22] — 2026-06-22
 
 **Build the full advisor coaching layer — play system, safety state-gate, episodic/semantic memory, Challenger subsystem, living artifacts, brain-dump decomposer, and entity/state-chart views.**

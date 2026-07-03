@@ -5,7 +5,7 @@
 
 'use strict';
 
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const { existsSync, readdirSync, mkdirSync, appendFileSync } = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,12 +13,24 @@ const path = require('path');
 // Append a structured failure record to the nervous-system ledger so a silent
 // post-merge close failure becomes something the health pulse can watch.
 // Dependency-free and non-fatal — must never throw or break the git hook.
+// Also mirrors the record into health.jsonl (kind: 'error') — the legacy
+// agent-tasks-failures.jsonl file has no reader; health-pulse.js only
+// watches health.jsonl, so that's where the pulse's error-volume alarm and
+// /factory-health actually look.
 function escalate(project, taskId, error) {
   try {
     const stateDir = path.join(os.homedir(), '.claude', 'state');
     mkdirSync(stateDir, { recursive: true });
     const record = { ts: new Date().toISOString(), project, taskId, error: String(error || 'unknown') };
     appendFileSync(path.join(stateDir, 'agent-tasks-failures.jsonl'), JSON.stringify(record) + '\n');
+    const healthRecord = {
+      ts: new Date().toISOString(),
+      source: 'hook:agent-tasks-post-merge',
+      kind: 'error',
+      detail: { project, taskId, error: String(error || 'unknown') },
+      session: null,
+    };
+    appendFileSync(path.join(stateDir, 'health.jsonl'), JSON.stringify(healthRecord) + '\n');
   } catch {
     // Never let escalation break the hook.
   }
@@ -117,6 +129,34 @@ function main() {
 
   if (closed.length > 0) {
     console.log(`[agent-tasks] Closed ${closed.length} task(s): ${closed.join(', ')}`);
+  }
+
+  // Fallback: any task the loop above could not close still has its GitHub
+  // evidence (this merged PR) available — hand it to reconcile-github as an
+  // automatic second chance instead of leaving it stuck forever. Detached +
+  // process.execPath (never the .cmd shim) so `git pull` is never blocked by
+  // GitHub API latency and no console window flashes on Windows.
+  const failedIds = taskIds.filter((id) => !closed.includes(id));
+  if (failedIds.length > 0) {
+    const candidates = [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      path.join(repoRoot, 'node_modules', 'mcp-agent-tasks', 'dist', 'cli.js'),
+    ];
+    const cliPath = candidates.find((p) => existsSync(p));
+    if (!cliPath) {
+      console.warn('[agent-tasks] post-merge: cli not found, skipping reconcile fallback');
+    } else {
+      const failedPrefixes = [...new Set(failedIds.map((id) => id.split('-')[0]))];
+      for (const prefix of failedPrefixes) {
+        spawn(process.execPath, [cliPath, 'reconcile-github', '--project', repoRoot, '--prefix', prefix], {
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+          cwd: repoRoot,
+        }).unref();
+      }
+      console.log(`[agent-tasks] post-merge: handed off to reconcile-github for prefix(es): ${failedPrefixes.join(', ')}`);
+    }
   }
 }
 

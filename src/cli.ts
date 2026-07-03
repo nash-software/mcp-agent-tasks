@@ -17,6 +17,7 @@ import { Reconciler } from './store/reconciler.js';
 import { planCollisionFixes, applyCollisionFixes, findReferences, type StoreRef } from './store/id-collision-fixer.js';
 import { NoteStore } from './store/note-store.js';
 import { installTray, uninstallTray } from './cli-install-tray.js';
+import { appendHealthEvent } from './health/health-ledger.js';
 
 // Extended update type to carry git link fields through the update path
 interface UpdateWithGit extends TaskUpdateInput {
@@ -869,6 +870,14 @@ program
         projectPath: options.project ?? process.cwd(),
         idPrefix: options.prefix,
         dryRun: options.dryRun,
+      });
+
+      // Left as ledger evidence even when this runs as a detached fallback
+      // spawned from post-merge.js (stdio ignored, so console output is lost).
+      appendHealthEvent({
+        source: 'worker:agent-tasks-reconcile',
+        kind: 'metric',
+        detail: { scanned: summary.scanned, reconciled: summary.reconciled, noSignal: summary.noSignal, dryRun: summary.dryRun, trigger: 'cli' },
       });
 
       if (summary.scanned === 0) {
