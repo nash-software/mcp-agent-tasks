@@ -114,6 +114,8 @@ Set `SKIP_TASK_GATE=1` to bypass the Claude Code gate when needed.
 | `archive <id>` | Archive a task |
 | `link-commit <id> <sha> <msg>` | Link a commit to a task |
 | `link-pr <id>` | Link current branch PR to a task |
+| `audit <projectPath>` | Audit `in_progress` tasks: resolve done via git/GitHub, tag ambiguous ones for review |
+| `reconcile-github` | Reconcile all non-done tasks against GitHub — detect shipped work via merged PRs + default-branch commits (catches squash-merges), transition to done (`--project`, `--prefix`, `--dry-run`) |
 | `migrate` | Run schema migrations (currently a no-op) |
 
 ## Spec
