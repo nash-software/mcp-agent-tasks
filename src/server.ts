@@ -16,6 +16,8 @@ import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
 import type { ToolContext } from './tools/context.js';
 import { appendHealthEvent, HEALTH_SOURCE } from './health/health-ledger.js';
+import { runScheduledGithubReconcile } from './health/github-reconcile-scheduler.js';
+import { reconcileTasksGithub } from './tools/task-reconcile-github.js';
 
 // Tool modules
 import * as taskCreate from './tools/task-create.js';
@@ -254,6 +256,25 @@ async function main(): Promise<void> {
     }
   };
 
+  // Stamp-gated daily sweep for GitHub-side merges the post-merge hook never
+  // saw locally. 30s delay + unref keeps session start light and never holds
+  // the process open. Injecting the registry store + sqliteIndex.listTasks
+  // (same call shape as task-reconcile-github.ts's own default wiring) means
+  // no second SqliteIndex connection is opened on .index.db.
+  const scheduleGithubReconcile = (): void => {
+    const t = setTimeout(() => {
+      void runScheduledGithubReconcile({
+        projects: config.projects.map((p) => ({ prefix: p.prefix, path: p.path })),
+        reconcile: (opts) => reconcileTasksGithub(opts, {
+          store: registry.getStoreForPrefix(opts.idPrefix),
+          listTasks: () => sqliteIndex.listTasks({ project: opts.idPrefix, limit: 5000 }),
+        }),
+        appendEvent: appendHealthEvent,
+      }).catch((err: unknown) => logStoreError('github reconcile', err));
+    }, 30_000);
+    t.unref();
+  };
+
   const startWatchers = (): void => {
     for (const tasksDir of registry.allTasksDirs()) {
       const watcher = new FileWatcher(
@@ -288,6 +309,7 @@ async function main(): Promise<void> {
       watcher.start();
       watchers.push(watcher);
     }
+    scheduleGithubReconcile();
   };
 
   // Process one project per setImmediate tick to yield the event loop between each,
