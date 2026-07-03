@@ -943,3 +943,23 @@
 ## [HIGH] Gate refer path for crisis and sustained distress
 
 ## [HIGH] Gate crisis language overrides sustained distress ordering
+
+## [HIGH] consolidateSession idempotency
+
+## [HIGH] consolidateAll idempotency
+
+## [HIGH] consolidateSession entity creation
+
+## [HIGH] pivot with prior belief record survival
+
+## [HIGH] Challenger suppresses LLM calls during grounding and referral gate states
+
+## [HIGH] Challenger resumes generation after grounding state resolves
+
+## [HIGH] Challenger always runs in isolation mode (cold: true) and never shares instance with coach
+
+## [HIGH] Challenger returns null when gate action is ground or refer
+
+## [HIGH] Challenger happy path returns bounded ChallengeResult with limits on counterpoint and test evidence
+
+## [HIGH] Challenger returns null gracefully when LLM is unavailable or output is unparseable
