@@ -15,6 +15,7 @@ import { ensureHealthyIndex } from './store/index-health.js';
 import { MilestoneRepository } from './store/milestone-repository.js';
 import { McpTasksError } from './types/errors.js';
 import type { ToolContext } from './tools/context.js';
+import { appendHealthEvent, HEALTH_SOURCE } from './health/health-ledger.js';
 
 // Tool modules
 import * as taskCreate from './tools/task-create.js';
@@ -217,6 +218,7 @@ async function main(): Promise<void> {
 
       const message = err instanceof Error ? err.message : String(err);
       process.stderr.write(`[agent-tasks] Unexpected error in tool ${toolName}: ${message}\n`);
+      appendHealthEvent({ source: HEALTH_SOURCE, kind: 'error', detail: { tool: toolName, message: message.slice(0, 200) }, session: sessionId });
 
       return {
         content: [
@@ -235,6 +237,7 @@ async function main(): Promise<void> {
   await server.connect(transport);
 
   process.stderr.write(`[agent-tasks] Server started. Session: ${sessionId}\n`);
+  appendHealthEvent({ source: HEALTH_SOURCE, kind: 'heartbeat', detail: { event: 'startup', version: pkg.version, pid: process.pid, projects: config.projects.length }, session: sessionId });
 
   // Reconcile and start file watchers in the background — must not block connect()
   // watchers declared here so shutdown() can stop them regardless of timing
@@ -354,9 +357,28 @@ async function main(): Promise<void> {
   }, CHECKPOINT_INTERVAL_MS);
   checkpointTimer.unref();
 
+  // Liveness heartbeat for the factory nervous system's dead-man switch — a
+  // running instance that dies stops producing these; that cessation, not an
+  // error event, is the disconnect signal (health-pulse.js watches for silence).
+  const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000;
+  const heartbeatTimer = setInterval(() => {
+    appendHealthEvent({ source: HEALTH_SOURCE, kind: 'heartbeat', detail: { event: 'alive', pid: process.pid }, session: sessionId });
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref();
+
   // Cleanup on exit
+  // shutdown() runs on both the signal handler and the 'exit' event — guard
+  // so the shutdown status event is appended exactly once.
+  let shutdownReported = false;
   const shutdown = (): void => {
+    if (!shutdownReported) {
+      shutdownReported = true;
+      // appendHealthEvent is fully synchronous, so it is safe inside the
+      // 'exit' handler; it runs first so it lands even if close() throws.
+      appendHealthEvent({ source: HEALTH_SOURCE, kind: 'status', detail: { event: 'shutdown', pid: process.pid }, session: sessionId });
+    }
     clearInterval(checkpointTimer);
+    clearInterval(heartbeatTimer);
     configWatcher.close();
     for (const watcher of watchers) {
       watcher.stop();
@@ -378,5 +400,6 @@ async function main(): Promise<void> {
 main().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
   process.stderr.write(`[agent-tasks] Fatal startup error: ${message}\n`);
+  appendHealthEvent({ source: HEALTH_SOURCE, kind: 'error', detail: { event: 'fatal-startup', message: message.slice(0, 200) } });
   process.exit(1);
 });
