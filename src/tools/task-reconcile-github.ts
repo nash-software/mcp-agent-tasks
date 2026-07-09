@@ -4,7 +4,8 @@ import { SqliteIndex } from '../store/sqlite-index.js';
 import { MarkdownStore } from '../store/markdown-store.js';
 import { ManifestWriter } from '../store/manifest-writer.js';
 import { TaskStore } from '../store/task-store.js';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
+import { loadConfig, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
+import type { McpTasksConfig } from '../config/loader.js';
 import { listMergedPrs } from '../lib/gh-client.js';
 import { getDefaultBranch, findCommitsByTaskId } from '../lib/git-inference.js';
 import { resolvePath } from '../lib/normalize-path.js';
@@ -77,9 +78,18 @@ function derivePrefix(projectPath: string): string {
   return path.basename(projectPath).toUpperCase().replace(/[^A-Z0-9_]/g, '_');
 }
 
-function buildStore(projectPath: string, prefix: string, tasksDirName: string): { store: TaskStore; index: SqliteIndex } {
+function buildStore(
+  projectPath: string,
+  prefix: string,
+  tasksDirName: string,
+  config: McpTasksConfig,
+): { store: TaskStore; index: SqliteIndex } {
   const tasksDir = path.join(projectPath, tasksDirName);
-  const dbPath = fs.existsSync(tasksDir) ? path.join(tasksDir, '.index.db') : getDbPath();
+  // Storage-aware resolution (MCPAT-115): mirrors the same resolveServerDbPath
+  // call the long-lived MCP server and CLI use, so reconcile-github writes to
+  // the exact DB path a storage:local vs storage:global project is configured
+  // for — not a divergent fs.existsSync guess that ignores config entirely.
+  const dbPath = resolveServerDbPath(tasksDir, config, prefix);
   const index = new SqliteIndex(dbPath);
   index.init();
   const store = new TaskStore(new MarkdownStore(), index, new ManifestWriter(), tasksDir, prefix);
@@ -164,7 +174,7 @@ export async function reconcileTasksGithub(
   let store = deps?.store;
   let listTasks = deps?.listTasks;
   if (!store || !listTasks) {
-    const built = buildStore(projectPath, prefix, tasksDirName);
+    const built = buildStore(projectPath, prefix, tasksDirName, config);
     store = store ?? built.store;
     const index = built.index;
     listTasks = listTasks ?? ((): Task[] => index.listTasks({ project: prefix, limit: 5000 }));

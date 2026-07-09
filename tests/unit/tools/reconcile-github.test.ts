@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import type { Task, TaskStatus } from '../../../src/types/task.js';
 import type { MergedPr } from '../../../src/lib/gh-client.js';
 import {
@@ -7,6 +10,8 @@ import {
   pathToDone,
   type ReconcileDeps,
 } from '../../../src/tools/task-reconcile-github.js';
+import { resolveServerDbPath, DEFAULT_TASKS_DIR_NAME } from '../../../src/config/loader.js';
+import { SqliteIndex } from '../../../src/store/sqlite-index.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -263,5 +268,107 @@ describe('reconcileTasksGithub — PR-mismatch regression (RELAY-025)', () => {
     const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'RELAY' }, deps);
 
     expect(summary.results[0].evidence?.prNumber).toBe(78);
+  });
+});
+
+// ── MCPAT-115: buildStore must use the storage-aware resolveServerDbPath ───
+// helper instead of its own divergent fs.existsSync heuristic. Without the
+// fix, a storage:local project's reconcile run writes to a DB path that
+// resolveServerDbPath would NOT pick for that project, so the long-lived
+// MCP server (which always calls resolveServerDbPath) never sees the write.
+describe('reconcileTasksGithub — DB path resolution (MCPAT-115)', () => {
+  let tempDir: string;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-reconcile-dbpath-'));
+    saved.MCP_TASKS_CONFIG = process.env['MCP_TASKS_CONFIG'];
+    saved.MCP_TASKS_DB = process.env['MCP_TASKS_DB'];
+    delete process.env['MCP_TASKS_DB'];
+  });
+
+  afterEach(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+    // reconcileTasksGithub's buildStore keeps its SqliteIndex open for the
+    // process lifetime (same as production — a real CLI invocation exits
+    // right after, releasing the handle; the test process does not). On
+    // Windows the resulting WAL lock can outlive the test, so cleanup here
+    // is best-effort and must never fail the test on this unrelated teardown
+    // race — the OS reclaims the temp dir on its own schedule.
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch { /* best-effort — see comment above */ }
+  });
+
+  it('writes a storage:global project\'s reconciled task into the SAME db path resolveServerDbPath resolves for it, even when a local agent-tasks/ dir also exists on disk', async () => {
+    // Regression scenario: the project's config says storage:global, but its
+    // agent-tasks/ dir also physically exists on disk (e.g. leftover from a
+    // prior local checkout). The OLD buildStore heuristic only checked
+    // fs.existsSync(tasksDir) — ignoring config — so it would wrongly write
+    // to the LOCAL db even though this project is storage:global and the
+    // real MCP server (which always honors config via resolveServerDbPath)
+    // reads/writes the GLOBAL db.
+    const projectRoot = path.join(tempDir, 'global-project');
+    const tasksDir = path.join(projectRoot, DEFAULT_TASKS_DIR_NAME);
+    fs.mkdirSync(tasksDir, { recursive: true }); // exists on disk despite storage:global
+
+    const globalStorageDir = path.join(tempDir, 'global');
+    fs.mkdirSync(globalStorageDir, { recursive: true });
+
+    const configPath = path.join(tempDir, 'config.json');
+    const config = {
+      version: 1,
+      storageDir: globalStorageDir,
+      defaultStorage: 'global' as const,
+      enforcement: 'off' as const,
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: DEFAULT_TASKS_DIR_NAME,
+      projects: [
+        { prefix: 'GLBL', path: projectRoot, storage: 'global' as const },
+      ],
+    };
+    fs.writeFileSync(configPath, JSON.stringify(config), 'utf-8');
+    process.env['MCP_TASKS_CONFIG'] = configPath;
+
+    // Seed a real task directly into the index at the path resolveServerDbPath
+    // says this storage:global project should use (the GLOBAL db), mirroring
+    // how the running MCP server would have created it.
+    const expectedDbPath = resolveServerDbPath(tasksDir, config, 'GLBL');
+    expect(expectedDbPath).toBe(path.join(globalStorageDir, '.index.db'));
+
+    const seedIndex = new SqliteIndex(expectedDbPath);
+    seedIndex.init();
+    seedIndex.ensureProject('GLBL');
+    const now = new Date().toISOString();
+    seedIndex.upsertTask({
+      schema_version: 1, id: 'GLBL-001', title: 'Global task', type: 'chore', status: 'in_progress',
+      priority: 'medium', project: 'GLBL', tags: [], complexity: 1, complexity_manual: false, why: '',
+      created: now, updated: now, last_activity: now, claimed_by: null, claimed_at: null, claim_ttl_hours: 4,
+      parent: null, children: [], dependencies: [], subtasks: [], git: { commits: [] }, transitions: [],
+      files: [], body: '', file_path: path.join(tasksDir, 'GLBL-001.md'),
+    });
+    seedIndex.close();
+
+    // Run reconcile with NO injected store/listTasks — this exercises the real
+    // buildStore path resolution inside task-reconcile-github.ts.
+    await reconcileTasksGithub(
+      { projectPath: projectRoot, idPrefix: 'GLBL' },
+      { listMergedPrs: () => [{ number: 1, title: 'GLBL-001 done', headRefName: 'feat/GLBL-001', mergedAt: now, body: '', url: 'https://x/1' }] },
+    );
+
+    // Re-open the index at the resolveServerDbPath-resolved path (the GLOBAL
+    // db) and confirm the transition landed THERE — not in the local db file
+    // the old fs.existsSync heuristic would have written to instead.
+    const verifyIndex = new SqliteIndex(expectedDbPath);
+    verifyIndex.init();
+    const tasks = verifyIndex.listTasks({ project: 'GLBL', limit: 10 });
+    verifyIndex.close();
+
+    const task = tasks.find(t => t.id === 'GLBL-001');
+    expect(task?.status).toBe('done');
   });
 });
