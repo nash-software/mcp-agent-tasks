@@ -680,13 +680,26 @@ export class SqliteIndex {
   }
 
   searchTasks(query: string): Task[] {
-    const rows = this.db.prepare(`
-      SELECT t.* FROM tasks t
-      JOIN tasks_fts f ON t.rowid = f.rowid
-      WHERE tasks_fts MATCH ?
-      LIMIT 20
-    `).all(query) as TaskRow[];
-    return rows.map(r => this.rowToTask(r));
+    // FTS5 parses bare metacharacters (`-`, `:`, `*`, `NOT`, `AND`, `OR`, etc.)
+    // as column-filter/operator syntax, so a raw user query like
+    // "reconcile-github" throws SQLITE_ERROR: no such column: github. Wrapping
+    // the whole query as a quoted FTS5 phrase neutralizes all of that syntax
+    // at once (escaping embedded quotes), rather than special-casing `-` alone.
+    const phrase = '"' + query.replace(/"/g, '""') + '"';
+    try {
+      const rows = this.db.prepare(`
+        SELECT t.* FROM tasks t
+        JOIN tasks_fts f ON t.rowid = f.rowid
+        WHERE tasks_fts MATCH ?
+        LIMIT 20
+      `).all(phrase) as TaskRow[];
+      return rows.map(r => this.rowToTask(r));
+    } catch {
+      // Defense in depth: we cannot enumerate every FTS5 edge case, so a
+      // still-malformed query degrades to an empty result set instead of
+      // throwing SQLITE_ERROR up to the MCP tool caller.
+      return [];
+    }
   }
 
   getNextTask(project: string): Task | null {

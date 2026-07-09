@@ -212,6 +212,36 @@ describe('SqliteIndex', () => {
       const results = idx.searchTasks('SpecialKeywordXYZ');
       expect(results.some(r => r.id === 'TEST-001')).toBe(false);
     });
+
+    it('MCPAT-113: hyphenated query does not throw SQLITE_ERROR (reconcile-github)', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ title: 'reconcile github tasks with PRs' }));
+
+      expect(() => idx.searchTasks('reconcile-github')).not.toThrow();
+    });
+
+    it('MCPAT-113: hyphenated task-ID-like query does not throw SQLITE_ERROR (RELAY-021)', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ title: 'RELAY-021 something unrelated' }));
+
+      expect(() => idx.searchTasks('RELAY-021')).not.toThrow();
+    });
+
+    it('MCPAT-113: hyphenated query does not throw SQLITE_ERROR (mcp-probe)', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ title: 'mcp probe diagnostics' }));
+
+      expect(() => idx.searchTasks('mcp-probe')).not.toThrow();
+    });
+
+    it('MCPAT-113: malformed FTS5 query degrades to empty array instead of throwing', () => {
+      ensureProject(idx, 'TEST');
+      idx.upsertTask(makeTask({ title: 'edge case query text' }));
+
+      expect(() => idx.searchTasks('"unterminated')).not.toThrow();
+      const results = idx.searchTasks('"unterminated');
+      expect(Array.isArray(results)).toBe(true);
+    });
   });
 
   describe('claimTask() TOCTOU', () => {
