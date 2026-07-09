@@ -87,8 +87,11 @@ describe('prMatchesTaskId', () => {
     expect(prMatchesTaskId(makePr({ title: 'x', headRefName: 'feat/HRLD-042-login' }), 'HRLD-042')).toBe(true);
   });
 
-  it('matches when the ID appears in the PR body', () => {
-    expect(prMatchesTaskId(makePr({ title: 'x', body: 'Closes HRLD-042.' }), 'HRLD-042')).toBe(true);
+  it('does not match when the ID only appears in the PR body (RELAY-025)', () => {
+    // Body prose routinely cross-references other tasks in passing without
+    // the PR implementing them — see reconcileTasksGithub — PR-mismatch
+    // regression (RELAY-025) below for the real incident this prevents.
+    expect(prMatchesTaskId(makePr({ title: 'x', body: 'Closes HRLD-042.' }), 'HRLD-042')).toBe(false);
   });
 
   it('does not match a longer numeric suffix (word boundary)', () => {
@@ -200,5 +203,65 @@ describe('reconcileTasksGithub', () => {
     const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'TEST' }, deps);
 
     expect(summary.scanned).toBe(0);
+  });
+});
+
+// ── RELAY-025 regression: PR-mismatch when a task ID is merely mentioned  ──
+// in another PR's prose, or when multiple merged PRs textually name the
+// same task. Reproduces the 2026-07-09 incident where reconcile-github
+// wrote wrong PR links onto 4 unrelated tasks in one run.
+describe('reconcileTasksGithub — PR-mismatch regression (RELAY-025)', () => {
+  it('does not reconcile a task whose ID is only mentioned in another PR\'s body prose', async () => {
+    // Mirrors real PR #78 (fix(RELAY-022): ...), whose body narrates
+    // "the trigger for the RELAY-021 false-done incident (#75)" — a
+    // cross-reference to a different task's *own* PR, not evidence that
+    // #78 implements RELAY-021.
+    const tasks = [makeTask({ id: 'RELAY-021', status: 'in_progress' })];
+    const { deps } = makeDeps({
+      tasks,
+      prs: [
+        makePr({
+          number: 78,
+          title: 'fix(RELAY-022): sentinel launches from mutable dev checkout',
+          headRefName: 'fix/RELAY-022-sentinel-launch-path',
+          body: 'Fixes the trigger for the RELAY-021 false-done incident (#75).',
+        }),
+      ],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'RELAY' }, deps);
+
+    expect(summary.results[0].method).toBe('none');
+    expect(summary.results[0].evidence?.prNumber).not.toBe(78);
+    expect(summary.noSignal).toBe(1);
+  });
+
+  it('prefers the PR that actually implements the task over a later PR that merely also names it', async () => {
+    // Mirrors real PR #78 (the true fix) and #79 (a later chore/task-sync
+    // PR whose title also happens to name RELAY-022). gh's default
+    // ordering returns the newer PR first, so an unranked `.find()` picks
+    // the wrong one.
+    const tasks = [makeTask({ id: 'RELAY-022', status: 'in_progress' })];
+    const { deps } = makeDeps({
+      tasks,
+      prs: [
+        makePr({
+          number: 79,
+          title: 'chore: task-state sync — RELAY-022 in_progress, PR #78 linked',
+          headRefName: 'chore/task-sync-relay-021-022',
+          mergedAt: '2026-07-09T02:00:00.000Z',
+        }),
+        makePr({
+          number: 78,
+          title: 'fix(RELAY-022): sentinel launches from mutable dev checkout',
+          headRefName: 'fix/RELAY-022-sentinel-launch-path',
+          mergedAt: '2026-07-09T01:00:00.000Z',
+        }),
+      ],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'RELAY' }, deps);
+
+    expect(summary.results[0].evidence?.prNumber).toBe(78);
   });
 });
