@@ -86,11 +86,30 @@ function buildStore(projectPath: string, prefix: string, tasksDirName: string): 
   return { store, index };
 }
 
-/** True when the task ID appears as a whole word in the PR title, branch, or body. */
+/**
+ * True when the task ID appears as a whole word in the PR title or branch
+ * name. Deliberately excludes the PR body: body prose routinely cross-
+ * references other tasks in passing (motivation, related-work, changelog
+ * narrative) without the PR implementing them — matching on body text turns
+ * every such mention into a false "this PR resolves that task" signal.
+ */
 export function prMatchesTaskId(pr: MergedPr, taskId: string): boolean {
   const escaped = taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`\\b${escaped}\\b`);
-  return re.test(pr.title) || re.test(pr.headRefName) || re.test(pr.body ?? '');
+  return re.test(pr.title) || re.test(pr.headRefName);
+}
+
+/**
+ * True when the task ID is the PR's actual subject rather than an incidental
+ * mention: the branch follows the conventional `<type>/TASKID-...` naming
+ * (e.g. `fix/RELAY-022-sentinel-launch-path`). Used to break ties when more
+ * than one merged PR's title names the same task ID — e.g. the real fix PR
+ * plus a later chore/task-sync PR that also mentions it.
+ */
+export function isPrimaryPrForTask(pr: MergedPr, taskId: string): boolean {
+  const escaped = taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^|/)${escaped}([-_]|$)`);
+  return re.test(pr.headRefName);
 }
 
 /**
@@ -168,7 +187,8 @@ export async function reconcileTasksGithub(
 
   for (const task of tasks) {
     // ── Signal 1: merged PR referencing the task ID ──────────────────────────
-    const pr = prs.find(p => prMatchesTaskId(p, task.id));
+    const candidates = prs.filter(p => prMatchesTaskId(p, task.id));
+    const pr = candidates.find(p => isPrimaryPrForTask(p, task.id)) ?? candidates[0];
     if (pr) {
       results.push({
         taskId: task.id,
