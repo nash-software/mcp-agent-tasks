@@ -29,6 +29,7 @@ agent-tasks/
 .handbook/graph.db
 .handbook/graph/
 .handbook/.first-call-*
+.handbook/.drain-requested
 
 .claude/state/
 
