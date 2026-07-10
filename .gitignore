@@ -28,6 +28,7 @@ agent-tasks/
 .handbook/diagnose/cache.json
 .handbook/graph.db
 .handbook/graph/
+.handbook/.first-call-*
 
 .claude/state/
 
