@@ -123,6 +123,22 @@ export function isPrimaryPrForTask(pr: MergedPr, taskId: string): boolean {
 }
 
 /**
+ * True for PRs that only perform task-bookkeeping (registering, syncing, or
+ * closing agent-tasks/*.md entries) rather than implementing anything. These
+ * routinely enumerate or mention task IDs in their title purely as a listing
+ * (e.g. "chore(agent-tasks): register ALFI-086 through ALFI-090") or in an
+ * administrative sync ("chore: sync stray ALFI-080 task commit into main") —
+ * never as evidence the referenced task was actually built. Confirmed live
+ * 2026-07-14: PR #127 ("register ALFI-086 through ALFI-090") and PR #113
+ * ("sync stray ALFI-080 task commit into main") both got picked as the
+ * reconciling PR via the candidates[0] fallback below, falsely closing three
+ * tasks that were never touched by either PR's actual diff.
+ */
+export function isTaskBookkeepingPr(pr: MergedPr): boolean {
+  return /^chore\(agent-tasks\):/i.test(pr.title) || /\btask commit\b/i.test(pr.title);
+}
+
+/**
  * Ordered list of statuses to transition through to reach `done`, computed via
  * BFS over the state machine. `todo`/`blocked`/`draft`/`approved` cannot go to
  * `done` directly, so they route through `in_progress`. Empty when already done
@@ -197,7 +213,10 @@ export async function reconcileTasksGithub(
 
   for (const task of tasks) {
     // ── Signal 1: merged PR referencing the task ID ──────────────────────────
-    const candidates = prs.filter(p => prMatchesTaskId(p, task.id));
+    // Bookkeeping-only PRs are excluded from candidacy entirely — even as a
+    // last-resort fallback — since by definition they never implement the
+    // task they mention (see isTaskBookkeepingPr).
+    const candidates = prs.filter(p => prMatchesTaskId(p, task.id) && !isTaskBookkeepingPr(p));
     const pr = candidates.find(p => isPrimaryPrForTask(p, task.id)) ?? candidates[0];
     if (pr) {
       results.push({
