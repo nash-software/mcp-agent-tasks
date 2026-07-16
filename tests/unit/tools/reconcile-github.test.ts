@@ -7,6 +7,7 @@ import type { MergedPr } from '../../../src/lib/gh-client.js';
 import {
   reconcileTasksGithub,
   prMatchesTaskId,
+  isTaskBookkeepingPr,
   pathToDone,
   type ReconcileDeps,
 } from '../../../src/tools/task-reconcile-github.js';
@@ -268,6 +269,89 @@ describe('reconcileTasksGithub — PR-mismatch regression (RELAY-025)', () => {
     const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'RELAY' }, deps);
 
     expect(summary.results[0].evidence?.prNumber).toBe(78);
+  });
+});
+
+// ── MCPAT-138: task-bookkeeping PRs must never be reconciliation evidence ──
+// Reproduces the 2026-07-14 atlas-pipeline incident where the candidates[0]
+// fallback picked a batch task-registration PR and an administrative sync
+// PR as "the PR that closed" tasks neither of them ever touched.
+describe('isTaskBookkeepingPr', () => {
+  it('flags a batch task-registration commit', () => {
+    expect(isTaskBookkeepingPr(makePr({ title: 'chore(agent-tasks): register ALFI-086 through ALFI-090' }))).toBe(true);
+  });
+
+  it('flags an administrative task-commit sync', () => {
+    expect(isTaskBookkeepingPr(makePr({ title: 'chore: sync stray ALFI-080 task commit into main' }))).toBe(true);
+  });
+
+  it('does not flag a genuine implementing PR', () => {
+    expect(isTaskBookkeepingPr(makePr({ title: 'fix(ALFI-009): unblock /markets/rank — token headroom' }))).toBe(false);
+  });
+});
+
+describe('reconcileTasksGithub — bookkeeping-PR fallback regression (MCPAT-138)', () => {
+  it('does not reconcile via a batch task-registration PR (real PR #127 incident)', async () => {
+    const tasks = [makeTask({ id: 'ALFI-090', status: 'todo' })];
+    const { deps, store } = makeDeps({
+      tasks,
+      prs: [
+        makePr({
+          number: 127,
+          title: 'chore(agent-tasks): register ALFI-086 through ALFI-090',
+          headRefName: 'chore/register-p2-outreach-tasks',
+        }),
+      ],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'ALFI' }, deps);
+
+    expect(summary.results[0].action).toBe('no_signal');
+    expect(summary.noSignal).toBe(1);
+    expect(store.transitionTask).not.toHaveBeenCalled();
+  });
+
+  it('does not reconcile via an administrative task-commit sync PR (real PR #113 incident)', async () => {
+    const tasks = [makeTask({ id: 'ALFI-080', status: 'todo' })];
+    const { deps, store } = makeDeps({
+      tasks,
+      prs: [
+        makePr({
+          number: 113,
+          title: 'chore: sync stray ALFI-080 task commit into main',
+          headRefName: 'chore/sync-main-alfi080-and-spec-merge',
+        }),
+      ],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'ALFI' }, deps);
+
+    expect(summary.results[0].action).toBe('no_signal');
+    expect(store.transitionTask).not.toHaveBeenCalled();
+  });
+
+  it('still reconciles via a genuine implementing PR even when a bookkeeping PR also mentions the task', async () => {
+    const tasks = [makeTask({ id: 'ALFI-090', status: 'todo' })];
+    const { deps, store } = makeDeps({
+      tasks,
+      prs: [
+        makePr({
+          number: 127,
+          title: 'chore(agent-tasks): register ALFI-086 through ALFI-090',
+          headRefName: 'chore/register-p2-outreach-tasks',
+        }),
+        makePr({
+          number: 140,
+          title: 'feat(ALFI-090): implement the actual feature',
+          headRefName: 'feat/ALFI-090-implement',
+        }),
+      ],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'ALFI' }, deps);
+
+    expect(summary.results[0].evidence?.prNumber).toBe(140);
+    expect(store.transitionTask).toHaveBeenCalled();
   });
 });
 
