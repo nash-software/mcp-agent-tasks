@@ -1,7 +1,8 @@
-# MCPAT-116: `nextId()` doesn't check git history — causes ID collisions with real, merged work
+# `nextId()` doesn't check git history — causes ID collisions with real, merged work
 
 **Type**: Bug
-**ID**: MCPAT-116
+**Task:** MCPAT-125 (implementation) — see MCPAT-118 for the ID-collision fix that renamed this
+spec file away from its original `MCPAT-116-*.md` filename
 **Repo**: mcp-agent-tasks
 **Discovered**: ALFI-073 delivery run (2026-07-08/09, in atlas-pipeline) — created 4 new tracker
 tasks; two of them (`ALFI-071`, `ALFI-072`) were silently assigned numbers that collide with real,

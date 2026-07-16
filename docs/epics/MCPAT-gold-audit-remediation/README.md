@@ -8,9 +8,10 @@ commands, env vars, transition semantics), and a live ID-collision bug caught mi
 **Source of truth:**
 - Audit: `docs/audits/2026-07-10-gold-audit.md`
 - Delivery brief: `docs/audits/2026-07-10-delivery-brief.md`
-- nextId spec (MCPAT-125's implementation target): `docs/specs/MCPAT-116-nextid-git-history-watermark.md`
-  — **still named MCPAT-116**, which is the exact collision MCPAT-118 (Phase 0) must resolve before
-  MCPAT-125 (Phase 1) touches it.
+- nextId spec (MCPAT-125's implementation target): `docs/specs/nextid-git-history-watermark.md`
+  — Phase 0 (MCPAT-118) renamed this from its original `MCPAT-116-*.md` filename, which collided
+  with the real, live task MCPAT-116 ("Timeline v2"). No numeric ID prefix now, matching the
+  precedent set by other specs in this directory that aren't tied to one exact task number.
 
 **Out of scope:** MCPAT-111 (the underlying dual-store-routing bug MCPAT-118 reinforces — already
 open, tracked separately, not part of this epic). Prism/relay-side infra changes.
@@ -24,7 +25,7 @@ dispatch, since repo state may have moved on by then.)
 
 | File | Phases touching it |
 |---|---|
-| `docs/specs/MCPAT-116-nextid-git-history-watermark.md` | Phase 0 (rename), Phase 1 (implement) |
+| `docs/specs/nextid-git-history-watermark.md` | Phase 0 (rename), Phase 1 (implement) |
 | `src/store/reconciler.ts` (`pruneOrphans()`) + `src/store/sqlite-index.ts` (`deleteTask()`) | Phase 7 only (123+126 combined) |
 | `src/store/sqlite-index.ts` (busy_timeout/index-health area) + `src/store/index-health.ts` | Phase 8 only (127+128 combined) |
 | `src/server.ts` | Phase 8 (INTERNAL_ERROR catch, ~line 229) and Phase 11 (uncaughtException/signal handlers, ~line 411) — same file, non-overlapping regions, sequenced across batches to avoid a stale-base rebase |
@@ -35,13 +36,13 @@ dispatch, since repo state may have moved on by then.)
 
 ## Phase 0 (MCPAT-118) — CRITICAL: fix live ID collision
 
-Caught live during the audit: `docs/specs/MCPAT-116-nextid-git-history-watermark.md` (this epic's
+Caught live during the audit: `docs/specs/nextid-git-history-watermark.md` (this epic's
 own source spec) collides with the store's actual task MCPAT-116 ("Timeline v2", created in the
 legacy `~/.mcp-tasks` global store while this doc lives in the repo's local `agent-tasks/`). Same
 dual-store-routing symptom as the already-open MCPAT-111.
 
 **Files to modify:**
-- `docs/specs/MCPAT-116-nextid-git-history-watermark.md` — rename to a non-colliding filename/ID
+- `docs/specs/nextid-git-history-watermark.md` — rename to a non-colliding filename/ID
   (verify against both the local `agent-tasks/` store and the global `~/.mcp-tasks` store before
   picking the new ID — that dual-check IS the fix for this class of bug)
 - Any in-repo references to the old filename (grep before renaming)
