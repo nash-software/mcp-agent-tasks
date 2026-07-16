@@ -7,16 +7,14 @@
     "node": ">=18"
   },
   "type": "module",
-  "main": "./dist/server.cjs",
+  "main": "./dist/server.js",
   "module": "./dist/server.js",
   "exports": {
     ".": {
-      "import": "./dist/server.js",
-      "require": "./dist/server.cjs"
+      "import": "./dist/server.js"
     },
     "./cli": {
-      "import": "./dist/cli.js",
-      "require": "./dist/cli.cjs"
+      "import": "./dist/cli.js"
     }
   },
   "bin": {
