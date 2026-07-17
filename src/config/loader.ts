@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { GlobalConfig } from '../types/config.js';
+import type { GlobalConfig, ProjectConfig } from '../types/config.js';
 
 // McpTasksConfig is an alias for GlobalConfig
 export type McpTasksConfig = GlobalConfig;
@@ -162,20 +162,30 @@ export function getDbPath(config?: McpTasksConfig): string {
   return path.join(resolvedConfig.storageDir, '.index.db');
 }
 
-export function resolveServerDbPath(tasksDir: string, config: McpTasksConfig, projectPrefix?: string): string {
-  const project = projectPrefix
-    ? config.projects.find(p => p.prefix === projectPrefix)
-    : config.projects[0];
+/**
+ * Always resolves to the shared global .index.db, regardless of a project's
+ * storage: 'local'|'global' field. Previously this branched on `storage` and
+ * returned a separate <repo>/agent-tasks/.index.db file for 'local' projects —
+ * but the always-on MCP server (src/server.ts) never branched on `storage` and
+ * always opened the shared global db. That divergence let the server and any
+ * CLI-spawned process (e.g. the Stop-hook auto-capture pipeline) write against
+ * two different physical SQLite files for the same task-ID prefix, producing a
+ * TOCTOU race in nextId()'s eventually-consistent directory rescan (MCPAT-111).
+ * Collapsing both call sites onto the same db path closes the race.
+ */
+export function resolveServerDbPath(_tasksDir: string, config: McpTasksConfig, _projectPrefix?: string): string {
+  return getDbPath(config);
+}
 
-  if (project?.storage === 'global') {
-    return getDbPath(config);
-  }
-
-  // No matching project or local storage — check if there's any project at all
-  if (!project) {
-    // No project found: default to global db
-    return getDbPath(config);
-  }
-
-  return path.join(tasksDir, '.index.db');
+/**
+ * Canonical storage-aware resolution of a project's markdown tasksDir (MCPAT-142).
+ * `storage: 'global'` projects share the config's global storageDir; `storage: 'local'`
+ * projects use `<project.path>/<tasksDirName>`. Several call sites previously hard-coded
+ * the local-only branch (`join(p.path, tasksDirName)`), which pointed at the wrong
+ * directory for global-storage projects.
+ */
+export function resolveProjectTasksDir(project: ProjectConfig, config: McpTasksConfig): string {
+  return project.storage === 'global'
+    ? config.storageDir
+    : path.join(project.path, config.tasksDirName);
 }

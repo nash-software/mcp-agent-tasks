@@ -55,9 +55,12 @@ describe('Hermes backend endpoints (P2-04)', () => {
     process.env['MCP_TASKS_DIR'] = storeDir;
     delete process.env['MCP_TASKS_DB'];
 
-    // Seed a task into the project index.
+    // Seed a task into the project index. MCPAT-142: resolveServerDbPath always resolves to
+    // config.storageDir (which MCP_TASKS_DIR overrides to storeDir here), not the per-project
+    // tasksDir — seed at the same resolved path the server will open.
     const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
-    const dbPath = path.join(tasksDir, '.index.db');
+    const { loadConfig, resolveServerDbPath } = await import('../../src/config/loader.js');
+    const dbPath = resolveServerDbPath(tasksDir, loadConfig(), 'TST');
     const idx = new SqliteIndex(dbPath);
     idx.init();
     idx.ensureProject('TST');
@@ -131,8 +134,9 @@ describe('Hermes backend endpoints (P2-04)', () => {
 
   it('GET /api/today returns flagged drafts in needs_review (not candidates) — P2-04b', async () => {
     const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
+    const { loadConfig, resolveServerDbPath } = await import('../../src/config/loader.js');
     const tasksDir = path.join(tempDir, 'agent-tasks');
-    const dbPath = path.join(tasksDir, '.index.db');
+    const dbPath = resolveServerDbPath(tasksDir, loadConfig(), 'TST');
     const ts = new Date().toISOString();
     const idx = new SqliteIndex(dbPath); idx.init(); idx.ensureProject('TST');
     idx.upsertTask({
@@ -157,8 +161,9 @@ describe('Hermes backend endpoints (P2-04)', () => {
     const { SqliteIndex } = await import('../../src/store/sqlite-index.js');
     const { MarkdownStore } = await import('../../src/store/markdown-store.js');
     const { Reconciler } = await import('../../src/store/reconciler.js');
+    const { loadConfig, resolveServerDbPath } = await import('../../src/config/loader.js');
     const tasksDir = path.join(tempDir, 'agent-tasks');
-    const dbPath = path.join(tasksDir, '.index.db');
+    const dbPath = resolveServerDbPath(tasksDir, loadConfig(), 'TST');
     const ts = new Date().toISOString();
     const base = {
       schema_version: 1 as const, id: 'TST-002', title: 'Durable signoff', type: 'feature' as const,

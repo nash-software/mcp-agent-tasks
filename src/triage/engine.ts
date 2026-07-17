@@ -23,7 +23,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import type { McpTasksConfig } from '../config/loader.js';
-import { getDbPath, DEFAULT_TASKS_DIR_NAME } from '../config/loader.js';
+import { getDbPath, resolveProjectTasksDir } from '../config/loader.js';
 import { MarkdownStore } from '../store/markdown-store.js';
 import type { Task, TaskStatus } from '../types/task.js';
 import { probeMerge, defaultRunner } from './git-signals.js';
@@ -354,7 +354,6 @@ const OPEN_STATUSES: ReadonlySet<TaskStatus> = new Set<TaskStatus>([
 ]);
 
 function buildProjectEntries(config: McpTasksConfig): ProjectEntry[] {
-  const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
   const entries: ProjectEntry[] = [];
 
   if (config.projects.length === 0) {
@@ -365,7 +364,7 @@ function buildProjectEntries(config: McpTasksConfig): ProjectEntry[] {
   }
 
   for (const p of config.projects) {
-    const tasksDir = join(p.path, tasksDirName);
+    const tasksDir = resolveProjectTasksDir(p, config);
     entries.push({ prefix: p.prefix, tasksDir, repoPath: p.path });
   }
 

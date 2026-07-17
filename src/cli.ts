@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import type { GitLink } from './types/task.js';
 import type { TaskUpdateInput } from './types/tools.js';
-import { loadConfig, resolveServerDbPath, DEFAULT_TASKS_DIR_NAME, GLOBAL_CONFIG_PATH } from './config/loader.js';
+import { loadConfig, resolveServerDbPath, resolveProjectTasksDir, DEFAULT_TASKS_DIR_NAME, GLOBAL_CONFIG_PATH } from './config/loader.js';
 import { SqliteIndex } from './store/sqlite-index.js';
 import { MarkdownStore } from './store/markdown-store.js';
 import { ManifestWriter } from './store/manifest-writer.js';
@@ -539,7 +539,7 @@ program
   .action((options: { apply?: boolean; force?: boolean }) => {
     const config = loadConfig();
     const dirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
-    const stores: StoreRef[] = config.projects.map(p => ({ prefix: p.prefix, tasksDir: path.join(p.path, dirName) }));
+    const stores: StoreRef[] = config.projects.map(p => ({ prefix: p.prefix, tasksDir: resolveProjectTasksDir(p, config) }));
     const genDir = path.join(os.homedir(), '.mcp-tasks', 'tasks', 'gen', dirName);
     if (fs.existsSync(genDir)) stores.push({ prefix: 'GEN', tasksDir: genDir });
 

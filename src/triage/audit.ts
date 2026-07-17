@@ -8,7 +8,7 @@
 import { existsSync, mkdirSync, writeFileSync, renameSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { McpTasksConfig } from '../config/loader.js';
-import { resolveServerDbPath } from '../config/loader.js';
+import { resolveServerDbPath, resolveProjectTasksDir } from '../config/loader.js';
 import { SqliteIndex } from '../store/sqlite-index.js';
 import { MarkdownStore } from '../store/markdown-store.js';
 import { ManifestWriter } from '../store/manifest-writer.js';
@@ -246,14 +246,12 @@ export async function undoRun(runId: string, config: McpTasksConfig): Promise<Un
 
   // Re-enumerate project entries to get tasksDirs
   // (We need the same prefix→tasksDir mapping as the forward run.)
-  const { DEFAULT_TASKS_DIR_NAME } = await import('../config/loader.js');
-  const { join: pathJoin } = await import('node:path');
   const { homedir } = await import('node:os');
+  const { join: pathJoin } = await import('node:path');
 
   const tasksDirByPrefix = new Map<string, string>();
-  const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
   for (const p of config.projects) {
-    tasksDirByPrefix.set(p.prefix, pathJoin(p.path, tasksDirName));
+    tasksDirByPrefix.set(p.prefix, resolveProjectTasksDir(p, config));
   }
   const genDir = pathJoin(homedir(), '.mcp-tasks', 'tasks', 'gen');
   if (existsSync(genDir)) {

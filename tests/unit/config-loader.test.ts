@@ -31,14 +31,14 @@ describe('resolveServerDbPath', () => {
     expect(result).toBe(path.join('/fake/global/storage', '.index.db'));
   });
 
-  it('returns .index.db for a local-storage project', () => {
+  it('returns the shared global .index.db for a local-storage project (MCPAT-111: no longer branches on storage)', () => {
     const config = makeConfig({
       storageDir: '/fake/global/storage',
       projects: [{ prefix: 'LOCALPROJ', path: '/fake/local-project', storage: 'local' }],
     });
     const tasksDir = '/fake/local-project/agent-tasks';
     const result = resolveServerDbPath(tasksDir, config, 'LOCALPROJ');
-    expect(result).toBe(path.join(tasksDir, '.index.db'));
+    expect(result).toBe(path.join('/fake/global/storage', '.index.db'));
   });
 
   it('returns global .index.db when no matching project entry found', () => {
@@ -49,6 +49,20 @@ describe('resolveServerDbPath', () => {
     const tasksDir = '/fake/project/agent-tasks';
     const result = resolveServerDbPath(tasksDir, config, 'UNKNOWN');
     expect(result).toBe(path.join('/fake/global/storage', '.index.db'));
+  });
+
+  it('returns the identical db path for a local-storage project and a global-storage project (MCPAT-111 TOCTOU fix)', () => {
+    const config = makeConfig({
+      storageDir: '/fake/global/storage',
+      projects: [
+        { prefix: 'GLOBALPROJ', path: '/fake/global-project', storage: 'global' },
+        { prefix: 'LOCALPROJ', path: '/fake/local-project', storage: 'local' },
+      ],
+    });
+    const globalResult = resolveServerDbPath('/fake/global-project/agent-tasks', config, 'GLOBALPROJ');
+    const localResult = resolveServerDbPath('/fake/local-project/agent-tasks', config, 'LOCALPROJ');
+    expect(localResult).toBe(globalResult);
+    expect(localResult).toBe(path.join('/fake/global/storage', '.index.db'));
   });
 });
 
