@@ -162,20 +162,17 @@ export function getDbPath(config?: McpTasksConfig): string {
   return path.join(resolvedConfig.storageDir, '.index.db');
 }
 
-export function resolveServerDbPath(tasksDir: string, config: McpTasksConfig, projectPrefix?: string): string {
-  const project = projectPrefix
-    ? config.projects.find(p => p.prefix === projectPrefix)
-    : config.projects[0];
-
-  if (project?.storage === 'global') {
-    return getDbPath(config);
-  }
-
-  // No matching project or local storage — check if there's any project at all
-  if (!project) {
-    // No project found: default to global db
-    return getDbPath(config);
-  }
-
-  return path.join(tasksDir, '.index.db');
+/**
+ * Always resolves to the shared global .index.db, regardless of a project's
+ * storage: 'local'|'global' field. Previously this branched on `storage` and
+ * returned a separate <repo>/agent-tasks/.index.db file for 'local' projects —
+ * but the always-on MCP server (src/server.ts) never branched on `storage` and
+ * always opened the shared global db. That divergence let the server and any
+ * CLI-spawned process (e.g. the Stop-hook auto-capture pipeline) write against
+ * two different physical SQLite files for the same task-ID prefix, producing a
+ * TOCTOU race in nextId()'s eventually-consistent directory rescan (MCPAT-111).
+ * Collapsing both call sites onto the same db path closes the race.
+ */
+export function resolveServerDbPath(_tasksDir: string, config: McpTasksConfig, _projectPrefix?: string): string {
+  return getDbPath(config);
 }
