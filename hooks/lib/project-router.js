@@ -121,6 +121,7 @@ function readConfig(configOverride) {
   const defaultConfig = {
     projects: [],
     storageDir: path.join(os.homedir(), '.mcp-tasks', 'tasks'),
+    tasksDirName: 'agent-tasks',
   };
 
   const configPath = configOverride
@@ -138,10 +139,26 @@ function readConfig(configOverride) {
       storageDir: typeof parsed.storageDir === 'string'
         ? parsed.storageDir
         : defaultConfig.storageDir,
+      tasksDirName: typeof parsed.tasksDirName === 'string' && parsed.tasksDirName
+        ? parsed.tasksDirName
+        : defaultConfig.tasksDirName,
     };
   } catch {
     return defaultConfig;
   }
+}
+
+// ── resolveProjectTasksDir ────────────────────────────────────────────────────
+// Storage-aware tasksDir resolution — mirrors src/cli.ts's resolveTasksDir(),
+// which is what actually runs when this hook spawns `agent-tasks create`.
+// A ProjectConfig entry has no `tasksDir` field (src/types/config.ts); reading
+// one and falling back to a hardcoded 'agent-tasks' join ignores `storage`
+// entirely and silently resolves the wrong directory for 'global' projects,
+// corrupting the dedup check in stop-intent-extractor.js (MCPAT-143).
+function resolveProjectTasksDir(proj, config) {
+  return proj.storage === 'global'
+    ? config.storageDir
+    : path.join(proj.path, config.tasksDirName);
 }
 
 // ── routeProject ──────────────────────────────────────────────────────────────
@@ -178,7 +195,7 @@ function routeProject(cwd, projectHint, configOverride) {
     const best = candidates[0];
     return {
       prefix: best.prefix,
-      tasksDir: best.tasksDir || path.join(best.path, 'agent-tasks'),
+      tasksDir: resolveProjectTasksDir(best, config),
     };
   }
 
@@ -191,9 +208,10 @@ function routeProject(cwd, projectHint, configOverride) {
     if (hintMatch) {
       return {
         prefix: hintMatch.prefix,
-        tasksDir: hintMatch.tasksDir || path.join(hintMatch.path, 'agent-tasks'),
+        tasksDir: resolveProjectTasksDir(hintMatch, config),
       };
     }
+    process.stderr.write(`[project-router] project hint "${projectHint}" did not match any registered project — falling back to GEN\n`);
   }
 
   // ── Step 3: GEN GLOBAL fallback ─────────────────────────────────────────────
