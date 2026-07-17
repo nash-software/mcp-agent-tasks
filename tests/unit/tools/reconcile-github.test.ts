@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { Task, TaskStatus } from '../../../src/types/task.js';
 import type { MergedPr } from '../../../src/lib/gh-client.js';
+import type { McpTasksConfig } from '../../../src/config/loader.js';
 import {
   reconcileTasksGithub,
   prMatchesTaskId,
@@ -63,10 +64,26 @@ interface FakeStore {
   transitionTask: ReturnType<typeof vi.fn>;
 }
 
+// Empty project registry so the MCPAT-145 store-provenance check is a no-op
+// by default — keeps every pre-existing test hermetic (independent of
+// whatever prefixes happen to be registered in the real host config.json).
+const EMPTY_CONFIG: McpTasksConfig = {
+  version: 1,
+  storageDir: '/fake-store',
+  defaultStorage: 'global',
+  enforcement: 'off',
+  autoCommit: false,
+  claimTtlHours: 4,
+  trackManifest: false,
+  tasksDirName: 'agent-tasks',
+  projects: [],
+};
+
 function makeDeps(opts: {
   tasks: Task[];
   prs?: MergedPr[];
   commits?: Record<string, { sha: string; message: string; authored_at: string }[]>;
+  config?: McpTasksConfig;
 }): { deps: ReconcileDeps; store: FakeStore } {
   const store: FakeStore = {
     updateTask: vi.fn((id: string, fields: unknown) => ({ ...opts.tasks.find(t => t.id === id), ...(fields as object) })),
@@ -78,6 +95,7 @@ function makeDeps(opts: {
     listMergedPrs: () => opts.prs ?? [],
     getDefaultBranch: () => 'main',
     findCommitsByTaskId: (_p: string, taskId: string) => opts.commits?.[taskId] ?? [],
+    config: opts.config ?? EMPTY_CONFIG,
   };
   return { deps, store };
 }
@@ -106,6 +124,51 @@ describe('prMatchesTaskId', () => {
 
   it('does not match an unrelated PR', () => {
     expect(prMatchesTaskId(makePr({ title: 'COND-999 something' }), 'HRLD-042')).toBe(false);
+  });
+});
+
+// ── MCPAT-145: prMatchesTaskId hardening — date scoping + store provenance ──
+// prMatchesTaskId previously did a bare substring/word-boundary match with no
+// awareness of *when* the task was created or *which repo* the task's ID
+// prefix is actually registered to. Both gaps let an ID-collision duplicate
+// (MCPAT-111) or a coincidental substring hit in an unrelated repo get
+// misattributed as reconciliation evidence.
+describe('prMatchesTaskId — date scoping (MCPAT-145)', () => {
+  it('does not match a PR merged before the task was created', () => {
+    const pr = makePr({ title: 'HRLD-042 fix login', mergedAt: '2024-01-01T00:00:00.000Z' });
+    expect(prMatchesTaskId(pr, 'HRLD-042', { taskCreatedAt: '2024-06-01T00:00:00.000Z' })).toBe(false);
+  });
+
+  it('still matches a PR merged after the task was created', () => {
+    const pr = makePr({ title: 'HRLD-042 fix login', mergedAt: '2024-06-02T00:00:00.000Z' });
+    expect(prMatchesTaskId(pr, 'HRLD-042', { taskCreatedAt: '2024-06-01T00:00:00.000Z' })).toBe(true);
+  });
+
+  it('matches when no taskCreatedAt is supplied (backward compatible, no opts)', () => {
+    const pr = makePr({ title: 'HRLD-042 fix login', mergedAt: '2024-01-01T00:00:00.000Z' });
+    expect(prMatchesTaskId(pr, 'HRLD-042')).toBe(true);
+  });
+});
+
+describe('prMatchesTaskId — store provenance (MCPAT-145)', () => {
+  const config: McpTasksConfig = {
+    ...EMPTY_CONFIG,
+    projects: [{ prefix: 'MCPAT', path: '/repos/mcp-agent-tasks', storage: 'global' }],
+  };
+
+  it('does not match when the scanned repo differs from the registered project path for the ID prefix', () => {
+    const pr = makePr({ title: 'MCPAT-101 fix thing' });
+    expect(prMatchesTaskId(pr, 'MCPAT-101', { projectPath: '/repos/unrelated-repo', config })).toBe(false);
+  });
+
+  it('still matches when the scanned repo IS the registered project path for the ID prefix', () => {
+    const pr = makePr({ title: 'MCPAT-101 fix thing' });
+    expect(prMatchesTaskId(pr, 'MCPAT-101', { projectPath: '/repos/mcp-agent-tasks', config })).toBe(true);
+  });
+
+  it('still matches when no project is registered for the ID prefix (nothing to contradict)', () => {
+    const pr = makePr({ title: 'OTHER-5 fix thing' });
+    expect(prMatchesTaskId(pr, 'OTHER-5', { projectPath: '/repos/whatever', config })).toBe(true);
   });
 });
 
@@ -209,6 +272,42 @@ describe('reconcileTasksGithub', () => {
     const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'TEST' }, deps);
 
     expect(summary.scanned).toBe(0);
+  });
+});
+
+// ── MCPAT-145: date scoping + store provenance wired through reconcileTasksGithub ──
+describe('reconcileTasksGithub — date scoping hardening (MCPAT-145)', () => {
+  it('does not reconcile via a PR merged before the task was created (phantom pre-existing PR)', async () => {
+    const tasks = [makeTask({ id: 'TEST-010', status: 'in_progress', created: '2026-01-01T00:00:00.000Z' })];
+    const { deps, store } = makeDeps({
+      tasks,
+      prs: [makePr({ number: 3, title: 'TEST-010 unrelated earlier work', mergedAt: '2025-01-01T00:00:00.000Z' })],
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/x', idPrefix: 'TEST' }, deps);
+
+    expect(summary.results[0].action).toBe('no_signal');
+    expect(store.transitionTask).not.toHaveBeenCalled();
+  });
+});
+
+describe('reconcileTasksGithub — store provenance hardening (MCPAT-145)', () => {
+  it('does not reconcile via a PR match when the scanned repo is not the registered project path for the ID prefix', async () => {
+    const tasks = [makeTask({ id: 'MCPAT-900', status: 'in_progress', project: 'MCPAT' })];
+    const config: McpTasksConfig = {
+      ...EMPTY_CONFIG,
+      projects: [{ prefix: 'MCPAT', path: '/repos/mcp-agent-tasks', storage: 'global' }],
+    };
+    const { deps, store } = makeDeps({
+      tasks,
+      prs: [makePr({ number: 11, title: 'MCPAT-900 fix' })],
+      config,
+    });
+
+    const summary = await reconcileTasksGithub({ projectPath: '/repos/unrelated-repo', idPrefix: 'MCPAT' }, deps);
+
+    expect(summary.results[0].action).toBe('no_signal');
+    expect(store.transitionTask).not.toHaveBeenCalled();
   });
 });
 

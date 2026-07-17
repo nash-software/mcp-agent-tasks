@@ -65,6 +65,8 @@ export interface ReconcileDeps {
   listMergedPrs: (projectPath: string) => MergedPr[];
   getDefaultBranch: (projectPath: string) => string;
   findCommitsByTaskId: (projectPath: string, taskId: string, branch?: string) => CommitRef[];
+  /** Defaults to `loadConfig()` — injectable so tests don't depend on the real host config. */
+  config?: McpTasksConfig;
 }
 
 function derivePrefix(projectPath: string): string {
@@ -96,17 +98,51 @@ function buildStore(
   return { store, index };
 }
 
+/** Extra evidence used by {@link prMatchesTaskId} to reject phantom matches. */
+export interface PrMatchOptions {
+  /** Task's `created` ISO-8601 timestamp — a PR merged before this cannot be its evidence. */
+  taskCreatedAt?: string;
+  /** Repo path being scanned (the `projectPath` reconcile is running against). */
+  projectPath?: string;
+  /** Loaded config, used to look up the registered path for the task ID's prefix. */
+  config?: McpTasksConfig;
+}
+
 /**
  * True when the task ID appears as a whole word in the PR title or branch
  * name. Deliberately excludes the PR body: body prose routinely cross-
  * references other tasks in passing (motivation, related-work, changelog
  * narrative) without the PR implementing them — matching on body text turns
  * every such mention into a false "this PR resolves that task" signal.
+ *
+ * Two further guards (MCPAT-145) close phantom-match gaps left by a pure
+ * substring hit: a PR that predates the task cannot be its evidence (date
+ * scoping), and a PR from a repo other than the one the task ID's prefix is
+ * registered to cannot be its evidence either (store provenance) — both
+ * scenarios that a stray ID collision (MCPAT-111) can otherwise reproduce
+ * indefinitely even after the collision itself is fixed.
  */
-export function prMatchesTaskId(pr: MergedPr, taskId: string): boolean {
+export function prMatchesTaskId(pr: MergedPr, taskId: string, opts: PrMatchOptions = {}): boolean {
   const escaped = taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`\\b${escaped}\\b`);
-  return re.test(pr.title) || re.test(pr.headRefName);
+  const textMatches = re.test(pr.title) || re.test(pr.headRefName);
+  if (!textMatches) return false;
+
+  if (opts.taskCreatedAt && pr.mergedAt) {
+    if (new Date(pr.mergedAt).getTime() < new Date(opts.taskCreatedAt).getTime()) {
+      return false;
+    }
+  }
+
+  if (opts.projectPath && opts.config) {
+    const prefix = taskId.split('-')[0];
+    const registered = opts.config.projects.find(p => p.prefix === prefix);
+    if (registered && resolvePath(registered.path) !== resolvePath(opts.projectPath)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -182,7 +218,7 @@ export async function reconcileTasksGithub(
   const projectPath = resolvePath(opts.projectPath);
   const dryRun = opts.dryRun ?? false;
 
-  const config = loadConfig();
+  const config = deps?.config ?? loadConfig();
   const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
   const prefix = opts.idPrefix ?? derivePrefix(projectPath);
 
@@ -216,7 +252,9 @@ export async function reconcileTasksGithub(
     // Bookkeeping-only PRs are excluded from candidacy entirely — even as a
     // last-resort fallback — since by definition they never implement the
     // task they mention (see isTaskBookkeepingPr).
-    const candidates = prs.filter(p => prMatchesTaskId(p, task.id) && !isTaskBookkeepingPr(p));
+    const candidates = prs.filter(p =>
+      prMatchesTaskId(p, task.id, { taskCreatedAt: task.created, projectPath, config }) && !isTaskBookkeepingPr(p),
+    );
     const pr = candidates.find(p => isPrimaryPrForTask(p, task.id)) ?? candidates[0];
     if (pr) {
       results.push({
