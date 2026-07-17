@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import type { GlobalConfig } from '../types/config.js';
+import type { GlobalConfig, ProjectConfig } from '../types/config.js';
 
 // McpTasksConfig is an alias for GlobalConfig
 export type McpTasksConfig = GlobalConfig;
@@ -175,4 +175,17 @@ export function getDbPath(config?: McpTasksConfig): string {
  */
 export function resolveServerDbPath(_tasksDir: string, config: McpTasksConfig, _projectPrefix?: string): string {
   return getDbPath(config);
+}
+
+/**
+ * Canonical storage-aware resolution of a project's markdown tasksDir (MCPAT-142).
+ * `storage: 'global'` projects share the config's global storageDir; `storage: 'local'`
+ * projects use `<project.path>/<tasksDirName>`. Several call sites previously hard-coded
+ * the local-only branch (`join(p.path, tasksDirName)`), which pointed at the wrong
+ * directory for global-storage projects.
+ */
+export function resolveProjectTasksDir(project: ProjectConfig, config: McpTasksConfig): string {
+  return project.storage === 'global'
+    ? config.storageDir
+    : path.join(project.path, config.tasksDirName);
 }

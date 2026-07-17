@@ -4,7 +4,7 @@ import { join, resolve, dirname, extname, isAbsolute } from 'node:path';
 import { homedir, userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync, execSync } from 'node:child_process';
-import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, writeConfig } from './config/loader.js';
+import { loadConfig, getDbPath, DEFAULT_TASKS_DIR_NAME, resolveServerDbPath, resolveProjectTasksDir, writeConfig } from './config/loader.js';
 import type { StorageMode } from './types/config.js';
 import { isPathWithinRoots } from './fs-sandbox.js';
 import { SqliteIndex } from './store/sqlite-index.js';
@@ -834,8 +834,6 @@ function reconcileIndexOnBoot(pi: ProjectIndex): void {
 }
 
 function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex[] {
-  const tasksDirName = config.tasksDirName ?? DEFAULT_TASKS_DIR_NAME;
-
   if (config.projects.length === 0) {
     // No registered projects — fall back to global DB
     const dbPath = getDbPath();
@@ -847,7 +845,7 @@ function openProjectIndexes(config: ReturnType<typeof loadConfig>): ProjectIndex
   }
 
   const indexes = config.projects.map(p => {
-    const tasksDir = join(p.path, tasksDirName);
+    const tasksDir = resolveProjectTasksDir(p, config);
     const dbPath = resolveServerDbPath(tasksDir, config, p.prefix);
     const idx = new SqliteIndex(dbPath);
     idx.init();

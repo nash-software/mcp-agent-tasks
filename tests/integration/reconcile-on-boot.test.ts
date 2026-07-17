@@ -41,35 +41,9 @@ describe('MCPAT-065 — reconcile-on-boot', () => {
     const tasksDir = path.join(projectRoot, 'agent-tasks');
     fs.mkdirSync(tasksDir, { recursive: true });
 
-    const dbPath = path.join(tasksDir, '.index.db');
-    const idx = new SqliteIndex(dbPath);
-    idx.init();
-    idx.ensureProject('BOOT');
-    const store = new TaskStore(new MarkdownStore(), idx, new ManifestWriter(), tasksDir, 'BOOT');
-
-    // BOOT-001: a real markdown task. Then DELETE its index row → markdown present, index missing it (AC1).
-    const t1 = store.createTask({ project: 'BOOT', title: 'Real task from markdown', type: 'chore', priority: 'medium', why: 'x' });
-    // Poison file (AC3): copy t1's markdown to a new id with an invalid priority — no index row.
-    const poison = fs.readFileSync(t1.file_path, 'utf-8')
-      .replace(/^id:.*$/m, 'id: BOOT-666')
-      .replace(/^title:.*$/m, 'title: "Poison file"')
-      .replace(/^priority:.*$/m, 'priority: normal');
-    fs.writeFileSync(path.join(tasksDir, 'BOOT-666.md'), poison, 'utf-8');
-
-    idx.deleteTask(t1.id);                 // AC1: row gone, markdown remains
-    idx.upsertTask(orphanTask('BOOT-999')); // AC2: index row with no markdown
-    idx.close();
-
-    // BARE project: index-only rows, NO markdown files at all. The has-markdown guard must leave its
-    // index untouched (don't nuke an index when there's no markdown to heal from).
     const bareRoot = path.join(tempDir, 'bare-project');
     const bareTasksDir = path.join(bareRoot, 'agent-tasks');
     fs.mkdirSync(bareTasksDir, { recursive: true });
-    const bareIdx = new SqliteIndex(path.join(bareTasksDir, '.index.db'));
-    bareIdx.init();
-    bareIdx.ensureProject('BARE');
-    bareIdx.upsertTask({ ...orphanTask('BARE-001'), project: 'BARE', title: 'Index-only, no markdown' });
-    bareIdx.close();
 
     const configPath = path.join(tempDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
@@ -85,6 +59,34 @@ describe('MCPAT-065 — reconcile-on-boot', () => {
     saved.MCP_TASKS_DB = process.env['MCP_TASKS_DB'];
     process.env['MCP_TASKS_CONFIG'] = configPath;
     delete process.env['MCP_TASKS_DB'];
+
+    // MCPAT-142: resolveServerDbPath always resolves to config.storageDir now, so BOOT and BARE
+    // (both storage:'local') share ONE physical db file at storageDir/.index.db — seed both
+    // projects' rows into that same shared index instead of two separate per-project db files.
+    const { loadConfig, resolveServerDbPath } = await import('../../src/config/loader.js');
+    const dbPath = resolveServerDbPath(tasksDir, loadConfig(), 'BOOT');
+    const idx = new SqliteIndex(dbPath);
+    idx.init();
+    idx.ensureProject('BOOT');
+    idx.ensureProject('BARE');
+    const store = new TaskStore(new MarkdownStore(), idx, new ManifestWriter(), tasksDir, 'BOOT');
+
+    // BOOT-001: a real markdown task. Then DELETE its index row → markdown present, index missing it (AC1).
+    const t1 = store.createTask({ project: 'BOOT', title: 'Real task from markdown', type: 'chore', priority: 'medium', why: 'x' });
+    // Poison file (AC3): copy t1's markdown to a new id with an invalid priority — no index row.
+    const poison = fs.readFileSync(t1.file_path, 'utf-8')
+      .replace(/^id:.*$/m, 'id: BOOT-666')
+      .replace(/^title:.*$/m, 'title: "Poison file"')
+      .replace(/^priority:.*$/m, 'priority: normal');
+    fs.writeFileSync(path.join(tasksDir, 'BOOT-666.md'), poison, 'utf-8');
+
+    idx.deleteTask(t1.id);                 // AC1: row gone, markdown remains
+    idx.upsertTask(orphanTask('BOOT-999')); // AC2: index row with no markdown
+
+    // BARE project: index-only rows, NO markdown files at all. The has-markdown guard must leave its
+    // index untouched (don't nuke an index when there's no markdown to heal from).
+    idx.upsertTask({ ...orphanTask('BARE-001'), project: 'BARE', title: 'Index-only, no markdown' });
+    idx.close();
 
     handle = await startUiServer({ port: 0 }); // reconcile-on-boot runs here
     baseUrl = handle.url;
