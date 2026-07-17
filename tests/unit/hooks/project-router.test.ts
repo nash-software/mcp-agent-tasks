@@ -2,7 +2,7 @@
  * Tests for hooks/lib/project-router.js
  * Uses MCP_TASKS_CONFIG env var pointing to temp fixture config files for isolation.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -221,6 +221,87 @@ describe('project-router', () => {
       if (result !== null) {
         expect(result.isGlobal).toBe(true);
         expect(result.prefix).toBe('GEN');
+      }
+    });
+  });
+
+  // ── routeProject — storage-aware tasksDir (MCPAT-143) ──────────────────────────
+  // Real ProjectConfig entries have `storage: 'global'|'local'` and no `tasksDir`
+  // field (see src/types/config.ts). The dedup-check tasksDir must be computed the
+  // same way src/cli.ts's resolveTasksDir() computes it for the CLI process the
+  // hook spawns to perform the actual write — otherwise the dedup read and the
+  // write land in different directories.
+
+  describe('routeProject - storage-aware tasksDir', () => {
+    it('CWD match: storage "global" resolves tasksDir to config.storageDir, not proj.path/agent-tasks', () => {
+      const { routeProject } = loadRouter();
+      const storageDir = path.join(tmpDir, 'global-tasks');
+      const data = {
+        projects: [
+          { prefix: 'ACR', path: '/code/acr-reimagined', storage: 'global' },
+        ],
+        storageDir,
+      };
+      writeConfig(configPath, data);
+
+      const result = routeProject('/code/acr-reimagined/src', null, configPath);
+      expect(result).not.toBeNull();
+      expect(result!.tasksDir).toBe(storageDir);
+    });
+
+    it('CWD match: storage "local" resolves tasksDir to path.join(proj.path, tasksDirName)', () => {
+      const { routeProject } = loadRouter();
+      const data = {
+        projects: [
+          { prefix: 'HRLD', path: '/code/herald', storage: 'local' },
+        ],
+        storageDir: path.join(tmpDir, 'global-tasks'),
+      };
+      writeConfig(configPath, data);
+
+      const result = routeProject('/code/herald/src', null, configPath);
+      expect(result).not.toBeNull();
+      expect(result!.tasksDir).toBe(path.join('/code/herald', 'agent-tasks'));
+    });
+
+    it('hint match: storage "global" resolves tasksDir to config.storageDir', () => {
+      const { routeProject } = loadRouter();
+      const storageDir = path.join(tmpDir, 'global-tasks');
+      const data = {
+        projects: [
+          { prefix: 'PROXY', path: '/code/proxy-manager', storage: 'global' },
+        ],
+        storageDir,
+      };
+      writeConfig(configPath, data);
+
+      const result = routeProject('/some/other/dir', 'PROXY', configPath);
+      expect(result).not.toBeNull();
+      expect(result!.tasksDir).toBe(storageDir);
+    });
+  });
+
+  // ── routeProject — loud signal on hint miss (MCPAT-143) ─────────────────────────
+
+  describe('routeProject - loud signal on hint miss', () => {
+    it('writes a stderr warning naming the unmatched hint before falling back to GEN', () => {
+      const { routeProject } = loadRouter();
+      const data = {
+        projects: [
+          { prefix: 'HERALD', path: '/code/herald', storage: 'local' },
+          { prefix: 'GEN', path: os.homedir(), storage: 'global', tasksDir: path.join(tmpDir, 'gen-tasks') },
+        ],
+        storageDir: path.join(tmpDir, 'tasks'),
+      };
+      writeConfig(configPath, data);
+
+      const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      try {
+        routeProject('/some/other/dir', 'NOMATCH', configPath);
+        const messages = writeSpy.mock.calls.map(call => String(call[0]));
+        expect(messages.some(m => m.includes('NOMATCH'))).toBe(true);
+      } finally {
+        writeSpy.mockRestore();
       }
     });
   });
