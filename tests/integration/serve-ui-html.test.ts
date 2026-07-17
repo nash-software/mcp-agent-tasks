@@ -15,12 +15,32 @@ describe('serve-ui HTML dashboard', () => {
   let tempDir: string;
   let originalEnv: string | undefined;
 
+  let originalConfigEnv: string | undefined;
+
   beforeAll(async () => {
     if (!UI_BUILT) return;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-serve-html-'));
     const dbPath = path.join(tempDir, 'tasks.db');
     originalEnv = process.env['MCP_TASKS_DB'];
     process.env['MCP_TASKS_DB'] = dbPath;
+
+    // Point loadConfig() at an isolated fixture config (empty projects) instead of the real
+    // ~/.config/mcp-tasks/config.json — otherwise openProjectIndexes() reconciles against every
+    // real registered project's markdown on disk (MCPAT-119/144: non-hermetic host dependency).
+    const configPath = path.join(tempDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      storageDir: path.join(tempDir, 'global-store'),
+      defaultStorage: 'global',
+      enforcement: 'off',
+      autoCommit: false,
+      claimTtlHours: 4,
+      trackManifest: false,
+      tasksDirName: 'agent-tasks',
+      projects: [],
+    }), 'utf-8');
+    originalConfigEnv = process.env['MCP_TASKS_CONFIG'];
+    process.env['MCP_TASKS_CONFIG'] = configPath;
 
     handle = await startUiServer({ port: 0 });
     baseUrl = handle.url;
@@ -33,6 +53,11 @@ describe('serve-ui HTML dashboard', () => {
       delete process.env['MCP_TASKS_DB'];
     } else {
       process.env['MCP_TASKS_DB'] = originalEnv;
+    }
+    if (originalConfigEnv === undefined) {
+      delete process.env['MCP_TASKS_CONFIG'];
+    } else {
+      process.env['MCP_TASKS_CONFIG'] = originalConfigEnv;
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
