@@ -52,6 +52,11 @@ export function validate(input: unknown): asserts input is ValidatedInput {
 }
 
 export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<ToolOutput> {
+  if (input.storage_mode === undefined) {
+    console.warn(
+      `[task_init] storage_mode not provided for project '${input.project_prefix}' — defaulting to 'global' storage`,
+    );
+  }
   const storageMode = input.storage_mode ?? 'global';
   let projectPath = input.project_path ?? process.cwd();
   if (input.project_prefix === 'GEN' && !input.project_path) {
