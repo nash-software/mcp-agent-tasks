@@ -4,6 +4,8 @@ File-based task management for AI coding agents. Hybrid markdown/SQLite store wi
 
 Tasks live as plain markdown files on disk (human-readable, git-trackable) with a SQLite index for fast queries. Agents interact via the MCP protocol; humans can read and edit files directly.
 
+This describes the tool's storage model for projects that adopt it. This repo's own `agent-tasks/` directory (used to dogfood the tool on its own development) is intentionally excluded via `.gitignore` alongside `scratchpads/` — it holds the maintainer's local working backlog, not published project content.
+
 ## Tech Stack
 
 - Node.js >=18, TypeScript (strict)
