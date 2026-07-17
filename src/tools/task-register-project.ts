@@ -58,6 +58,12 @@ export async function execute(input: ValidatedInput, ctx: ToolContext): Promise<
     return ok({ registered: true, prefix: input.prefix, already_existed: true });
   }
 
+  if (input.storage === undefined) {
+    console.warn(
+      `[task_register_project] storage not provided for project '${input.prefix}' — defaulting to 'global' storage`,
+    );
+  }
+
   ctx.config.projects.push({
     prefix: input.prefix,
     path: input.path,

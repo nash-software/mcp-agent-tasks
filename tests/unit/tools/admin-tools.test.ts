@@ -102,6 +102,30 @@ describe('task_init', async () => {
       // Second call — config already has the project so it skips registration
       await expect(mod.execute(input, ctx)).resolves.not.toThrow();
     });
+
+    it('warns when storage_mode is not provided (silently defaulted to global) (MCPAT-141)', async () => {
+      const projectPath = path.join(tmpDir, 'myproject3');
+      fs.mkdirSync(projectPath, { recursive: true });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const ctx = makeCtx({ config: makeConfig(tmpDir) });
+      await mod.execute({ project_prefix: 'TEST3', project_path: projectPath }, ctx);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('storage'));
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn when storage_mode is explicitly provided (MCPAT-141)', async () => {
+      const projectPath = path.join(tmpDir, 'myproject4');
+      fs.mkdirSync(projectPath, { recursive: true });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const ctx = makeCtx({ config: makeConfig(tmpDir) });
+      await mod.execute({ project_prefix: 'TEST4', project_path: projectPath, storage_mode: 'global' }, ctx);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
   });
 });
 
@@ -262,6 +286,26 @@ describe('task_register_project', async () => {
       const result = await mod.execute({ prefix: 'EXISTING', path: '/x' }, ctx);
       const parsed = JSON.parse(result.content[0].text) as { already_existed: boolean };
       expect(parsed.already_existed).toBe(true);
+    });
+
+    it('warns when storage is not provided (silently defaulted to global) (MCPAT-141)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const ctx = makeCtx({ config: makeConfig(tmpDir) });
+
+      await mod.execute({ prefix: 'WARNPROJ', path: '/some/project' }, ctx);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('storage'));
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn when storage is explicitly provided (MCPAT-141)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const ctx = makeCtx({ config: makeConfig(tmpDir) });
+
+      await mod.execute({ prefix: 'EXPLICITPROJ', path: '/some/project', storage: 'global' }, ctx);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });
