@@ -625,6 +625,9 @@ export class SqliteIndex {
     const deleteCascade = this.db.transaction((taskId: string) => {
       this.db.prepare('DELETE FROM subtasks WHERE parent_id=?').run(taskId);
       this.db.prepare('DELETE FROM dependencies WHERE task_id=?').run(taskId);
+      // Other tasks may list this task as their depends_on target — that FK
+      // has no ON DELETE CASCADE in schema.sql, so it must be cleared explicitly.
+      this.db.prepare('DELETE FROM dependencies WHERE depends_on=?').run(taskId);
       this.db.prepare('DELETE FROM tags WHERE task_id=?').run(taskId);
       this.db.prepare('DELETE FROM transitions WHERE task_id=?').run(taskId);
       this.db.prepare('DELETE FROM commits WHERE task_id=?').run(taskId);
@@ -632,6 +635,9 @@ export class SqliteIndex {
       this.db.prepare('DELETE FROM children WHERE parent_id=? OR child_id=?').run(taskId, taskId);
       this.db.prepare('DELETE FROM task_references WHERE from_id=? OR to_id=?').run(taskId, taskId);
       this.db.prepare('DELETE FROM task_files WHERE task_id=?').run(taskId);
+      // tasks.parent is self-referencing with no ON DELETE CASCADE — null out
+      // any surviving child's parent pointer before removing this row.
+      this.db.prepare('UPDATE tasks SET parent=NULL WHERE parent=?').run(taskId);
       this.db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
     });
     deleteCascade(id);
